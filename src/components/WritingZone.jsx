@@ -25,7 +25,13 @@ export default function WritingZone({ masterCanvasState, focusBoxState, toolbarS
     }));
   };
 
-  const canvasState = useCanvas(onStroke, onAdvance, toolbarState);
+  const onStrokeEnd = () => {
+    if (masterCanvasState?.endStroke) {
+      masterCanvasState.endStroke();
+    }
+  };
+
+  const canvasState = useCanvas(onStroke, onAdvance, toolbarState, onStrokeEnd);
   const { canvasRef, startDrawing, draw, stopDrawing } = canvasState || {};
 
   return (

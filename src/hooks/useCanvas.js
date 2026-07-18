@@ -1,6 +1,6 @@
 import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 
-export default function useCanvas(onStroke = null, onAdvance = null, toolbarState = null) {
+export default function useCanvas(onStroke = null, onAdvance = null, toolbarState = null, onStrokeEnd = null) {
   const canvasRef = useRef(null);
   const lastPosRef = useRef(null);
   const currentStrokeRef = useRef([]);
@@ -188,6 +188,10 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     setIsDrawing(false);
     if (currentStrokeRef.current.length > 0) {
       saveSnapshot([...currentStrokeRef.current]);
+    }
+
+    if (onStrokeEnd) {
+      onStrokeEnd();
     }
 
     if (onAdvance && lastPosRef.current) {

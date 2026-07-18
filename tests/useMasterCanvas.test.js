@@ -25,7 +25,7 @@ describe('useMasterCanvas', () => {
     expect(typeof result.current.redo).toBe('function');
   });
 
-  it('drawLine should call context methods', () => {
+  it('drawLine should call context methods and not update history immediately', () => {
     const { result } = renderHook(() => useMasterCanvas());
     
     // Mock canvas and context
@@ -51,13 +51,54 @@ describe('useMasterCanvas', () => {
     result.current.masterCanvasRef.current = mockCanvas;
     
     // Test drawLine
-    result.current.drawLine(0, 0, 10, 10, '#000', 5, false);
+    act(() => {
+      result.current.drawLine(0, 0, 10, 10, '#000', 5, false);
+    });
 
     expect(mockCanvas.getContext).toHaveBeenCalledWith('2d');
     expect(mockContext.beginPath).toHaveBeenCalled();
     expect(mockContext.moveTo).toHaveBeenCalledWith(0, 0);
     expect(mockContext.lineTo).toHaveBeenCalledWith(10, 10);
     expect(mockContext.stroke).toHaveBeenCalled();
+    
+    // History shouldn't update yet
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('endStroke should update history', () => {
+    const { result } = renderHook(() => useMasterCanvas());
+    
+    const mockContext = {
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      save: vi.fn(),
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+    };
+    
+    const mockCanvas = {
+      getContext: vi.fn(() => mockContext),
+      getBoundingClientRect: vi.fn(() => ({ width: 100, height: 100 })),
+      toDataURL: vi.fn(() => 'data:image/png;base64,...'),
+    };
+
+    result.current.masterCanvasRef.current = mockCanvas;
+    
+    act(() => {
+      result.current.drawLine(0, 0, 10, 10, '#000', 5, false);
+    });
+
+    expect(result.current.canUndo).toBe(false);
+
+    act(() => {
+      result.current.endStroke();
+    });
+
+    expect(result.current.canUndo).toBe(true);
   });
 
   it('clearCanvas should call clearRect and save a snapshot', () => {

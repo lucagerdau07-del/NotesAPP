@@ -5,6 +5,7 @@ export default function useMasterCanvas() {
 
   const historyRef = useRef([]);
   const historyIndexRef = useRef(-1);
+  const currentStrokeRef = useRef([]);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -114,6 +115,7 @@ export default function useMasterCanvas() {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.restore();
     saveSnapshot([]);
+    currentStrokeRef.current = [];
   }, [saveSnapshot]);
 
   const drawLine = useCallback((x1, y1, x2, y2, strokeColor, width, isEraser = false) => {
@@ -132,16 +134,25 @@ export default function useMasterCanvas() {
     context.lineTo(x2, y2);
     context.stroke();
 
-    // In a real implementation we might batch these or handle them differently
-    // For now we just push individual segments if saveSnapshot isn't explicitly called elsewhere
-    saveSnapshot([{ x1, y1, x2, y2, color: strokeColor, lineWidth: width, isEraser }]);
+    currentStrokeRef.current.push({ x1, y1, x2, y2, color: strokeColor, lineWidth: width, isEraser });
+  }, []);
+
+  const endStroke = useCallback(() => {
+    if (currentStrokeRef.current.length > 0) {
+      saveSnapshot([...currentStrokeRef.current]);
+      currentStrokeRef.current = [];
+    }
   }, [saveSnapshot]);
 
   return {
     masterCanvasRef,
     drawLine,
+    endStroke,
     clearCanvas,
     undo,
-    redo
+    redo,
+    canUndo,
+    canRedo
   };
 }
+
