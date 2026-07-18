@@ -1,6 +1,6 @@
 import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 
-export default function useCanvas(masterCanvasState = null, focusBoxState = null) {
+export default function useCanvas(onStroke = null, onAdvance = null) {
   const canvasRef = useRef(null);
   const lastPosRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -8,7 +8,6 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
   const [isEraser, setIsEraser] = useState(false);
   const [lineWidth, setLineWidth] = useState(3);
   const [eraserWidth, setEraserWidth] = useState(15);
-
 
   const historyRef = useRef([]);
   const historyIndexRef = useRef(-1);
@@ -30,6 +29,17 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
     historyIndexRef.current = nextIndex;
     updateHistoryState();
   }, [updateHistoryState]);
+
+  const clearCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.restore();
+    saveSnapshot();
+  }, [saveSnapshot]);
 
   const restoreSnapshot = useCallback((index) => {
     const canvas = canvasRef.current;
@@ -89,26 +99,15 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
     });
 
     resizeObserver.observe(canvas);
-    updateCanvasSize(); // Set initial size
+    updateCanvasSize();
 
     return () => {
       resizeObserver.disconnect();
     };
   }, []);
 
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    context.save();
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.restore();
-    saveSnapshot();
-  }, [saveSnapshot]);
-
   const startDrawing = ({ nativeEvent }) => {
-    if (nativeEvent.pointerType !== 'touch') return;
+    if (nativeEvent.pointerType !== 'touch' && nativeEvent.pointerType !== 'mouse') return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = nativeEvent.clientX - rect.left;
     const y = nativeEvent.clientY - rect.top;
@@ -128,7 +127,7 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
 
   const draw = ({ nativeEvent }) => {
     if (!isDrawing) return;
-    if (nativeEvent.pointerType !== 'touch') return;
+    if (nativeEvent.pointerType !== 'touch' && nativeEvent.pointerType !== 'mouse') return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = nativeEvent.clientX - rect.left;
     const y = nativeEvent.clientY - rect.top;
@@ -136,17 +135,8 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
     context.lineTo(x, y);
     context.stroke();
 
-    if (masterCanvasState && focusBoxState && lastPosRef.current) {
-      const pad = rect;
-      const fb = focusBoxState.focusBox;
-      const scaleX = fb.width / pad.width;
-      const scaleY = fb.height / pad.height;
-      const masterX1 = fb.x + lastPosRef.current.x * scaleX;
-      const masterY1 = fb.y + lastPosRef.current.y * scaleY;
-      const masterX2 = fb.x + x * scaleX;
-      const masterY2 = fb.y + y * scaleY;
-      
-      masterCanvasState.drawLine(masterX1, masterY1, masterX2, masterY2, color, isEraser ? eraserWidth : lineWidth, isEraser);
+    if (onStroke && lastPosRef.current) {
+      onStroke(lastPosRef.current.x, lastPosRef.current.y, x, y, color, isEraser ? eraserWidth : lineWidth, isEraser);
     }
     lastPosRef.current = { x, y };
   };
@@ -158,13 +148,10 @@ export default function useCanvas(masterCanvasState = null, focusBoxState = null
     setIsDrawing(false);
     saveSnapshot();
 
-    if (masterCanvasState && focusBoxState && lastPosRef.current) {
+    if (onAdvance && lastPosRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       if (lastPosRef.current.x > rect.width * 0.85) {
-        focusBoxState.setFocusBox(prev => ({
-          ...prev,
-          x: prev.x + prev.width * 0.8
-        }));
+        onAdvance(lastPosRef.current.x);
         clearCanvas();
       }
     }

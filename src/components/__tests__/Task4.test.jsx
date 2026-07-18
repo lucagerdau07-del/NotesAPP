@@ -1,38 +1,68 @@
 import '@testing-library/jest-dom';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import SplitLayout from '../SplitLayout';
-import * as useCanvasModule from '../../hooks/useCanvas';
-import * as useMasterCanvasModule from '../../hooks/useMasterCanvas';
-import * as useFocusBoxModule from '../../hooks/useFocusBox';
+import WritingZone from '../WritingZone';
 
-// Mock components
-vi.mock('../DocumentView', () => ({
-  default: ({ masterCanvasState }) => (
-    <div data-testid="mock-document-view">
-      {masterCanvasState && <canvas data-testid="master-canvas" />}
-    </div>
-  )
-}));
-vi.mock('../WritingZone', () => ({
-  default: ({ canvasState }) => (
-    <div data-testid="mock-writing-zone">
-      <button data-testid="trigger-draw" onClick={() => {
-        // simulate drawing which triggers masterCanvasState and auto advance
-        const drawMock = canvasState.draw;
-        const stopMock = canvasState.stopDrawing;
-        if (drawMock) drawMock({ nativeEvent: { pointerType: 'touch', clientX: 100, clientY: 100 } });
-        if (stopMock) stopMock();
-      }}>Draw</button>
-    </div>
-  )
-}));
+describe('Task 4 - WritingZone', () => {
+  let mockContext;
+  
+  beforeEach(() => {
+    mockContext = {
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      closePath: vi.fn(),
+      save: vi.fn(),
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+    };
 
-describe('Task 4', () => {
-  it('instantiates hooks and passes them down', () => {
-    // We just want to check if it doesn't crash and renders the mocks
-    render(<SplitLayout activeTab="smartCanvas" />);
-    expect(screen.getByTestId('mock-document-view')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-writing-zone')).toBeInTheDocument();
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => mockContext);
+    HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:image/png;base64,mock');
+
+    Element.prototype.getBoundingClientRect = vi.fn(() => {
+      return {
+        width: 800,
+        height: 600,
+        top: 0,
+        left: 0,
+        bottom: 600,
+        right: 800,
+      };
+    });
+    
+    global.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+
+  it('translates coordinates and calls masterCanvasState.drawLine', () => {
+    const masterCanvasState = {
+      drawLine: vi.fn(),
+    };
+    const focusBoxState = {
+      focusBox: { x: 100, y: 50, width: 400, height: 300 },
+      setFocusBox: vi.fn(),
+    };
+
+    render(<WritingZone masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} />);
+    
+    const canvas = document.querySelector('.writing-zone canvas');
+    
+    fireEvent.pointerDown(canvas, { clientX: 10, clientY: 20, pointerType: 'touch' });
+    
+    fireEvent.pointerMove(canvas, { clientX: 30, clientY: 40, pointerType: 'touch' });
+    
+    expect(masterCanvasState.drawLine).toHaveBeenCalledWith(105, 60, 115, 70, expect.any(String), expect.any(Number), expect.any(Boolean));
+    
+    fireEvent.pointerMove(canvas, { clientX: 700, clientY: 40, pointerType: 'touch' });
+    fireEvent.pointerUp(canvas);
+    
+    expect(focusBoxState.setFocusBox).toHaveBeenCalled();
   });
 });
