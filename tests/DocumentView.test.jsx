@@ -40,3 +40,49 @@ test('renders DocumentView without crashing when states are missing', () => {
   const documentView = screen.getByTestId('document-view');
   expect(documentView).toBeTruthy();
 });
+
+test('select mode draws draft focus box and updates focus box state', () => {
+  const setFocusBox = vi.fn();
+  const setIsSelectMode = vi.fn();
+  const focusBoxState = { focusBox: null, setFocusBox };
+  const toolbarState = { isSelectMode: true, setIsSelectMode };
+
+  render(<DocumentView focusBoxState={focusBoxState} toolbarState={toolbarState} />);
+
+  const container = screen.getByTestId('document-view');
+  
+  container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
+
+  fireEvent.pointerDown(container, { clientX: 100, clientY: 100 });
+  
+  let draftBox = screen.queryByTestId('draft-focus-box');
+  expect(draftBox).toBeTruthy();
+
+  fireEvent.pointerMove(container, { clientX: 200, clientY: 250 });
+  fireEvent.pointerUp(container, { clientX: 200, clientY: 250 });
+
+  expect(setFocusBox).toHaveBeenCalledWith(expect.objectContaining({
+    x: 100, y: 100, width: 100, height: 150
+  }));
+  expect(setIsSelectMode).toHaveBeenCalledWith(false);
+});
+
+test('synced undo and clear canvas', () => {
+  const clearCanvas = vi.fn();
+  const undo = vi.fn();
+  const masterCanvasState = { clearCanvas, undo, canUndo: true };
+  const padActionsRef = { current: { undo: vi.fn(), clearCanvas: vi.fn() } };
+
+  render(<DocumentView masterCanvasState={masterCanvasState} padActionsRef={padActionsRef} />);
+
+  const undoBtn = screen.getByTitle('Rückgängig');
+  const clearBtn = screen.getByTitle('Leeren');
+
+  fireEvent.click(undoBtn);
+  expect(undo).toHaveBeenCalled();
+  expect(padActionsRef.current.undo).toHaveBeenCalled();
+
+  fireEvent.click(clearBtn);
+  expect(clearCanvas).toHaveBeenCalled();
+  expect(padActionsRef.current.clearCanvas).toHaveBeenCalled();
+});

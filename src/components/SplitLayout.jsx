@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import DocumentView from './DocumentView';
 import WritingZone from './WritingZone';
 import useMasterCanvas from '../hooks/useMasterCanvas';
@@ -9,22 +9,25 @@ export default function SplitLayout({ activeTab }) {
   const [isEraser, setIsEraser] = useState(false);
   const [lineWidth, setLineWidth] = useState(3);
   const [eraserWidth, setEraserWidth] = useState(15);
+  const [isSelectMode, setIsSelectMode] = useState(false);
 
   const toolbarState = {
     color, setColor,
     isEraser, setIsEraser,
     lineWidth, setLineWidth,
-    eraserWidth, setEraserWidth
+    eraserWidth, setEraserWidth,
+    isSelectMode, setIsSelectMode
   };
 
   const masterCanvasState = useMasterCanvas();
   const focusBoxState = useFocusBox();
+  const padActionsRef = useRef(null);
 
   if (activeTab === 'smartCanvas') {
     return (
       <div className="split-layout">
-        <DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} />
-        <WritingZone masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} />
+        <DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} padActionsRef={padActionsRef} />
+        <WritingZone masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} padActionsRef={padActionsRef} />
       </div>
     );
   }

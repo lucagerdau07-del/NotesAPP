@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import useCanvas from '../hooks/useCanvas';
 
-export default function WritingZone({ masterCanvasState, focusBoxState, toolbarState }) {
+export default function WritingZone({ masterCanvasState, focusBoxState, toolbarState, padActionsRef }) {
   const onStroke = (x1, y1, x2, y2, color, lineWidth, isEraser) => {
     if (!masterCanvasState || !focusBoxState) return;
     const canvas = document.querySelector('.writing-zone canvas');
@@ -32,7 +33,13 @@ export default function WritingZone({ masterCanvasState, focusBoxState, toolbarS
   };
 
   const canvasState = useCanvas(onStroke, onAdvance, toolbarState, onStrokeEnd);
-  const { canvasRef, startDrawing, draw, stopDrawing } = canvasState || {};
+  const { canvasRef, startDrawing, draw, stopDrawing, undo, redo, clearCanvas } = canvasState || {};
+
+  useEffect(() => {
+    if (padActionsRef) {
+      padActionsRef.current = { undo, redo, clearCanvas };
+    }
+  }, [undo, redo, clearCanvas, padActionsRef]);
 
   return (
     <div className="writing-zone" data-testid="writing-zone">

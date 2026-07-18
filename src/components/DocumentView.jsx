@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Eraser, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Eraser, Trash2, Undo2, Redo2, SquareDashed } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
 
@@ -41,7 +41,7 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onChange, 
   );
 }
 
-export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState }) {
+export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState, padActionsRef }) {
   const { 
     clearCanvas, undo, redo, canUndo, canRedo
   } = masterCanvasState || {};
@@ -49,11 +49,11 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
     color, setColor, 
     isEraser, setIsEraser, 
     lineWidth, setLineWidth,
-    eraserWidth, setEraserWidth
+    eraserWidth, setEraserWidth,
+    isSelectMode, setIsSelectMode
   } = toolbarState || {};
   const [customColors, setCustomColors] = useState(['#2C2825', '#D32F2F', '#1976D2', '#388E3C', '#F57C00']);
   const [activePickerIndex, setActivePickerIndex] = useState(null);
-
 
   const handleColorChange = (index, newColor) => {
     const newColors = [...customColors];
@@ -63,13 +63,74 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
     setIsEraser?.(false);
   };
 
+  const handleUndo = () => {
+    undo?.();
+    padActionsRef?.current?.undo?.();
+  };
+  const handleRedo = () => {
+    redo?.();
+    padActionsRef?.current?.redo?.();
+  };
+  const handleClearCanvas = () => {
+    clearCanvas?.();
+    padActionsRef?.current?.clearCanvas?.();
+  };
+
+  const [draftFocusBox, setDraftFocusBox] = useState(null);
+  const containerRef = useRef(null);
+
+  const handlePointerDown = (e) => {
+    if (!isSelectMode) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setDraftFocusBox({ x, y, width: 0, height: 0, startX: x, startY: y });
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isSelectMode || !draftFocusBox) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    setDraftFocusBox(prev => {
+      const x = Math.min(prev.startX, currentX);
+      const y = Math.min(prev.startY, currentY);
+      const width = Math.abs(currentX - prev.startX);
+      const height = Math.abs(currentY - prev.startY);
+      return { ...prev, x, y, width, height };
+    });
+  };
+
+  const handlePointerUp = (e) => {
+    if (!isSelectMode || !draftFocusBox) return;
+    if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
+      focusBoxState.setFocusBox({
+        x: draftFocusBox.x,
+        y: draftFocusBox.y,
+        width: draftFocusBox.width,
+        height: draftFocusBox.height
+      });
+    }
+    setDraftFocusBox(null);
+    setIsSelectMode?.(false);
+  };
 
   return (
-    <div className="document-view" data-testid="document-view" style={{ position: 'relative' }}>
+    <div 
+      className="document-view" 
+      data-testid="document-view" 
+      style={{ position: 'relative', touchAction: isSelectMode ? 'none' : 'auto' }}
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
       <div className="writing-toolbar">
         <button 
           className="tool-btn icon-btn"
-          onClick={undo}
+          onClick={handleUndo}
           disabled={!canUndo}
           style={{ opacity: canUndo ? 1 : 0.3, cursor: canUndo ? 'pointer' : 'default' }}
           title="Rückgängig"
@@ -78,7 +139,7 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
         </button>
         <button 
           className="tool-btn icon-btn"
-          onClick={redo}
+          onClick={handleRedo}
           disabled={!canRedo}
           style={{ opacity: canRedo ? 1 : 0.3, cursor: canRedo ? 'pointer' : 'default' }}
           title="Wiederholen"
@@ -86,14 +147,23 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           <Redo2 size={24} />
         </button>
         <div className="toolbar-divider" />
+        <button 
+          className={`tool-btn icon-btn ${isSelectMode ? 'active' : ''}`}
+          onClick={() => { setIsSelectMode?.(!isSelectMode); setIsEraser?.(false); }}
+          title="Fokus Box ziehen"
+          data-testid="select-mode-btn"
+        >
+          <SquareDashed size={24} />
+        </button>
+        <div className="toolbar-divider" />
         {customColors.map((c, index) => (
           <ColorSlot
             key={index}
             index={index}
             colorValue={c}
-            isActive={color === c}
+            isActive={color === c && !isSelectMode}
             isEraser={isEraser}
-            onSelect={() => { setColor?.(c); setIsEraser?.(false); }}
+            onSelect={() => { setColor?.(c); setIsEraser?.(false); setIsSelectMode?.(false); }}
             onChange={(newColor) => handleColorChange(index, newColor)}
             activePickerIndex={activePickerIndex}
             setActivePickerIndex={setActivePickerIndex}
@@ -101,13 +171,13 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
         ))}
         <div className="toolbar-divider" />
         <button 
-          className={`tool-btn icon-btn ${isEraser ? 'active' : ''}`}
-          onClick={() => setIsEraser?.(true)}
+          className={`tool-btn icon-btn ${isEraser && !isSelectMode ? 'active' : ''}`}
+          onClick={() => { setIsEraser?.(true); setIsSelectMode?.(false); }}
           title="Radiergummi"
         >
           <Eraser size={24} />
         </button>
-        <button className="tool-btn icon-btn danger" onClick={clearCanvas} title="Leeren">
+        <button className="tool-btn icon-btn danger" onClick={handleClearCanvas} title="Leeren">
           <Trash2 size={24} />
         </button>
         <div className="toolbar-divider" />
@@ -144,6 +214,22 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             height: focusBoxState.focusBox.height
           }}
           onPointerDown={focusBoxState.handleDrag}
+        />
+      )}
+      {draftFocusBox && (
+        <div 
+          data-testid="draft-focus-box"
+          style={{
+            position: 'absolute',
+            border: '2px dashed #1976D2',
+            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            pointerEvents: 'none',
+            left: draftFocusBox.x,
+            top: draftFocusBox.y,
+            width: draftFocusBox.width,
+            height: draftFocusBox.height,
+            zIndex: 1000
+          }}
         />
       )}
     </div>
