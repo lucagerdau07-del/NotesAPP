@@ -1,7 +1,8 @@
 import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 
-export default function useCanvas() {
+export default function useCanvas(masterCanvasState = null, focusBoxState = null) {
   const canvasRef = useRef(null);
+  const lastPosRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#2C2825');
   const [isEraser, setIsEraser] = useState(false);
@@ -95,6 +96,17 @@ export default function useCanvas() {
     };
   }, []);
 
+  const clearCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.restore();
+    saveSnapshot();
+  }, [saveSnapshot]);
+
   const startDrawing = ({ nativeEvent }) => {
     if (nativeEvent.pointerType !== 'touch') return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -111,6 +123,7 @@ export default function useCanvas() {
     context.beginPath();
     context.moveTo(x, y);
     setIsDrawing(true);
+    lastPosRef.current = { x, y };
   };
 
   const draw = ({ nativeEvent }) => {
@@ -122,6 +135,20 @@ export default function useCanvas() {
     const context = canvasRef.current.getContext('2d');
     context.lineTo(x, y);
     context.stroke();
+
+    if (masterCanvasState && focusBoxState && lastPosRef.current) {
+      const pad = rect;
+      const fb = focusBoxState.focusBox;
+      const scaleX = fb.width / pad.width;
+      const scaleY = fb.height / pad.height;
+      const masterX1 = fb.x + lastPosRef.current.x * scaleX;
+      const masterY1 = fb.y + lastPosRef.current.y * scaleY;
+      const masterX2 = fb.x + x * scaleX;
+      const masterY2 = fb.y + y * scaleY;
+      
+      masterCanvasState.drawLine(masterX1, masterY1, masterX2, masterY2, color, isEraser ? eraserWidth : lineWidth, isEraser);
+    }
+    lastPosRef.current = { x, y };
   };
 
   const stopDrawing = () => {
@@ -130,18 +157,19 @@ export default function useCanvas() {
     context.closePath();
     setIsDrawing(false);
     saveSnapshot();
-  };
 
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    context.save();
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.restore();
-    saveSnapshot();
-  }, [saveSnapshot]);
+    if (masterCanvasState && focusBoxState && lastPosRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      if (lastPosRef.current.x > rect.width * 0.85) {
+        focusBoxState.setFocusBox(prev => ({
+          ...prev,
+          x: prev.x + prev.width * 0.8
+        }));
+        clearCanvas();
+      }
+    }
+    lastPosRef.current = null;
+  };
 
   return { 
     canvasRef, 
