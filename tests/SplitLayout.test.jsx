@@ -9,4 +9,9 @@ describe('SplitLayout', () => {
     expect(screen.getByTestId('document-view')).toBeInTheDocument();
     expect(screen.getByTestId('writing-zone')).toBeInTheDocument();
   });
+
+  it('renders TBD placeholder in delegation mode', () => {
+    render(<SplitLayout activeTab="delegation" />);
+    expect(screen.getByText('Delegation Mode (TBD)')).toBeInTheDocument();
+  });
 });
