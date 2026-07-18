@@ -2,8 +2,6 @@ import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 
 export default function useMasterCanvas() {
   const masterCanvasRef = useRef(null);
-  const [color, setColor] = useState('#2C2825');
-  const [lineWidth, setLineWidth] = useState(3);
 
   const historyRef = useRef([]);
   const historyIndexRef = useRef(-1);
@@ -124,8 +122,6 @@ export default function useMasterCanvas() {
     drawLine,
     clearCanvas,
     undo,
-    redo,
-    color,
-    lineWidth
+    redo
   };
 }

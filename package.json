@@ -14,7 +14,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "lucide-react": "^1.25.0",
     "react": "^19.2.7",
+    "react-colorful": "^5.8.0",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {

@@ -23,7 +23,8 @@ describe('useCanvas', () => {
     };
     mockCanvas = {
       getContext: vi.fn(() => mockContext),
-      getBoundingClientRect: vi.fn(() => ({ width: 800, height: 600 }))
+      getBoundingClientRect: vi.fn(() => ({ width: 800, height: 600, left: 0, top: 0 })),
+      toDataURL: vi.fn(() => 'data:image/png;base64,mock')
     };
   });
 
@@ -38,7 +39,7 @@ describe('useCanvas', () => {
 
     act(() => {
       result.current.startDrawing({
-        nativeEvent: { pointerType: 'touch', offsetX: 10, offsetY: 20 }
+        nativeEvent: { pointerType: 'touch', clientX: 10, clientY: 20 }
       });
     });
 
@@ -54,7 +55,7 @@ describe('useCanvas', () => {
 
     act(() => {
       result.current.startDrawing({
-        nativeEvent: { pointerType: 'mouse', offsetX: 10, offsetY: 20 }
+        nativeEvent: { pointerType: 'mouse', clientX: 10, clientY: 20 }
       });
     });
 
@@ -68,13 +69,13 @@ describe('useCanvas', () => {
 
     act(() => {
       result.current.startDrawing({
-        nativeEvent: { pointerType: 'touch', offsetX: 10, offsetY: 20 }
+        nativeEvent: { pointerType: 'touch', clientX: 10, clientY: 20 }
       });
     });
 
     act(() => {
       result.current.draw({
-        nativeEvent: { pointerType: 'touch', offsetX: 30, offsetY: 40 }
+        nativeEvent: { pointerType: 'touch', clientX: 30, clientY: 40 }
       });
     });
 
@@ -88,7 +89,7 @@ describe('useCanvas', () => {
 
     act(() => {
       result.current.startDrawing({
-        nativeEvent: { pointerType: 'touch', offsetX: 10, offsetY: 20 }
+        nativeEvent: { pointerType: 'touch', clientX: 10, clientY: 20 }
       });
     });
 

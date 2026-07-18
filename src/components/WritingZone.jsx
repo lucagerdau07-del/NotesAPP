@@ -1,10 +1,9 @@
-import useCanvas from '../hooks/useCanvas';
-
-export default function WritingZone() {
-  const { canvasRef, startDrawing, draw, stopDrawing } = useCanvas();
+export default function WritingZone({ canvasState }) {
+  const { canvasRef, startDrawing, draw, stopDrawing } = canvasState || {};
 
   return (
     <div className="writing-zone" data-testid="writing-zone">
+
       <canvas
         ref={canvasRef}
         onPointerDown={startDrawing}
