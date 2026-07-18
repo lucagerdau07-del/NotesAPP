@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 
 export default function useLongPress(onLongPress, onClick, { delay = 400 } = {}) {
   const timeout = useRef(null);
@@ -30,6 +30,14 @@ export default function useLongPress(onLongPress, onClick, { delay = 400 } = {})
     },
     [onClick]
   );
+
+  useEffect(() => {
+    return () => {
+      if (timeout.current) {
+        clearTimeout(timeout.current);
+      }
+    };
+  }, []);
 
   return {
     onPointerDown: (e) => start(e),

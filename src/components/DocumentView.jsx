@@ -41,14 +41,16 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onChange, 
   );
 }
 
-export default function DocumentView({ canvasState, masterCanvasState, focusBoxState }) {
+export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState }) {
+  const { 
+    clearCanvas, undo, redo, canUndo, canRedo
+  } = masterCanvasState || {};
   const { 
     color, setColor, 
     isEraser, setIsEraser, 
-    clearCanvas, undo, redo, canUndo, canRedo,
     lineWidth, setLineWidth,
     eraserWidth, setEraserWidth
-  } = canvasState || {};
+  } = toolbarState || {};
   const [customColors, setCustomColors] = useState(['#2C2825', '#D32F2F', '#1976D2', '#388E3C', '#F57C00']);
   const [activePickerIndex, setActivePickerIndex] = useState(null);
 

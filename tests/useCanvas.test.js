@@ -19,7 +19,9 @@ describe('useCanvas', () => {
       moveTo: vi.fn(),
       lineTo: vi.fn(),
       stroke: vi.fn(),
-      closePath: vi.fn()
+      closePath: vi.fn(),
+      getImageData: vi.fn(() => ({ data: new Uint8ClampedArray() })),
+      putImageData: vi.fn()
     };
     mockCanvas = {
       getContext: vi.fn(() => mockContext),
@@ -49,13 +51,13 @@ describe('useCanvas', () => {
     expect(mockContext.moveTo).toHaveBeenCalledWith(10, 20);
   });
 
-  it('should not start drawing if pointerType is not touch', () => {
+  it('should not start drawing if pointerType is not touch, mouse, or pen', () => {
     const { result } = renderHook(() => useCanvas());
     result.current.canvasRef.current = mockCanvas;
 
     act(() => {
       result.current.startDrawing({
-        nativeEvent: { pointerType: 'mouse', clientX: 10, clientY: 20 }
+        nativeEvent: { pointerType: 'unknown', clientX: 10, clientY: 20 }
       });
     });
 

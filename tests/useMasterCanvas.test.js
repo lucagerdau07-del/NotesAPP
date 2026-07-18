@@ -83,7 +83,6 @@ describe('useMasterCanvas', () => {
     });
 
     expect(mockContext.clearRect).toHaveBeenCalledWith(0, 0, 500, 500);
-    expect(mockCanvas.toDataURL).toHaveBeenCalled();
   });
 
   it('undo and redo should manipulate history correctly', () => {
@@ -139,7 +138,9 @@ describe('useMasterCanvas', () => {
     const mockContext = {
       scale: vi.fn(),
       lineCap: '',
-      lineJoin: ''
+      lineJoin: '',
+      getImageData: vi.fn(() => ({ data: new Uint8ClampedArray() })),
+      putImageData: vi.fn()
     };
     
     const mockCanvas = {

@@ -18,6 +18,8 @@ describe('Task 4 - WritingZone', () => {
       clearRect: vi.fn(),
       restore: vi.fn(),
       scale: vi.fn(),
+      getImageData: vi.fn(() => ({ data: new Uint8ClampedArray() })),
+      putImageData: vi.fn(),
     };
 
     HTMLCanvasElement.prototype.getContext = vi.fn(() => mockContext);

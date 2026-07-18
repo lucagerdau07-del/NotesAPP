@@ -1,6 +1,6 @@
 import useCanvas from '../hooks/useCanvas';
 
-export default function WritingZone({ masterCanvasState, focusBoxState }) {
+export default function WritingZone({ masterCanvasState, focusBoxState, toolbarState }) {
   const onStroke = (x1, y1, x2, y2, color, lineWidth, isEraser) => {
     if (!masterCanvasState || !focusBoxState) return;
     const canvas = document.querySelector('.writing-zone canvas');
@@ -14,7 +14,7 @@ export default function WritingZone({ masterCanvasState, focusBoxState }) {
     const masterX2 = fb.x + x2 * scaleX;
     const masterY2 = fb.y + y2 * scaleY;
     
-    masterCanvasState.drawLine(masterX1, masterY1, masterX2, masterY2, color, lineWidth, isEraser);
+    masterCanvasState.drawLine(masterX1, masterY1, masterX2, masterY2, color, lineWidth * scaleX, isEraser);
   };
 
   const onAdvance = (lastX) => {
@@ -25,7 +25,7 @@ export default function WritingZone({ masterCanvasState, focusBoxState }) {
     }));
   };
 
-  const canvasState = useCanvas(onStroke, onAdvance);
+  const canvasState = useCanvas(onStroke, onAdvance, toolbarState);
   const { canvasRef, startDrawing, draw, stopDrawing } = canvasState || {};
 
   return (
