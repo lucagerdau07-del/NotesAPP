@@ -41,7 +41,7 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onChange, 
   );
 }
 
-export default function DocumentView({ canvasState }) {
+export default function DocumentView({ canvasState, masterCanvasState, focusBoxState }) {
   const { 
     color, setColor, 
     isEraser, setIsEraser, 
@@ -124,6 +124,26 @@ export default function DocumentView({ canvasState }) {
       <div style={{ padding: '80px 24px' }}>
         Document Area
       </div>
+      {masterCanvasState && (
+        <canvas 
+          ref={masterCanvasState.masterCanvasRef} 
+          className="master-canvas"
+          data-testid="master-canvas"
+        />
+      )}
+      {focusBoxState && focusBoxState.focusBox && (
+        <div 
+          className="focus-box"
+          data-testid="focus-box"
+          style={{
+            left: focusBoxState.focusBox.x,
+            top: focusBoxState.focusBox.y,
+            width: focusBoxState.focusBox.width,
+            height: focusBoxState.focusBox.height
+          }}
+          onPointerDown={focusBoxState.handleDrag}
+        />
+      )}
     </div>
   );
 }
