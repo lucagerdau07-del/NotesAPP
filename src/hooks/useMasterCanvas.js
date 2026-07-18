@@ -126,11 +126,6 @@ export default function useMasterCanvas() {
     undo,
     redo,
     color,
-    setColor,
-    lineWidth,
-    setLineWidth,
-    canUndo,
-    canRedo,
-    saveSnapshot // Exporting to allow saving snapshot after multiple drawLines if needed, but not required by interface. Will leave it inside since hooks usually don't need it exported unless specified, I'll export it just in case or omit it. Actually, I won't export it unless needed.
+    lineWidth
   };
 }
