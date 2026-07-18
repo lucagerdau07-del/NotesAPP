@@ -7,6 +7,6 @@ import App from '../src/App';
 describe('App Component', () => {
   it('renders without crashing', () => {
     render(<App />);
-    expect(screen.getByText('Notes App Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Smart Canvas')).toBeInTheDocument();
   });
 });
