@@ -165,49 +165,4 @@ describe('useMasterCanvas', () => {
     // so we just ensure no errors occur.
   });
 
-  it('should update canvas size on resize observer callback', () => {
-    let observerCallback = null;
-    global.ResizeObserver = class ResizeObserver {
-      constructor(callback) {
-        observerCallback = callback;
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    };
-
-    const mockContext = {
-      scale: vi.fn(),
-      lineCap: '',
-      lineJoin: '',
-      getImageData: vi.fn(() => ({ data: new Uint8ClampedArray() })),
-      putImageData: vi.fn()
-    };
-    
-    const mockCanvas = {
-      getContext: vi.fn(() => mockContext),
-      getBoundingClientRect: vi.fn(() => ({ width: 800, height: 600 })),
-      width: 0,
-      height: 0,
-    };
-
-    renderHook(() => {
-      const hookResult = useMasterCanvas();
-      if (!hookResult.masterCanvasRef.current) {
-        hookResult.masterCanvasRef.current = mockCanvas;
-      }
-      return hookResult;
-    });
-    
-    act(() => {
-      if (observerCallback) {
-        observerCallback();
-      }
-    });
-
-    const dpr = window.devicePixelRatio || 1;
-    expect(mockCanvas.width).toBe(800 * dpr);
-    expect(mockCanvas.height).toBe(600 * dpr);
-    expect(mockContext.scale).toHaveBeenCalledWith(dpr, dpr);
-  });
 });

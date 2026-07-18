@@ -1,6 +1,6 @@
 import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 
-export default function useCanvas(onStroke = null, onAdvance = null, toolbarState = null, onStrokeEnd = null) {
+export default function useCanvas(onStroke = null, toolbarState = null, onStrokeEnd = null, fbWidth = 800) {
   const canvasRef = useRef(null);
   const lastPosRef = useRef(null);
   const currentStrokeRef = useRef([]);
@@ -45,13 +45,14 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.restore();
-    saveSnapshot([]);
+    saveSnapshot({ isClear: true });
   }, [saveSnapshot]);
 
   const restoreSnapshot = useCallback((index) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext('2d');
+    if (!context) return;
     
     context.save();
     context.setTransform(1, 0, 0, 1, 0, 0);
@@ -62,7 +63,15 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       for (let i = 0; i <= index; i++) {
         const stroke = historyRef.current[i];
         if (!stroke) continue;
+        if (stroke.isClear) {
+          context.save();
+          context.setTransform(1, 0, 0, 1, 0, 0);
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.restore();
+          continue;
+        }
         const points = stroke.points || stroke;
+        if (!Array.isArray(points)) continue;
         points.forEach(({ x1, y1, x2, y2, color, lineWidth, isEraser }) => {
           context.strokeStyle = color;
           context.lineWidth = lineWidth;
@@ -75,6 +84,20 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
           context.stroke();
         });
       }
+    }
+
+    if (currentStrokeRef.current && currentStrokeRef.current.length > 0) {
+      currentStrokeRef.current.forEach(({ x1, y1, x2, y2, color, lineWidth, isEraser }) => {
+        context.strokeStyle = color;
+        context.lineWidth = lineWidth;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+        context.beginPath();
+        context.moveTo(x1, y1);
+        context.lineTo(x2, y2);
+        context.stroke();
+      });
     }
   }, []);
 
@@ -104,11 +127,6 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       const context = canvas.getContext('2d');
       if (!context) return;
       
-      let imgData = null;
-      if (canvas.width > 0 && canvas.height > 0) {
-        imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-      }
-
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       
@@ -116,9 +134,7 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       context.lineCap = 'round';
       context.lineJoin = 'round';
       
-      if (imgData) {
-        context.putImageData(imgData, 0, 0);
-      }
+      restoreSnapshot(historyIndexRef.current);
     };
 
     const resizeObserver = new ResizeObserver(() => {
@@ -140,8 +156,10 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     const y = nativeEvent.clientY - rect.top;
     const context = canvasRef.current.getContext('2d');
     
+    const magnification = rect.width / fbWidth;
+    const currentWidth = (isEraser ? eraserWidth : lineWidth) * magnification;
     context.strokeStyle = color;
-    context.lineWidth = isEraser ? eraserWidth : lineWidth;
+    context.lineWidth = currentWidth;
     context.lineCap = 'round';
     context.lineJoin = 'round';
     context.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
@@ -163,8 +181,10 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     context.lineTo(x, y);
     context.stroke();
 
+    const magnification = rect.width / fbWidth;
+
     if (onStroke && lastPosRef.current) {
-      onStroke(lastPosRef.current.x, lastPosRef.current.y, x, y, color, isEraser ? eraserWidth : lineWidth, isEraser);
+      onStroke(lastPosRef.current.x, lastPosRef.current.y, x, y, color, (isEraser ? eraserWidth : lineWidth) * magnification, isEraser);
     }
     
     if (lastPosRef.current) {
@@ -174,7 +194,7 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
         x2: x,
         y2: y,
         color,
-        lineWidth: isEraser ? eraserWidth : lineWidth,
+        lineWidth: (isEraser ? eraserWidth : lineWidth) * magnification,
         isEraser
       });
     }
@@ -195,13 +215,7 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       onStrokeEnd();
     }
 
-    if (onAdvance && lastPosRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      if (lastPosRef.current.x > rect.width * 0.85) {
-        onAdvance(lastPosRef.current.x);
-        clearCanvas();
-      }
-    }
+    currentStrokeRef.current = [];
     lastPosRef.current = null;
   };
 
@@ -215,6 +229,23 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       restoreSnapshot(historyIndexRef.current);
       updateHistoryState();
     }, [restoreSnapshot, updateHistoryState]);
+
+    const shiftLiveStroke = useCallback((dx, dy) => {
+      if (!isDrawing) return;
+      currentStrokeRef.current = currentStrokeRef.current.map(p => ({
+        ...p,
+        x1: p.x1 + dx,
+        x2: p.x2 + dx,
+        y1: p.y1 + dy,
+        y2: p.y2 + dy
+      }));
+      if (lastPosRef.current) {
+        lastPosRef.current = {
+          x: lastPosRef.current.x + dx,
+          y: lastPosRef.current.y + dy
+        };
+      }
+    }, [isDrawing]);
 
   return { 
     canvasRef, 
@@ -236,6 +267,7 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     canUndo,
     canRedo,
     getHistory,
-    loadStrokes
+    loadStrokes,
+    shiftLiveStroke
   };
 }

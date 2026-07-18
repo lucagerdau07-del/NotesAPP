@@ -10,7 +10,8 @@ export default function SplitLayout({ activeTab }) {
   const [lineWidth, setLineWidth] = useState(3);
   const [eraserWidth, setEraserWidth] = useState(15);
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [isCollegeBlock, setIsCollegeBlock] = useState(false);
+  const [paperStyle, setPaperStyle] = useState('blank');
+  const [showPageBreaks, setShowPageBreaks] = useState(true);
 
   const toolbarState = {
     color, setColor,
@@ -18,7 +19,8 @@ export default function SplitLayout({ activeTab }) {
     lineWidth, setLineWidth,
     eraserWidth, setEraserWidth,
     isSelectMode, setIsSelectMode,
-    isCollegeBlock, setIsCollegeBlock
+    paperStyle, setPaperStyle,
+    showPageBreaks, setShowPageBreaks
   };
 
   const masterCanvasState = useMasterCanvas();

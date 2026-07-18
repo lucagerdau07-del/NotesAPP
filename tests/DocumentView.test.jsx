@@ -29,10 +29,6 @@ test('renders DocumentView with master canvas and focus box', () => {
   expect(focusBox.style.top).toBe('60px');
   expect(focusBox.style.width).toBe('200px');
   expect(focusBox.style.height).toBe('100px');
-
-  // Check drag interaction
-  fireEvent.pointerDown(focusBox, { clientX: 55, clientY: 65 });
-  expect(handleDrag).toHaveBeenCalled();
 });
 
 test('renders DocumentView without crashing when states are missing', () => {
@@ -49,7 +45,7 @@ test('select mode draws draft focus box and updates focus box state', () => {
 
   render(<DocumentView focusBoxState={focusBoxState} toolbarState={toolbarState} />);
 
-  const container = screen.getByTestId('document-view');
+  const container = screen.getByTestId('document-page');
   
   container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
 

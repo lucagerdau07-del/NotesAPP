@@ -36,7 +36,15 @@ export default function useMasterCanvas() {
       for (let i = 0; i <= index; i++) {
         const stroke = historyRef.current[i];
         if (!stroke) continue;
+        if (stroke.isClear) {
+          context.save();
+          context.setTransform(1, 0, 0, 1, 0, 0);
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.restore();
+          continue;
+        }
         const points = stroke.points || stroke;
+        if (!Array.isArray(points)) continue;
         points.forEach(({ x1, y1, x2, y2, color, lineWidth, isEraser }) => {
           context.strokeStyle = color;
           context.lineWidth = lineWidth;
@@ -78,21 +86,15 @@ export default function useMasterCanvas() {
       const context = canvas.getContext('2d');
       if (!context) return;
       
-      let imgData = null;
-      if (canvas.width > 0 && canvas.height > 0) {
-        imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-      }
-
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       
-      context.scale(dpr, dpr);
+      const zoomScale = rect.width / 800;
+      context.scale(dpr * zoomScale, dpr * zoomScale);
       context.lineCap = 'round';
       context.lineJoin = 'round';
       
-      if (imgData) {
-        context.putImageData(imgData, 0, 0);
-      }
+      restoreSnapshot(historyIndexRef.current);
     };
 
     const resizeObserver = new ResizeObserver(() => {
@@ -115,7 +117,7 @@ export default function useMasterCanvas() {
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.restore();
-    saveSnapshot([]);
+    saveSnapshot({ isClear: true });
     currentStrokeRef.current = [];
   }, [saveSnapshot]);
 
@@ -140,10 +142,19 @@ export default function useMasterCanvas() {
 
   const getStrokesInRect = useCallback((rect) => {
     const intersecting = [];
+    let lastClearIndex = -1;
     for (let i = 0; i <= historyIndexRef.current; i++) {
+      if (historyRef.current[i] && historyRef.current[i].isClear) {
+        lastClearIndex = i;
+      }
+    }
+
+    for (let i = lastClearIndex + 1; i <= historyIndexRef.current; i++) {
       const stroke = historyRef.current[i];
       if (!stroke) continue;
+      if (stroke.isClear) continue;
       const points = stroke.points || stroke;
+      if (!Array.isArray(points)) continue;
       let inRect = false;
       for (const p of points) {
         if (p.x1 >= rect.x && p.x1 <= rect.x + rect.width &&
@@ -172,37 +183,16 @@ export default function useMasterCanvas() {
     updateHistoryState();
   }, [restoreSnapshot, updateHistoryState]);
 
-  const endStroke = useCallback(({ isCollegeBlock = false } = {}) => {
+  const endStroke = useCallback(() => {
     if (currentStrokeRef.current.length > 0) {
-      let strokeToSave = [...currentStrokeRef.current];
-      
-      if (isCollegeBlock) {
-        const points = [...strokeToSave].sort((a, b) => Math.max(b.y1, b.y2) - Math.max(a.y1, a.y2));
-        const numPoints = Math.max(1, Math.floor(points.length * 0.33));
-        const bottomPoints = points.slice(0, numPoints);
-        const lowestY = Math.max(...bottomPoints.map(p => Math.max(p.y1, p.y2)));
-        
-        const nearestMultiple = Math.round(lowestY / 40) * 40;
-        const offset = nearestMultiple - lowestY;
-
-        strokeToSave = strokeToSave.map(p => ({
-          ...p,
-          y1: p.y1 + offset,
-          y2: p.y2 + offset
-        }));
-      }
-
+      const strokeToSave = [...currentStrokeRef.current];
       const id = Date.now() + Math.random();
       saveSnapshot({ id, points: strokeToSave });
       currentStrokeRef.current = [];
-      
-      if (isCollegeBlock) {
-        restoreSnapshot(historyIndexRef.current);
-      }
       return id;
     }
     return null;
-  }, [saveSnapshot, restoreSnapshot]);
+  }, [saveSnapshot]);
 
   return {
     masterCanvasRef,

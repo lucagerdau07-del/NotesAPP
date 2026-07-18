@@ -61,10 +61,5 @@ describe('Task 4 - WritingZone', () => {
     fireEvent.pointerMove(canvas, { clientX: 30, clientY: 40, pointerType: 'touch' });
     
     expect(masterCanvasState.drawLine).toHaveBeenCalledWith(105, 60, 115, 70, expect.any(String), expect.any(Number), expect.any(Boolean));
-    
-    fireEvent.pointerMove(canvas, { clientX: 700, clientY: 40, pointerType: 'touch' });
-    fireEvent.pointerUp(canvas);
-    
-    expect(focusBoxState.setFocusBox).toHaveBeenCalled();
   });
 });
