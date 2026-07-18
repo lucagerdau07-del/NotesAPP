@@ -10,13 +10,15 @@ export default function SplitLayout({ activeTab }) {
   const [lineWidth, setLineWidth] = useState(3);
   const [eraserWidth, setEraserWidth] = useState(15);
   const [isSelectMode, setIsSelectMode] = useState(false);
+  const [isCollegeBlock, setIsCollegeBlock] = useState(false);
 
   const toolbarState = {
     color, setColor,
     isEraser, setIsEraser,
     lineWidth, setLineWidth,
     eraserWidth, setEraserWidth,
-    isSelectMode, setIsSelectMode
+    isSelectMode, setIsSelectMode,
+    isCollegeBlock, setIsCollegeBlock
   };
 
   const masterCanvasState = useMasterCanvas();

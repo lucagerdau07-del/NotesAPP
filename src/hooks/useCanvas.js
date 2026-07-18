@@ -62,7 +62,8 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
       for (let i = 0; i <= index; i++) {
         const stroke = historyRef.current[i];
         if (!stroke) continue;
-        stroke.forEach(({ x1, y1, x2, y2, color, lineWidth, isEraser }) => {
+        const points = stroke.points || stroke;
+        points.forEach(({ x1, y1, x2, y2, color, lineWidth, isEraser }) => {
           context.strokeStyle = color;
           context.lineWidth = lineWidth;
           context.lineCap = 'round';
@@ -187,7 +188,7 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     context.closePath();
     setIsDrawing(false);
     if (currentStrokeRef.current.length > 0) {
-      saveSnapshot([...currentStrokeRef.current]);
+      saveSnapshot({ id: Date.now() + Math.random(), points: [...currentStrokeRef.current] });
     }
 
     if (onStrokeEnd) {
@@ -203,6 +204,17 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     }
     lastPosRef.current = null;
   };
+
+    const getHistory = useCallback(() => {
+      return historyRef.current.slice(0, historyIndexRef.current + 1);
+    }, []);
+
+    const loadStrokes = useCallback((strokes) => {
+      historyRef.current = strokes;
+      historyIndexRef.current = strokes.length - 1;
+      restoreSnapshot(historyIndexRef.current);
+      updateHistoryState();
+    }, [restoreSnapshot, updateHistoryState]);
 
   return { 
     canvasRef, 
@@ -222,6 +234,8 @@ export default function useCanvas(onStroke = null, onAdvance = null, toolbarStat
     undo,
     redo,
     canUndo,
-    canRedo
+    canRedo,
+    getHistory,
+    loadStrokes
   };
 }

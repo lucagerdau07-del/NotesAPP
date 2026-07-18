@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Eraser, Trash2, Undo2, Redo2, SquareDashed } from 'lucide-react';
+import { Eraser, Trash2, Undo2, Redo2, SquareDashed, AlignJustify } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
 
@@ -50,7 +50,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
     isEraser, setIsEraser, 
     lineWidth, setLineWidth,
     eraserWidth, setEraserWidth,
-    isSelectMode, setIsSelectMode
+    isSelectMode, setIsSelectMode,
+    isCollegeBlock, setIsCollegeBlock
   } = toolbarState || {};
   const [customColors, setCustomColors] = useState(['#2C2825', '#D32F2F', '#1976D2', '#388E3C', '#F57C00']);
   const [activePickerIndex, setActivePickerIndex] = useState(null);
@@ -118,7 +119,7 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
 
   return (
     <div 
-      className="document-view" 
+      className={`document-view ${isCollegeBlock ? 'college-block' : ''}`} 
       data-testid="document-view" 
       style={{ position: 'relative', touchAction: isSelectMode ? 'none' : 'auto' }}
       ref={containerRef}
@@ -154,6 +155,14 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           data-testid="select-mode-btn"
         >
           <SquareDashed size={24} />
+        </button>
+        <button 
+          className={`tool-btn icon-btn ${isCollegeBlock ? 'active' : ''}`}
+          onClick={() => { setIsCollegeBlock?.(!isCollegeBlock); }}
+          title="College Block umschalten"
+          data-testid="college-block-btn"
+        >
+          <AlignJustify size={24} />
         </button>
         <div className="toolbar-divider" />
         {customColors.map((c, index) => (

@@ -196,3 +196,8 @@ body {
 .focus-box:active {
   cursor: grabbing;
 }
+
+.college-block {
+  background-image: repeating-linear-gradient(transparent, transparent 39px, #ccc 39px, #ccc 40px) !important;
+  background-size: 100% 40px !important;
+}
