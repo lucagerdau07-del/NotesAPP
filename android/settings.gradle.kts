@@ -16,7 +16,7 @@ dependencyResolutionManagement {
 rootProject.name = "school-notes"
 include(":app")
 include(":core-model")
-// include(":ink-engine")
+include(":ink-engine")
 // include(":touch-engine")
 // include(":document-engine")
 // include(":storage")
