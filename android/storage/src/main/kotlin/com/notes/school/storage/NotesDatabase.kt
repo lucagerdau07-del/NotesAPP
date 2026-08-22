@@ -32,8 +32,15 @@ abstract class NotesDatabase : RoomDatabase() {
 
         fun open(context: Context): NotesDatabase =
             Room.databaseBuilder(context.applicationContext, NotesDatabase::class.java, NAME)
-                // No fallbackToDestructiveMigration: losing a student's notes on an
-                // upgrade is worse than failing loudly.
+                .addMigrations(*Migrations.ALL)
                 .build()
     }
+}
+
+/**
+ * Every schema change adds a Migration here and commits the new schemas/N.json.
+ * Version 1 is the baseline and has no migration.
+ */
+object Migrations {
+    val ALL: Array<androidx.room.migration.Migration> = emptyArray()
 }
