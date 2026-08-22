@@ -53,8 +53,18 @@ dependencies {
     implementation(project(":core-model"))
     implementation(project(":ink-engine"))
     implementation(project(":touch-engine"))
+    implementation(project(":document-engine"))
+    implementation(project(":storage"))
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation("androidx.navigation:navigation-testing:2.7.7")
+    debugImplementation(libs.compose.ui.test.manifest)
 }
