@@ -57,6 +57,7 @@ dependencies {
     implementation(project(":touch-engine"))
     implementation(project(":document-engine"))
     implementation(project(":storage"))
+    implementation(project(":remote"))
     implementation(libs.room.runtime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.runtime.compose)
