@@ -50,5 +50,11 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
+    implementation(project(":core-model"))
+    implementation(project(":ink-engine"))
+    implementation(project(":touch-engine"))
+
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

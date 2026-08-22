@@ -126,7 +126,7 @@ class ContactTracker {
             durationMs = duration,
             pathLengthPx = acc.pathLength,
             displacementPx = sqrt(dx * dx + dy * dy),
-            meanSpeedPxPerMs = if (duration > 0) acc.pathLength / duration else 0f,
+            meanSpeedPxPerMs = if (duration > 0) acc.pathLength / duration else acc.peakSpeed,
             peakSpeedPxPerMs = acc.peakSpeed,
             meanSizeNorm = acc.sizeSum / samples,
             maxSizeNorm = acc.maxSize,
