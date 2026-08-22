@@ -30,7 +30,7 @@ body {
   padding: 16px 8px;
   box-sizing: border-box;
   overflow: hidden;
-  background: #08080A;
+  background: transparent;
 }
 
 .split-layout.full-mode .document-view {
@@ -39,7 +39,9 @@ body {
 
 .document-view {
   width: 75%;
-  background-color: #0D0C11;
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.62) 0%, rgba(16, 16, 20, 0.78) 40%, rgba(8, 8, 12, 0.90) 100%);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
   border-radius: 24px;
   box-shadow: 0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08);
   position: relative;
@@ -48,7 +50,9 @@ body {
 
 .writing-zone {
   width: 25%;
-  background-color: #0A090D;
+  background-color: rgba(10, 9, 13, 0.55);
+  backdrop-filter: blur(40px) saturate(1.7);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7);
   background-image: radial-gradient(rgba(255,255,255,.1) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
   border-radius: 24px;
@@ -323,7 +327,7 @@ body {
 
 .lib-tile.active {
   transform: translateY(-5px) scale(1.03);
-  box-shadow: 0 0 0 2.5px #0a84ff, 0 16px 36px -12px rgba(10, 132, 255, 0.5) !important;
+  box-shadow: 0 0 0 2.5px var(--subj-accent), 0 16px 36px -12px var(--subj-accent-soft) !important;
 }
 
 .lib-tile-inactive {
@@ -384,42 +388,53 @@ body {
    ========================================================================== */
 
 /* Fluted Reeded Glass Textured Dark Background */
+body::before,
 .liquid-fluted-bg {
-  position: absolute;
+  content: "";
+  position: fixed;
   inset: 0;
-  background-color: #060608;
-  background-image: 
-    /* 1. Organic Dark Light Blooms / Volumetric Highlights (matches Image 1) */
-    radial-gradient(ellipse 900px 600px at 12% 18%, rgba(85, 85, 100, 0.35), transparent 65%),
-    radial-gradient(ellipse 800px 650px at 88% 22%, rgba(65, 65, 80, 0.3), transparent 65%),
-    radial-gradient(ellipse 950px 700px at 50% 88%, rgba(55, 55, 70, 0.32), transparent 70%),
-    radial-gradient(ellipse 550px 480px at 75% 65%, rgba(95, 95, 115, 0.22), transparent 60%),
-    radial-gradient(ellipse 400px 400px at 28% 75%, rgba(70, 70, 85, 0.2), transparent 60%),
-    /* 2. Micro-Ribbed Vertical Reeded Fluting (frosted corrugated glass effect) */
-    repeating-linear-gradient(90deg, 
-      rgba(255, 255, 255, 0.04) 0px, 
-      rgba(255, 255, 255, 0.04) 1px, 
-      transparent 1px, 
-      transparent 3.5px, 
-      rgba(0, 0, 0, 0.5) 3.5px, 
-      rgba(0, 0, 0, 0.5) 5.5px, 
-      transparent 5.5px, 
-      transparent 8px
+  z-index: -1;
+  background-color: #050506;
+  /* Reihenfolge zählt: erste Ebene liegt OBEN. Das Gewebe muss über den
+     Blooms liegen, sonst leuchtet das Licht die Rippen platt statt sie
+     von hinten zu durchscheinen (Referenzbild-Look). */
+  background-image:
+    /* 1. Halftone-Dithering (Raster ganz oben) */
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.16) 0.9px, transparent 1.3px),
+    /* 2. Gewebe — senkrechte Rippen (dünne Hell/Dunkel-Linien, Rest offen) */
+    repeating-linear-gradient(90deg,
+      rgba(255, 255, 255, 0.30) 0px,
+      rgba(255, 255, 255, 0.30) 1px,
+      transparent 1px,
+      transparent 2.5px,
+      rgba(0, 0, 0, 0.48) 2.5px,
+      rgba(0, 0, 0, 0.48) 4px,
+      transparent 4px,
+      transparent 6px
     ),
-    /* 3. Crosshatch Ripple Waves / Moiré Dithering */
-    repeating-linear-gradient(0deg, 
-      rgba(255, 255, 255, 0.025) 0px, 
-      rgba(255, 255, 255, 0.025) 1px, 
-      transparent 1px, 
-      transparent 4px, 
-      rgba(0, 0, 0, 0.35) 4px, 
-      rgba(0, 0, 0, 0.35) 6px, 
-      transparent 6px, 
-      transparent 10px
+    /* 3. Gewebe — waagerechte Rippen (ergibt Moiré-Kreuzung) */
+    repeating-linear-gradient(0deg,
+      rgba(255, 255, 255, 0.22) 0px,
+      rgba(255, 255, 255, 0.22) 1px,
+      transparent 1px,
+      transparent 2.5px,
+      rgba(0, 0, 0, 0.38) 2.5px,
+      rgba(0, 0, 0, 0.38) 4px,
+      transparent 4px,
+      transparent 6px
     ),
-    /* 4. Fine frosted micro-halftone dithering */
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.055) 1px, transparent 1.6px);
-  background-size: auto, auto, auto, auto, auto, 8px 100%, 100% 10px, 5px 5px;
+    /* 4. Volumetrische Lichtblasen dahinter */
+    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.80), transparent 64%),
+    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.72), transparent 66%),
+    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.64), transparent 66%),
+    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.60), transparent 68%),
+    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.54), transparent 66%),
+    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.52), transparent 76%);
+  background-size:
+    5px 5px,
+    6px 100%,
+    100% 6px,
+    auto, auto, auto, auto, auto, auto;
   background-attachment: fixed;
   pointer-events: none;
 }
@@ -555,7 +570,7 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: #060608;
+  background: transparent;
 }
 
 .editor-title-pill, .editor-actions-pill {
@@ -566,13 +581,14 @@ body {
   display: flex;
   align-items: center;
   background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
-  backdrop-filter: blur(34px) saturate(1.6);
-  -webkit-backdrop-filter: blur(34px) saturate(1.6);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.5),
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
-    0 18px 36px -20px rgba(0,0,0,.9);
+    0 20px 48px -10px rgba(0, 0, 0, 0.95),
+    0 4px 16px rgba(0, 0, 0, 0.6);
   z-index: 200;
   color: #FFFFFF;
   font-family: Manrope, sans-serif;
@@ -633,6 +649,9 @@ body {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  /* Ohne dieses Reset blurrt die Vollflächen-Ansicht die Glastextur dahinter weg. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .editor-sidebar {
@@ -642,10 +661,14 @@ body {
   bottom: 12px;
   width: 72px;
   border-radius: 30px;
-  background: linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));
-  backdrop-filter: blur(30px) saturate(1.35);
-  border: 1px solid rgba(255,255,255,.13);
-  box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 28px 60px -26px rgba(0,0,0,.85);
+  background: linear-gradient(170deg, rgba(38,38,44,.68) 0%, rgba(16,16,20,.8) 35%, rgba(8,8,12,.92) 100%);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255,255,255,.45),
+    inset 0 -1.5px 2px 0 rgba(0,0,0,.9),
+    0 28px 60px -20px rgba(0,0,0,.98);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -701,7 +724,7 @@ body {
   border-radius: 15px;
   border: none;
   background: none;
-  color: rgba(233,230,223,.42);
+  color: rgba(255,255,255,.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1081,9 +1104,9 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  /* transparent, damit die geriffelte Glastextur aus body::before durchscheint */
   background: radial-gradient(circle at 12% 8%, rgba(10,132,255,.08), transparent 24%),
-              radial-gradient(circle at 88% 88%, rgba(90,200,250,.04), transparent 26%),
-              #08080A;
+              radial-gradient(circle at 88% 88%, rgba(90,200,250,.04), transparent 26%);
   color: #FFFFFF;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   padding: 16px;
@@ -1514,3 +1537,306 @@ body {
 
 
 
+
+/* ==========================================================================
+   Agent Panel (Liquid Glass)
+   ========================================================================== */
+.agent-panel {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  bottom: 14px;
+  width: 500px;
+  border-radius: 30px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
+}
+.agent-panel[data-open="false"] {
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agent-panel-head {
+  padding: 18px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-badge {
+  margin-left: auto;
+  font: 600 9.5px ui-monospace, monospace;
+  letter-spacing: .06em;
+  color: #FFFFFF;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.agent-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.agent-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.08);
+}
+
+.agent-panel-body {
+  padding: 0 14px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+.agent-panel-body::-webkit-scrollbar {
+  width: 8px;
+}
+.agent-panel-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.agent-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.agent-panel-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.agent-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0.03) 100%);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1.5px 0 rgba(0, 0, 0, 0.7),
+    0 14px 30px -18px rgba(0, 0, 0, 0.95);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.agent-card:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
+}
+
+.agent-card-new {
+  animation: agent-card-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes agent-card-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  font: 700 9.5px ui-monospace, monospace;
+  letter-spacing: .05em;
+  color: #FFFFFF;
+}
+
+.agent-progress {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.agent-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.55));
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+}
+
+.agent-input {
+  height: 48px;
+  padding: 0 6px 0 16px;
+  gap: 10px;
+}
+.agent-input input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #FFFFFF;
+  font: 500 12.5px Manrope, sans-serif;
+  caret-color: #0a84ff;
+}
+.agent-input input::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+.agent-input button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0B0B0F;
+  background: linear-gradient(180deg, #FFFFFF, #C9C9D2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.agent-input button:hover {
+  transform: scale(1.08);
+}
+
+/* ==========================================================================
+   Thematic Subject Decor Band (top chrome reacts to selected subject)
+   ========================================================================== */
+.subject-topdeco {
+  position: absolute;
+  left: 106px;
+  top: 0;
+  height: 84px;
+  border-radius: 0 0 34px 34px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transform: translateY(-14px);
+  transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), right 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+}
+.subject-topdeco[data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.subject-topdeco-pattern {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  animation: subject-deco-drift 26s linear infinite;
+}
+@keyframes subject-deco-drift {
+  from { background-position: 0 0; }
+  to { background-position: 120px 0; }
+}
+
+.subject-topdeco-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(760px 200px at 6% 0%, var(--subj-accent-soft), transparent 72%),
+    radial-gradient(520px 180px at 62% 0%, var(--subj-accent-soft), transparent 70%);
+}
+
+.subject-chip {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 52px;
+  padding: 0 16px 0 13px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(16, 16, 20, 0.86) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid var(--subj-accent-soft);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 18px 44px -12px rgba(0, 0, 0, 0.95),
+    0 0 30px -8px var(--subj-accent-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  animation: subject-chip-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes subject-chip-in {
+  from { opacity: 0; transform: translateX(-16px) scale(0.94); max-width: 0; }
+  to { opacity: 1; transform: none; max-width: 420px; }
+}
+
+.subject-chip-mark {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font: 700 14px/1 "Bricolage Grotesque", serif;
+  color: #0B0B0F;
+  background: var(--subj-accent);
+  box-shadow: 0 0 16px -2px var(--subj-accent-soft);
+}
+
+.subject-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.subject-chip-text strong {
+  font: 700 13px "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+}
+.subject-chip-text em {
+  font: 700 8.5px ui-monospace, monospace;
+  font-style: normal;
+  letter-spacing: .14em;
+  color: var(--subj-accent);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.subject-chip-count {
+  margin-left: 2px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font: 700 10.5px ui-monospace, monospace;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Top chrome picks up the subject accent */
+[data-subject]:not([data-subject="all"]) .liquid-glass-pill {
+  border-color: var(--subj-accent-soft);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 20px 48px -10px rgba(0, 0, 0, 0.95),
+    0 0 26px -6px var(--subj-accent-soft);
+}
+[data-subject]:not([data-subject="all"]) .liquid-glass-circle {
+  border-color: var(--subj-accent-soft);
+}
+[data-subject]:not([data-subject="all"]) .lib-agent-dot,
+[data-subject]:not([data-subject="all"]) .agent-progress > span {
+  background: var(--subj-accent);
+}

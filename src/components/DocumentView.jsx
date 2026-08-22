@@ -935,11 +935,17 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           textAlign: isFullMode ? 'left' : 'center',
           touchAction: 'pan-x pan-y',
           // Vollmodus: der Scroll-Container IST das Papier (Design: left:96 right:24 top/bottom:22).
-          margin: isFullMode ? '22px 24px 22px 96px' : 0,
+          // Rahmen breit genug, dass die geriffelte Glastextur rundum sichtbar bleibt.
+          margin: isFullMode ? '34px 40px 34px 112px' : 0,
           borderRadius: isFullMode ? '22px' : 0,
-          backgroundColor: isFullMode ? '#0D0C12' : 'transparent',
+          // Kein backdrop-filter: der Blur würde die Textur dahinter zu einem
+          // glatten Verlauf verschmieren. Papier deshalb fast deckend.
+          background: isFullMode
+            ? 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)'
+            : 'transparent',
+          color: '#FFFFFF',
           boxShadow: isFullMode
-            ? '0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)'
+            ? 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)'
             : 'none'
         }}
         onPointerDown={handleGestureStart}

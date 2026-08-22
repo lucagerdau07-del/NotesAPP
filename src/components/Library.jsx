@@ -17,6 +17,57 @@ const SUBJECTS = [
   { id: 'spanisch', name: 'Spanisch', count: 14, themeColor: 'oklch(0.65 0.08 52)' },
 ];
 
+// Thematic decor per subject: accent color, decorative top-band pattern, wordmark + motto
+const SUBJECT_THEMES = {
+  mathe: {
+    accent: '#6BA8FF', accentSoft: 'rgba(107,168,255,.28)',
+    mark: 'ƒ(x)', motto: 'ANALYSIS · VEKTOREN · STOCHASTIK',
+    pattern: 'linear-gradient(rgba(107,168,255,.30) 1px, transparent 1px), linear-gradient(90deg, rgba(107,168,255,.30) 1px, transparent 1px)',
+    patternSize: '26px 26px, 26px 26px',
+  },
+  chemie: {
+    accent: '#4ADE80', accentSoft: 'rgba(74,222,128,.26)',
+    mark: '⌬', motto: 'SYNTHESE · REDOX · TITRATION',
+    pattern: 'radial-gradient(circle at 50% 50%, rgba(74,222,128,.38) 1.6px, transparent 2px)',
+    patternSize: '22px 22px',
+  },
+  kunst: {
+    accent: '#FF7AC8', accentSoft: 'rgba(255,122,200,.26)',
+    mark: '◐', motto: 'PERSPEKTIVE · FARBLEHRE · KOMPOSITION',
+    pattern: 'repeating-linear-gradient(45deg, rgba(255,122,200,.24) 0 8px, transparent 8px 22px)',
+    patternSize: 'auto',
+  },
+  pgw: {
+    accent: '#C08BFF', accentSoft: 'rgba(192,139,255,.26)',
+    mark: '▤', motto: 'POLITIK · GESELLSCHAFT · WIRTSCHAFT',
+    pattern: 'repeating-linear-gradient(90deg, rgba(192,139,255,.30) 0 3px, transparent 3px 16px)',
+    patternSize: 'auto',
+  },
+  philosophie: {
+    accent: '#E8CFA0', accentSoft: 'rgba(232,207,160,.24)',
+    mark: 'Φ', motto: 'ETHIK · ERKENNTNIS · METAPHYSIK',
+    pattern: 'repeating-linear-gradient(0deg, rgba(232,207,160,.22) 0 1px, transparent 1px 30px)',
+    patternSize: 'auto',
+  },
+  englisch: {
+    accent: '#FF8A80', accentSoft: 'rgba(255,138,128,.26)',
+    mark: 'Aa', motto: 'LITERATURE · ESSAY · SHAKESPEARE',
+    pattern: 'repeating-linear-gradient(0deg, rgba(255,138,128,.26) 0 1px, transparent 1px 14px)',
+    patternSize: 'auto',
+  },
+  spanisch: {
+    accent: '#FFB259', accentSoft: 'rgba(255,178,89,.26)',
+    mark: '¡Ñ!', motto: 'VOCABULARIO · SUBJUNTIVO · CULTURA',
+    pattern: 'repeating-linear-gradient(-45deg, rgba(255,178,89,.24) 0 10px, transparent 10px 26px)',
+    patternSize: 'auto',
+  },
+};
+const DEFAULT_THEME = {
+  accent: '#FFFFFF', accentSoft: 'rgba(255,255,255,.16)',
+  mark: '', motto: '',
+  pattern: 'none', patternSize: 'auto',
+};
+
 const RECENT = [
   // MATHE
   { 
@@ -299,8 +350,9 @@ function TileWrap({ onOpen, w, h, bg, boxShadow, className = '', testId, childre
 }
 
 function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
+  const accent = (SUBJECT_THEMES[s.id] || DEFAULT_THEME).accent;
   const shadow = isSelected 
-    ? '0 24px 50px -16px rgba(10,132,255,.6), 0 0 0 2.5px #0a84ff' 
+    ? `0 24px 50px -16px ${(SUBJECT_THEMES[s.id] || DEFAULT_THEME).accentSoft}, 0 0 0 2.5px ${accent}` 
     : '0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.12) inset';
 
   const tileClass = isSelected ? 'active' : isOtherSelected ? 'lib-tile-inactive' : '';
@@ -883,12 +935,24 @@ export default function Library({ onOpenNote, onOpenSettings }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMicActive, setIsMicActive] = useState(false);
   const [sortToast, setSortToast] = useState(null);
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [agentTasks, setAgentTasks] = useState([]);
+  const [agentDraft, setAgentDraft] = useState('');
   const toastTimeoutRef = useRef(null);
 
   const showToast = (msg) => {
     setSortToast(msg);
     clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setSortToast(null), 1600);
+  };
+
+  const askAgent = (text) => {
+    const q = text.trim();
+    if (!q) return;
+    setAgentTasks(prev => [{ id: Date.now(), text: q, subject: selectedSubject?.name || null }, ...prev].slice(0, 6));
+    setAgentOpen(true);
+    setSearchQuery('');
+    showToast('An den Agenten übergeben');
   };
 
   const handleToggleSubject = (subject) => {
@@ -953,13 +1017,23 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.33 0.08 55/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.06 40/.3),transparent 65%)'
     : 'radial-gradient(720px 420px at 10% -6%,oklch(0.32 0.055 260/.35),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.3 0.045 200/.25),transparent 64%)';
 
+  const theme = (selectedSubject && SUBJECT_THEMES[selectedSubject.id]) || DEFAULT_THEME;
+
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#060608', fontFamily: 'Manrope,sans-serif', color: '#FFFFFF' }}>
+    <div
+      style={{
+        position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden',
+        background: 'transparent', fontFamily: 'Manrope,sans-serif', color: '#FFFFFF',
+        '--subj-accent': theme.accent,
+        '--subj-accent-soft': theme.accentSoft,
+      }}
+      data-subject={selectedSubject?.id || 'all'}
+    >
       {/* 1. Fluted Reeded Glass Textured Dark Background Layer (Image 1 reference) */}
       <div className="liquid-fluted-bg" />
 
       {/* 2. Dynamic Thematic Ambient Lighting overlay */}
-      <div style={{ position: 'absolute', inset: 0, background: bgGradient, transition: 'background 0.4s ease', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', inset: 0, background: bgGradient, opacity: 0.55, mixBlendMode: 'soft-light', transition: 'background 0.4s ease', pointerEvents: 'none' }} />
 
       {/* sidebar rail */}
       <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
@@ -1004,7 +1078,9 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') askAgent(searchQuery); }}
             placeholder={selectedSubject ? `Ask AI zu ${selectedSubject.name}…` : 'Ask AI'}
+            data-testid="ask-ai-input"
             style={{
               flex: 1,
               background: 'transparent',
@@ -1013,7 +1089,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
               color: '#FFFFFF',
               font: '500 15px/1 Manrope, -apple-system, sans-serif',
               letterSpacing: '-0.01em',
-              caretColor: '#0a84ff'
+              caretColor: theme.accent
             }}
           />
 
@@ -1039,18 +1115,6 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           >
             <Mic size={18} strokeWidth={2} />
           </button>
-
-          {/* Live Audio Waveform Indicator (Image 1) */}
-          <div 
-            style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '0 2px', height: 20 }}
-            title="Audio-Wellenform"
-          >
-            <span className="liquid-wave-bar" />
-            <span className="liquid-wave-bar" />
-            <span className="liquid-wave-bar" />
-            <span className="liquid-wave-bar" />
-            <span className="liquid-wave-bar" />
-          </div>
         </div>
 
         {/* Standalone Liquid Glass Circle Button (Image 1 Close / Reset Pod) */}
@@ -1068,7 +1132,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* view toggle + new note (right aligned) */}
-      <div style={{ position: 'absolute', right: 300, top: 20, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15 }}>
+      <div style={{ position: 'absolute', right: agentOpen ? 530 : 110, top: 20, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
         <div className="liquid-glass-pill" style={{ height: 52, padding: '0 6px', gap: 2 }}>
           <button 
             className={`lib-view-btn ${viewMode === 'masonry' ? 'active' : ''}`} 
@@ -1102,7 +1166,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         <div 
           onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })} 
           className="liquid-glass-pill lib-newnote" 
-          style={{ height: 52, padding: '0 22px 0 18px', gap: 10, background: '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: '0 20px 48px -12px rgba(0,0,0,0.95)' }}
+          style={{ height: 52, padding: '0 22px 0 18px', gap: 10, background: selectedSubject ? theme.accent : '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: selectedSubject ? `0 18px 44px -12px ${theme.accentSoft}, 0 0 0 1px ${theme.accentSoft}` : '0 20px 48px -12px rgba(0,0,0,0.95)', transition: 'background 0.35s ease, box-shadow 0.35s ease' }}
           data-testid="new-note-btn"
         >
           <PenLine size={17} />
@@ -1114,27 +1178,19 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
       {/* Sort Toast */}
       {sortToast && (
-        <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: 300, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000 }} data-testid="sort-toast">
-          <ArrowUpDown size={14} color="#0a84ff" />
+        <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: agentOpen ? 530 : 110, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }} data-testid="sort-toast">
+          <ArrowUpDown size={14} color={theme.accent} />
           <span>{sortToast}</span>
         </div>
       )}
 
       {/* main content */}
-      <div className="lib-scroll" style={{ position: 'absolute', left: 106, top: 92, right: 300, bottom: 26, overflow: 'auto', paddingRight: 10 }}>
-        {/* Header or Thematic Subject Decor */}
-        {selectedSubject ? (
-          <ThematicSubjectHeader 
-            subject={selectedSubject} 
-            onClearFilter={() => { setSelectedSubject(null); showToast('Alle Fächer werden angezeigt'); }}
-            onNewNote={() => onOpenNote?.({ title: `Neue ${selectedSubject.name}-Notiz`, subject: selectedSubject.name })}
-          />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
-            <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em', color: '#FFFFFF' }}>Bibliothek</h2>
+      <div className="lib-scroll" style={{ position: 'absolute', left: 106, top: 92, right: agentOpen ? 514 : 0, bottom: 26, overflow: 'auto', paddingRight: agentOpen ? 24 : 14, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        {/* Header: Library Title */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
+          <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em', color: '#FFFFFF' }}>Bibliothek</h2>
             <span style={{ font: '600 10.5px ui-monospace,monospace', letterSpacing: '.11em', color: '#FFFFFF', paddingBottom: 8 }}>{SUBJECTS.length} FÄCHER · {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN</span>
           </div>
-        )}
 
         {/* Subjects horizontal selector row */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '0 0 28px' }}>
@@ -1159,6 +1215,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           </span>
         </div>
 
+
         {/* Dynamic View: Masonry vs List */}
         {viewMode === 'masonry' ? (
           <div className="lib-masonry-grid" data-testid="masonry-grid">
@@ -1172,15 +1229,40 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* agent panel */}
-      <div className="lib-glass" style={{ position: 'absolute', right: 14, top: 14, bottom: 14, width: 274, borderRadius: 30, background: 'rgba(14, 13, 18, 0.85)', backdropFilter: 'blur(34px) saturate(1.4)', border: '1px solid rgba(255,255,255,.1)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 30px 64px -26px rgba(0,0,0,.95)', overflow: 'hidden', display: 'flex', flexDirection: 'column', zIndex: 20 }}>
-        <div style={{ padding: '18px 18px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="lib-agent-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'oklch(0.68 0.09 150)' }} />
+      {!agentOpen && (
+        <button
+          className="liquid-glass-circle"
+          onClick={() => setAgentOpen(true)}
+          title="Agent öffnen"
+          style={{ position: 'absolute', right: 20, top: 20, zIndex: 20 }}
+          data-testid="agent-open-btn"
+        >
+          <Sparkles size={18} strokeWidth={2.2} />
+        </button>
+      )}
+
+      <div className="lib-glass agent-panel" data-open={agentOpen} data-testid="agent-panel">
+        <div className="agent-panel-head">
+          <span className="lib-agent-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'oklch(0.72 0.14 150)', boxShadow: '0 0 10px oklch(0.72 0.14 150)' }} />
           <span style={{ font: '700 13.5px "Bricolage Grotesque",sans-serif', letterSpacing: '-.02em', color: '#FFFFFF' }}>Agent</span>
-          <span style={{ marginLeft: 'auto', font: '600 9.5px ui-monospace,monospace', letterSpacing: '.06em', color: '#FFFFFF' }}>2 AKTIV</span>
+          <span className="agent-badge">{2 + agentTasks.length} AKTIV</span>
+          <button className="agent-close" onClick={() => setAgentOpen(false)} title="Agent schließen" data-testid="agent-close-btn">
+            <X size={14} strokeWidth={2.4} />
+          </button>
         </div>
 
-        <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 11, overflow: 'hidden' }}>
-          <div style={{ borderRadius: 18, background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.1)', padding: '13px 14px' }}>
+        <div className="agent-panel-body">
+          {agentTasks.map(t => (
+            <div key={t.id} className="agent-card agent-card-new" data-testid="agent-task">
+              <div className="agent-card-head">
+                <Sparkles size={12} color="oklch(0.8 0.12 90)" />
+                <span>NEUE ANFRAGE{t.subject ? ` · ${t.subject.toUpperCase()}` : ''}</span>
+              </div>
+              <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif', color: '#FFFFFF' }}>{t.text}</div>
+              <div className="agent-progress"><span style={{ width: '18%' }} /></div>
+            </div>
+          ))}
+          <div className="agent-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
               <Globe size={12} color="oklch(0.76 0.06 320)" />
               <span style={{ font: '700 9.5px ui-monospace,monospace', letterSpacing: '.05em', color: '#FFFFFF' }}>RECHERCHIERT</span>
@@ -1188,13 +1270,11 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif', color: '#FFFFFF' }}>
               {selectedSubject ? `${selectedSubject.name}: Fachbegriffe & Zusammenfassung` : 'Wahlsystem BRD vs. USA — Vergleichstabelle'}
             </div>
-            <div style={{ marginTop: 10, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.15)', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '64%', borderRadius: 2, background: 'linear-gradient(90deg,oklch(0.6 0.075 320),oklch(0.72 0.06 340))' }} />
-            </div>
+            <div className="agent-progress"><span style={{ width: '64%' }} /></div>
             <div style={{ marginTop: 7, display: 'flex', justifyContent: 'space-between', font: '600 9.5px ui-monospace,monospace', color: '#FFFFFF' }}><span>Quelle 4 von 6</span><span>~2 min</span></div>
           </div>
 
-          <div style={{ borderRadius: 18, background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.1)', padding: '13px 14px' }}>
+          <div className="agent-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
               <ScanText size={12} color="oklch(0.76 0.055 235)" />
               <span style={{ font: '700 9.5px ui-monospace,monospace', letterSpacing: '.05em', color: '#FFFFFF' }}>LIEST HANDSCHRIFT</span>
@@ -1220,11 +1300,16 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         </div>
 
         <div style={{ marginTop: 'auto', padding: '12px 14px 14px' }}>
-          <div style={{ height: 44, borderRadius: 22, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', gap: 9, padding: '0 7px 0 15px' }}>
-            <span style={{ flex: 1, font: '400 12.5px Manrope,sans-serif', color: '#FFFFFF' }}>
-              {selectedSubject ? `Auftrag für ${selectedSubject.name}…` : 'Auftrag an den Agenten…'}
-            </span>
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(140deg,oklch(0.6 0.08 320),oklch(0.44 0.09 300))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}><ArrowUp size={15} /></div>
+          <div className="liquid-glass-pill agent-input">
+            <input
+              type="text"
+              value={agentDraft}
+              onChange={(e) => setAgentDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { askAgent(agentDraft); setAgentDraft(''); } }}
+              placeholder={selectedSubject ? `Auftrag für ${selectedSubject.name}…` : 'Auftrag an den Agenten…'}
+              data-testid="agent-input"
+            />
+            <button onClick={() => { askAgent(agentDraft); setAgentDraft(''); }} title="Auftrag senden"><ArrowUp size={15} /></button>
           </div>
         </div>
       </div>
