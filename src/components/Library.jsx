@@ -2,75 +2,24 @@ import React, { useState, useRef } from 'react';
 import { 
   LayoutGrid, Rows3, ArrowUpDown, Search, PenLine, 
   Clock, Star, Tag, Sparkles, Globe, ScanText, Check, 
-  ArrowUp, Settings, Download, ZoomIn, Code2, Quote, FileText
+  ArrowUp, Settings, Download, ZoomIn, Code2, Quote, 
+  X, ArrowLeft, BookOpen, Layers, Sparkle
 } from 'lucide-react';
 
 const SUBJECTS = [
-  { id: 'mathe', name: 'Mathe', count: 24 },
-  { id: 'chemie', name: 'Chemie', count: 17 },
-  { id: 'kunst', name: 'Kunst', count: 31 },
-  { id: 'pgw', name: 'PGW', count: 12 },
-  { id: 'philosophie', name: 'Philosophie', count: 9 },
-  { id: 'englisch', name: 'Englisch', count: 21 },
-  { id: 'spanisch', name: 'Spanisch', count: 14 },
+  { id: 'mathe', name: 'Mathe', count: 24, themeColor: 'oklch(0.62 0.075 255)' },
+  { id: 'chemie', name: 'Chemie', count: 17, themeColor: 'oklch(0.64 0.06 158)' },
+  { id: 'kunst', name: 'Kunst', count: 31, themeColor: 'oklch(0.6 0.07 320)' },
+  { id: 'pgw', name: 'PGW', count: 12, themeColor: 'oklch(0.58 0.075 320)' },
+  { id: 'philosophie', name: 'Philosophie', count: 9, themeColor: 'oklch(0.7 0.035 78)' },
+  { id: 'englisch', name: 'Englisch', count: 21, themeColor: 'oklch(0.68 0.09 26)' },
+  { id: 'spanisch', name: 'Spanisch', count: 14, themeColor: 'oklch(0.65 0.08 52)' },
 ];
 
 const RECENT = [
+  // MATHE
   { 
     id: 1, 
-    type: 'code',
-    title: 'CopilotForXcode',
-    repo: 'github / CopilotForXcode',
-    subject: 'Informatik', 
-    dot: '#4FA66B', 
-    when: 'vor 5 Min',
-    body: 'AI coding assistant for Xcode', 
-    lang: 'Swift',
-    stars: '5,512'
-  },
-  { 
-    id: 2, 
-    type: 'banner',
-    title: 'The Renaissance Edition', 
-    subject: 'Kunst', 
-    dot: 'oklch(0.6 0.07 320)', 
-    when: '11:42',
-    tag: 'Shopify Editions | Winter \'26' 
-  },
-  { 
-    id: 3, 
-    type: 'quote',
-    title: 'CLOSED Bar Branding',
-    subject: 'Design',
-    dot: 'oklch(0.7 0.035 78)',
-    when: '14:20',
-    platform: 'X',
-    body: 'In crafting a rich, evocative identity for CLOSED bar, how by why serves a lesson in worldbuilding →'
-  },
-  { 
-    id: 4, 
-    type: 'inspect',
-    title: 'Titrationskurve & Tafelbild', 
-    subject: 'Chemie', 
-    dot: 'oklch(0.64 0.06 158)', 
-    when: 'Mo', 
-    body: 'Äquivalenzpunkt bei pH 7.0 (starke Säure / starke Base). Wendepunktanalyse.'
-  },
-  { 
-    id: 5, 
-    type: 'editorial',
-    title: 'Designing with Clarity', 
-    subject: 'Design', 
-    dot: '#0a84ff', 
-    when: 'heute',
-    subtitle: 'Structuring Ideas Before Execution',
-    body: 'Designing with clarity means making intentional choices that help users understand what to do and where to go. Every visual decision should reduce friction and guide attention, creating an experience that feels effortless rather than overwhelming.',
-    body2: 'Before jumping into visuals, it\'s important to organize ideas and define structure. A well-thought-out foundation makes the design process smoother and helps prevent unnecessary rework later on.',
-    tag: 'Small Details, Big Impact',
-    source: 'New York Times – Designing with Clarity'
-  },
-  { 
-    id: 6, 
     type: 'math',
     title: 'Ableitungsregeln', 
     subject: 'Mathe', 
@@ -79,8 +28,92 @@ const RECENT = [
     body: 'Produktregel: (u·v)\' = u\'v + uv\' — Kettenregel: äußere × innere Ableitung', 
     tag: 'Klausur 14.09.' 
   },
+  {
+    id: 2,
+    type: 'math',
+    title: 'Integralrechnung & Stammfunktionen',
+    subject: 'Mathe',
+    dot: 'oklch(0.62 0.075 255)',
+    when: 'vor 2 Tagen',
+    body: 'Hauptsatz: ∫ f(x)dx = F(b) - F(a). Partielle Integration: ∫ u·v\' = u·v - ∫ u\'·v',
+    tag: 'Analysis'
+  },
+  {
+    id: 3,
+    type: 'math',
+    title: 'Vektorgeometrie & Skalarprodukt',
+    subject: 'Mathe',
+    dot: 'oklch(0.62 0.075 255)',
+    when: 'Mo',
+    body: 'Orthogonalität: a ⊥ b ⇔ a·b = 0. Ebenengleichung: E: x = p + r·u + s·v',
+    tag: 'Lineare Algebra'
+  },
+  {
+    id: 4,
+    type: 'math',
+    title: 'Kurvendiskussion Extrema & Wendepunkte',
+    subject: 'Mathe',
+    dot: 'oklch(0.62 0.075 255)',
+    when: 'letzte Woche',
+    body: 'Notwendige Bedingung: f\'(x0) = 0. Hinreichende Bedingung: f\'\'(x0) ≠ 0.',
+    tag: 'Übungsblatt 4'
+  },
+
+  // CHEMIE
+  { 
+    id: 5, 
+    type: 'inspect',
+    title: 'Titrationskurve & Tafelbild', 
+    subject: 'Chemie', 
+    dot: 'oklch(0.64 0.06 158)', 
+    when: 'Mo', 
+    body: 'Äquivalenzpunkt bei pH 7.0 (starke Säure / starke Base). Wendepunktanalyse.'
+  },
+  { 
+    id: 6, 
+    type: 'math',
+    title: 'Redoxreaktionen & Oxidationszahlen', 
+    subject: 'Chemie', 
+    dot: 'oklch(0.64 0.06 158)', 
+    when: 'heute',
+    body: 'Oxidation = Elektronenabgabe, Reduktion = Aufnahme. Merksatz: OMA / RIG.' 
+  },
   { 
     id: 7, 
+    type: 'editorial',
+    title: 'Galvanische Zelle & Daniell-Element', 
+    subject: 'Chemie', 
+    dot: 'oklch(0.64 0.06 158)', 
+    when: 'vor 3 Tagen',
+    subtitle: 'Zink-Kupfer-Element',
+    body: 'Anode (Oxidation): Zn → Zn²⁺ + 2e⁻. Kathode (Reduktion): Cu²⁺ + 2e⁻ → Cu.',
+    body2: 'Standardpotential: ΔE° = E°(Kathode) - E°(Anode) = +0.34V - (-0.76V) = 1.10V.',
+    tag: 'Elektrochemie',
+    source: 'Laborprotokoll Nr. 3'
+  },
+  { 
+    id: 8, 
+    type: 'math',
+    title: 'Organische Chemie: Esterbildung', 
+    subject: 'Chemie', 
+    dot: 'oklch(0.64 0.06 158)', 
+    when: 'letzte Woche',
+    body: 'Carbonsäure + Alkohol ⇌ Carbonsäureester + Wasser (Säurekatalysiert)',
+    tag: 'Organik'
+  },
+
+  // KUNST
+  { 
+    id: 9, 
+    type: 'banner',
+    title: 'The Renaissance Edition', 
+    subject: 'Kunst', 
+    dot: 'oklch(0.6 0.07 320)', 
+    when: '11:42',
+    tag: 'Shopify Editions | Winter \'26' 
+  },
+  { 
+    id: 10, 
     type: 'gallery',
     title: 'Fotostudie & Perspektive',
     subject: 'Kunst',
@@ -89,7 +122,31 @@ const RECENT = [
     tag: '4 Fotos'
   },
   { 
-    id: 8, 
+    id: 11, 
+    type: 'figma',
+    title: 'Figma Draw & Vektoren', 
+    subject: 'Kunst', 
+    dot: '#D8615B', 
+    when: 'Di',
+    tag: 'Figma Draw'
+  },
+  { 
+    id: 12, 
+    type: 'editorial',
+    title: 'Designing with Clarity', 
+    subject: 'Kunst', 
+    dot: '#0a84ff', 
+    when: 'heute',
+    subtitle: 'Structuring Ideas Before Execution',
+    body: 'Designing with clarity means making intentional choices that help users understand what to do and where to go.',
+    body2: 'Before jumping into visuals, organize ideas and define structure for maximum aesthetic harmony.',
+    tag: 'Farblehre & Komposition',
+    source: 'New York Times – Designing with Clarity'
+  },
+
+  // PGW
+  { 
+    id: 13, 
     type: 'agent',
     title: 'Ursachen der Französischen Revolution', 
     subject: 'PGW', 
@@ -100,16 +157,20 @@ const RECENT = [
     body: 'Ständegesellschaft, Staatsbankrott 1788, Aufklärung als Legitimationsbruch — mit Zeitleiste und Quellenliste.' 
   },
   { 
-    id: 9, 
-    type: 'figma',
-    title: 'Figma Draw & Vektoren', 
-    subject: 'Kunst', 
-    dot: '#D8615B', 
-    when: 'Di',
-    tag: 'Figma Draw'
+    id: 14, 
+    type: 'editorial',
+    title: 'Wahlsysteme im Vergleich: BRD vs. USA', 
+    subject: 'PGW', 
+    dot: 'oklch(0.58 0.075 320)', 
+    when: 'gestern',
+    subtitle: 'Personalisiertes Verhältniswahlrecht vs. Mehrheitswahl',
+    body: 'BRD: Erststimme (Direktmandat) & Zweitstimme (Parteianteil mit 5%-Hürde).',
+    body2: 'USA: Winner-takes-all Prinzip im Electoral College mit 538 Wahlleuten.',
+    tag: 'Demokratie & Wahlen',
+    source: 'Bundeszentrale für politische Bildung'
   },
   { 
-    id: 10, 
+    id: 15, 
     type: 'vehicle',
     title: '2025 LAND CRUISER', 
     subject: 'PGW', 
@@ -117,8 +178,10 @@ const RECENT = [
     when: 'vor 2 Tagen',
     tag: 'Toyota Land Cruiser 250 - Overview'
   },
+
+  // PHILOSOPHIE
   { 
-    id: 11, 
+    id: 16, 
     type: 'serif',
     title: 'Höhlengleichnis', 
     subject: 'Philosophie', 
@@ -128,34 +191,123 @@ const RECENT = [
     question: 'Frage: Ist Bildung Zwang?' 
   },
   { 
-    id: 12, 
-    type: 'math',
-    title: 'Redoxreaktionen', 
-    subject: 'Chemie', 
-    dot: 'oklch(0.64 0.06 158)', 
+    id: 17, 
+    type: 'serif',
+    title: 'Kategorischer Imperativ', 
+    subject: 'Philosophie', 
+    dot: 'oklch(0.7 0.035 78)', 
+    when: 'Do', 
+    body: 'Handle nur nach derjenigen Maxime, durch die du zugleich wollen kannst, dass sie ein allgemeines Gesetz werde.', 
+    question: 'Kant: Pflichtethik vs. Utilitarismus' 
+  },
+  { 
+    id: 18, 
+    type: 'quote',
+    title: 'CLOSED Bar Branding',
+    subject: 'Philosophie',
+    dot: 'oklch(0.7 0.035 78)',
+    when: '14:20',
+    platform: 'X',
+    body: 'In crafting a rich, evocative identity for CLOSED bar, how by why serves a lesson in worldbuilding →'
+  },
+
+  // ENGLISCH
+  { 
+    id: 19, 
+    type: 'editorial',
+    title: 'Shakespeare: Macbeth Character Analysis', 
+    subject: 'Englisch', 
+    dot: 'oklch(0.68 0.09 26)', 
     when: 'heute',
-    body: 'Oxidation = Elektronenabgabe, Reduktion = Aufnahme. Merksatz: OMA / RIG.' 
+    subtitle: 'Ambition, Guilt and the Supernatural',
+    body: 'Macbeth\'s fatal flaw (hamartia) is unchecked ambition driven by the witches\' prophecies and Lady Macbeth\'s manipulation.',
+    body2: 'Key motif: "Fair is foul, and foul is fair" — appearance versus reality.',
+    tag: 'Drama Analysis',
+    source: 'Oxford Literature Guides'
+  },
+  { 
+    id: 20, 
+    type: 'code',
+    title: 'CopilotForXcode',
+    repo: 'github / CopilotForXcode',
+    subject: 'Englisch', 
+    dot: '#4FA66B', 
+    when: 'vor 5 Min',
+    body: 'AI coding assistant for Xcode — Technical Documentation Analysis', 
+    lang: 'Swift',
+    stars: '5,512'
+  },
+  { 
+    id: 21, 
+    type: 'math',
+    title: 'Rhetorical Devices & Connectors', 
+    subject: 'Englisch', 
+    dot: 'oklch(0.68 0.09 26)', 
+    when: 'gestern',
+    body: 'Metaphor, Alliteration, Oxymoron, Hyperbole. Transitions: Furthermore, Conversely, In light of this.',
+    tag: 'Essay Writing'
+  },
+
+  // SPANISCH
+  { 
+    id: 22, 
+    type: 'editorial',
+    title: 'Subjuntivo vs. Indicativo: Regla WEIRDO', 
+    subject: 'Spanisch', 
+    dot: 'oklch(0.65 0.08 52)', 
+    when: 'heute',
+    subtitle: 'Wishes, Emotions, Impersonal, Recommendations, Doubt, Ojalá',
+    body: 'El subjuntivo se utiliza para expresar deseos, dudas y valoraciones personales.',
+    body2: 'Ejemplo: "Espero que tengas un buen día" / "Dudo que sea verdad".',
+    tag: 'Gramática C1',
+    source: 'Real Academia Española'
+  },
+  { 
+    id: 23, 
+    type: 'math',
+    title: 'Vocabulario: Medio Ambiente y Clima', 
+    subject: 'Spanisch', 
+    dot: 'oklch(0.65 0.08 52)', 
+    when: 'Mo', 
+    body: 'el cambio climático, las energías renovables, la deforestación, la huella de carbono', 
+    tag: 'Klausurvorbereitung' 
+  },
+  { 
+    id: 24, 
+    type: 'serif',
+    title: 'El Siglo de Oro & Don Quijote', 
+    subject: 'Spanisch', 
+    dot: 'oklch(0.65 0.08 52)', 
+    when: 'vor 4 Tagen', 
+    body: 'Miguel de Cervantes Saavedra (1605). La parodia de los libros de caballerías y el idealismo quijotesco.', 
+    question: 'Pregunta: ¿Quién es el verdadero loco?' 
   }
 ];
 
-function TileWrap({ onOpen, w, h, bg, boxShadow, children }) {
+function TileWrap({ onOpen, w, h, bg, boxShadow, className = '', testId, children }) {
   return (
     <div
       onClick={onOpen}
-      className="lib-tile"
-      style={{ position: 'relative', flex: 'none', width: w, height: h, borderRadius: 24, overflow: 'hidden', background: bg, boxShadow, cursor: 'pointer' }}
+      className={`lib-tile ${className}`}
+      data-testid={testId}
+      style={{ position: 'relative', flex: 'none', width: w, height: h, borderRadius: 24, overflow: 'hidden', background: bg, boxShadow, cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
     >
       {children}
     </div>
   );
 }
 
-function SubjectTile({ s, onOpen }) {
-  const shadow = '0 20px 42px -22px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.07) inset';
+function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
+  const shadow = isSelected 
+    ? '0 24px 50px -16px rgba(10,132,255,.5), 0 0 0 2.5px #0a84ff' 
+    : '0 20px 42px -22px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.07) inset';
+
+  const tileClass = isSelected ? 'active' : isOtherSelected ? 'lib-tile-inactive' : '';
+  const testId = `subject-tile-${s.id}`;
 
   if (s.id === 'mathe') {
     return (
-      <TileWrap onOpen={onOpen} w={220} h={148} bg="linear-gradient(155deg,oklch(0.31 0.045 258),oklch(0.21 0.03 262))" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={220} h={148} bg="linear-gradient(155deg,oklch(0.31 0.045 258),oklch(0.21 0.03 262))" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(233,230,223,.075) 1px,transparent 1px),linear-gradient(90deg,rgba(233,230,223,.075) 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
         <div style={{ position: 'absolute', left: 0, right: 0, top: 34, height: 58, background: 'linear-gradient(72deg,transparent 12%,oklch(0.72 0.075 250/.75) 12%,oklch(0.72 0.075 250/.75) 13.4%,transparent 13.4%)', transform: 'skewY(-16deg)' }} />
         <div style={{ position: 'absolute', right: 18, top: 14, font: 'italic 20px "Instrument Serif",serif', color: 'rgba(233,230,223,.42)' }}>f(x)</div>
@@ -169,7 +321,7 @@ function SubjectTile({ s, onOpen }) {
 
   if (s.id === 'chemie') {
     return (
-      <TileWrap onOpen={onOpen} w={150} h={164} bg="linear-gradient(155deg,oklch(0.32 0.04 160),oklch(0.21 0.028 165))" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={150} h={164} bg="linear-gradient(155deg,oklch(0.32 0.04 160),oklch(0.21 0.028 165))" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(rgba(233,230,223,.1) 1.3px,transparent 1.4px)', backgroundSize: '15px 15px' }} />
         <div style={{ position: 'absolute', right: -16, top: 22, width: 76, height: 76, borderRadius: '50%', border: '2px solid oklch(0.72 0.06 158/.6)' }} />
         <div style={{ position: 'absolute', right: 8, top: 74, width: 44, height: 44, borderRadius: '50%', border: '1.5px solid oklch(0.72 0.06 158/.34)' }} />
@@ -186,14 +338,14 @@ function SubjectTile({ s, onOpen }) {
 
   if (s.id === 'kunst') {
     return (
-      <TileWrap onOpen={onOpen} w={140} h={148} bg="#1B1A1E" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={140} h={148} bg="#1B1A1E" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', left: -14, top: -10, width: 160, height: 30, background: 'oklch(0.6 0.09 42)', transform: 'rotate(-11deg)' }} />
         <div style={{ position: 'absolute', left: -14, top: 20, width: 160, height: 24, background: 'oklch(0.68 0.075 82)' }} />
         <div style={{ position: 'absolute', left: -14, top: 44, width: 160, height: 26, background: 'oklch(0.5 0.06 215)', transform: 'rotate(-11deg)' }} />
         <div style={{ position: 'absolute', left: -14, top: 70, width: 160, height: 20, background: 'oklch(0.36 0.05 315)', transform: 'rotate(-11deg)' }} />
         <div style={{ position: 'absolute', left: -10, right: -10, bottom: 26, height: 30, background: '#EEEAE1', transform: 'rotate(-7deg)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <span style={{ font: '700 15px "Bricolage Grotesque",sans-serif', letterSpacing: '-.01em', color: '#17161A' }}>Kunst</span>
-          <span style={{ font: '500 8.5px ui-monospace,monospace', color: 'rgba(233,230,223,.5)' }}>{s.count}</span>
+          <span style={{ font: '500 8.5px ui-monospace,monospace', color: 'rgba(23,22,26,.5)' }}>{s.count}</span>
         </div>
       </TileWrap>
     );
@@ -201,7 +353,7 @@ function SubjectTile({ s, onOpen }) {
 
   if (s.id === 'pgw') {
     return (
-      <TileWrap onOpen={onOpen} w={150} h={132} bg="linear-gradient(155deg,oklch(0.29 0.045 320),oklch(0.2 0.03 318))" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg,oklch(0.29 0.045 320),oklch(0.2 0.03 318))" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', left: 16, bottom: 38, display: 'flex', alignItems: 'flex-end', gap: 6, height: 58 }}>
           <div style={{ width: 11, height: 22, background: 'oklch(0.6 0.07 320/.45)' }} />
           <div style={{ width: 11, height: 40, background: 'oklch(0.6 0.07 320/.6)' }} />
@@ -218,7 +370,7 @@ function SubjectTile({ s, onOpen }) {
 
   if (s.id === 'philosophie') {
     return (
-      <TileWrap onOpen={onOpen} w={190} h={156} bg="linear-gradient(155deg,oklch(0.35 0.028 78),oklch(0.23 0.02 72))" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={190} h={156} bg="linear-gradient(155deg,oklch(0.35 0.028 78),oklch(0.23 0.02 72))" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', right: -8, top: -14, font: 'italic 110px/1 "Instrument Serif",serif', color: 'rgba(233,230,223,.06)' }}>Φ</div>
         <div style={{ position: 'absolute', left: 18, top: 18, right: 16, font: 'italic 31px/1.02 "Instrument Serif",serif', color: '#F2EFE8' }}>Philo­sophie</div>
         <div style={{ position: 'absolute', left: 18, top: 96, width: 40, height: 1, background: 'rgba(233,230,223,.3)' }} />
@@ -229,7 +381,7 @@ function SubjectTile({ s, onOpen }) {
 
   if (s.id === 'englisch') {
     return (
-      <TileWrap onOpen={onOpen} w={136} h={144} bg="linear-gradient(155deg,oklch(0.3 0.05 26),oklch(0.2 0.035 22))" boxShadow={shadow}>
+      <TileWrap onOpen={onToggle} w={136} h={144} bg="linear-gradient(155deg,oklch(0.3 0.05 26),oklch(0.2 0.035 22))" boxShadow={shadow} className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(to bottom,transparent calc(100% - 1px),rgba(233,230,223,.1) calc(100% - 1px))', backgroundSize: '100% 24px' }} />
         <div style={{ position: 'absolute', left: 22, top: 0, bottom: 0, width: 1, background: 'oklch(0.68 0.09 26/.4)' }} />
         <div style={{ position: 'absolute', right: 10, top: 4, font: '400 54px/1 "Instrument Serif",serif', color: 'rgba(233,230,223,.1)' }}>Aa</div>
@@ -241,13 +393,303 @@ function SubjectTile({ s, onOpen }) {
 
   // spanisch
   return (
-    <TileWrap onOpen={onOpen} w={150} h={132} bg="oklch(0.3 0.05 56)" boxShadow={shadow}>
+    <TileWrap onOpen={onToggle} w={150} h={132} bg="oklch(0.3 0.05 56)" boxShadow={shadow} className={tileClass} testId={testId}>
       <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(118deg,transparent 0 12px,oklch(0.58 0.08 52/.5) 12px 22px)' }} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 24, height: 34, background: '#EEEAE1', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 7 }}>
         <span style={{ font: '700 15px "Bricolage Grotesque",sans-serif', color: '#17161A' }}>Spanisch</span>
         <span style={{ marginLeft: 'auto', font: '500 8.5px ui-monospace,monospace', color: 'rgba(23,22,26,.5)' }}>{s.count}</span>
       </div>
     </TileWrap>
+  );
+}
+
+function ThematicSubjectHeader({ subject, onClearFilter, onNewNote }) {
+  if (subject.id === 'mathe') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.28 0.065 258) 0%, #15141b 100%)' }} data-testid="thematic-banner-mathe">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#69b1ff', textTransform: 'uppercase' }}>FACHÜBERSICHT · MATHEMATIK</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> Alle Fächer
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+              Mathematik & Analysis
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Differential- und Integralrechnung, Vektorräume, Stochastik & Klausurvorbereitung
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: '#0a84ff', border: 'none', color: '#fff', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> Neue Mathe-Notiz
+          </button>
+        </div>
+
+        {/* Thematic Floating Formula Badges */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', color: '#90c4ff', font: '600 11px ui-monospace,monospace' }}>
+            f'(x) = lim (f(x+h)-f(x))/h
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            ∫ f(x)dx = F(b) - F(a)
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            a ⊥ b ⇔ a·b = 0
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,200,100,0.14)', border: '1px solid rgba(255,200,100,0.25)', color: '#ffe082', font: '600 11px ui-monospace,monospace' }}>
+            Klausur: 14. September
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (subject.id === 'chemie') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.28 0.05 160) 0%, #121814 100%)' }} data-testid="thematic-banner-chemie">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#4ade80', textTransform: 'uppercase' }}>FACHÜBERSICHT · CHEMIE</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> Alle Fächer
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+              Chemie & Laborprotokolle
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Organische Synthese, Redox-Gleichgewichte, Säure-Base-Titrationen & Energetik
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: '#30d158', border: 'none', color: '#0f2414', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> Neue Chemie-Notiz
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(48,209,88,0.18)', border: '1px solid rgba(48,209,88,0.3)', color: '#86efac', font: '600 11px ui-monospace,monospace' }}>
+            pH = -lg[H3O+] = 7.0 (Äquivalenzpunkt)
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Zn → Zn²⁺ + 2e⁻ (ΔE° = 1.10V)
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            R-COOH + R'-OH ⇌ Ester + H2O
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (subject.id === 'kunst') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, #321c2c 0%, #1a1622 100%)' }} data-testid="thematic-banner-kunst">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#ff77c6', textTransform: 'uppercase' }}>FACHÜBERSICHT · BILDENDE KUNST</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> Alle Fächer
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+              Kunst, Zeichnung & Design
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Zweipunktperspektive, Farbtheorie nach Itten, Renaissance-Studien & Vektorkunst
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: 'linear-gradient(140deg, #ff4081, #d500f9)', border: 'none', color: '#fff', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> Neue Kunst-Skizze
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,64,129,0.18)', border: '1px solid rgba(255,64,129,0.3)', color: '#f48fb1', font: '600 11px ui-monospace,monospace' }}>
+            Goldener Schnitt: Φ ≈ 1.618
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Itten-Farbkreis & Komplementärkontrast
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Fluchtpunkt & Horizontlinie
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (subject.id === 'pgw') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.27 0.05 320) 0%, #19141f 100%)' }} data-testid="thematic-banner-pgw">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#c084fc', textTransform: 'uppercase' }}>FACHÜBERSICHT · PGW</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> Alle Fächer
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+              Politik, Gesellschaft, Wirtschaft
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Wahlsysteme, Verfassungsrecht, Internationale Konflikte & Wirtschaftsordnung
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: '#a855f7', border: 'none', color: '#fff', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> Neue PGW-Notiz
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(168,85,247,0.18)', border: '1px solid rgba(168,85,247,0.3)', color: '#d8b4fe', font: '600 11px ui-monospace,monospace' }}>
+            Grundgesetz Art. 1-20 (Ewigkeitsklausel)
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Bundestag & Bundesrat (Gewaltenteilung)
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Soziale Marktwirtschaft
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (subject.id === 'philosophie') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.28 0.035 78) 0%, #1c1813 100%)' }} data-testid="thematic-banner-philosophie">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#facc15', textTransform: 'uppercase' }}>FACHÜBERSICHT · PHILOSOPHIE</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> Alle Fächer
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: 'italic 40px/1 "Instrument Serif",serif', color: '#F1EEE7' }}>
+              Philosophie & Erkenntnistheorie
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Ethik, Anthropologie, Existenzialismus und antike Staatsphilosophie
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: '#eab308', border: 'none', color: '#171408', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> Neue Philosophie-Notiz
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(250,204,21,0.18)', border: '1px solid rgba(250,204,21,0.3)', color: '#fde047', font: 'italic 12px "Instrument Serif",serif' }}>
+            „Sapere aude! Habe Mut, dich deines eigenen Verstandes zu bedienen." — Kant
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: 'italic 12px "Instrument Serif",serif' }}>
+            „Die Existenz geht der Essenz voraus." — Sartre
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (subject.id === 'englisch') {
+    return (
+      <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.27 0.05 26) 0%, #1c1517 100%)' }} data-testid="thematic-banner-englisch">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#fb7185', textTransform: 'uppercase' }}>SUBJECT OVERVIEW · ENGLISH</span>
+              <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+                <X size={12} /> All Subjects
+              </button>
+            </div>
+            <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+              English Language & Literature
+            </h1>
+            <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+              Literary analysis, stylistic devices, Shakespearean drama & essay composition
+            </p>
+          </div>
+          <button 
+            onClick={onNewNote}
+            className="lib-filter-pill" 
+            style={{ background: '#f43f5e', border: 'none', color: '#fff', padding: '8px 18px', fontWeight: 700 }}
+          >
+            <PenLine size={14} /> New English Note
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.3)', color: '#fda4af', font: '600 11px ui-monospace,monospace' }}>
+            Macbeth: "Fair is foul, and foul is fair"
+          </span>
+          <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+            Connectors: Furthermore, In consequence, Conversely
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // SPANISCH
+  return (
+    <div className="lib-thematic-banner" style={{ background: 'linear-gradient(135deg, oklch(0.28 0.05 56) 0%, #1f1713 100%)' }} data-testid="thematic-banner-spanisch">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span style={{ font: '700 10.5px ui-monospace,monospace', letterSpacing: '.12em', color: '#fb923c', textTransform: 'uppercase' }}>RESUMEN DE LA ASIGNATURA · ESPAÑOL</span>
+            <button className="lib-filter-pill" onClick={onClearFilter} title="Alle Fächer anzeigen">
+              <X size={12} /> Todas las materias
+            </button>
+          </div>
+          <h1 style={{ margin: '4px 0 0', font: '800 36px/1 "Bricolage Grotesque",sans-serif', color: '#F1EEE7', letterSpacing: '-0.025em' }}>
+            Lengua y Literatura Española
+          </h1>
+          <p style={{ margin: '6px 0 0', color: 'rgba(233,230,223,.6)', font: '400 13px Manrope,sans-serif' }}>
+            Gramática avanzada, el subjuntivo, vocabulario temático y literatura clásica
+          </p>
+        </div>
+        <button 
+          onClick={onNewNote}
+          className="lib-filter-pill" 
+          style={{ background: '#f97316', border: 'none', color: '#170c04', padding: '8px 18px', fontWeight: 700 }}
+        >
+          <PenLine size={14} /> Nueva Nota
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(249,115,22,0.18)', border: '1px solid rgba(249,115,22,0.3)', color: '#fdba74', font: '600 11px ui-monospace,monospace' }}>
+          Subjuntivo: Deseos, Dudas, Emociones (WEIRDO)
+        </span>
+        <span style={{ padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E9E6DF', font: '600 11px ui-monospace,monospace' }}>
+          Don Quijote de la Mancha — Cervantes
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -433,6 +875,7 @@ function RecentListRow({ n, onOpen }) {
 }
 
 export default function Library({ onOpenNote, onOpenSettings }) {
+  const [selectedSubject, setSelectedSubject] = useState(null); // null = all subjects
   const [viewMode, setViewMode] = useState('masonry'); // 'masonry' | 'list'
   const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'title' | 'subject'
   const [sortToast, setSortToast] = useState(null);
@@ -442,6 +885,16 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     setSortToast(msg);
     clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setSortToast(null), 1600);
+  };
+
+  const handleToggleSubject = (subject) => {
+    if (selectedSubject?.id === subject.id) {
+      setSelectedSubject(null);
+      showToast('Alle Fächer werden angezeigt');
+    } else {
+      setSelectedSubject(subject);
+      showToast(`Fach ausgewählt: ${subject.name}`);
+    }
   };
 
   const cycleSort = () => {
@@ -457,18 +910,41 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     }
   };
 
-  const sortedRecent = [...RECENT].sort((a, b) => {
+  // Filter notes by selected subject
+  const filteredNotes = selectedSubject 
+    ? RECENT.filter(n => n.subject.toLowerCase() === selectedSubject.name.toLowerCase() || n.subject.toLowerCase() === selectedSubject.id.toLowerCase())
+    : RECENT;
+
+  const sortedRecent = [...filteredNotes].sort((a, b) => {
     if (sortBy === 'title') return a.title.localeCompare(b.title);
     if (sortBy === 'subject') return a.subject.localeCompare(b.subject);
     return a.id - b.id;
   });
 
+  // Dynamic Background Gradient depending on selected subject
+  const bgGradient = selectedSubject?.id === 'mathe' 
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.48 0.08 258/.9),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.38 0.06 240/.65),transparent 65%),#141318'
+    : selectedSubject?.id === 'chemie'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.46 0.07 160/.85),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.38 0.05 180/.65),transparent 65%),#121614'
+    : selectedSubject?.id === 'kunst'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.48 0.085 330/.85),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.42 0.07 280/.65),transparent 65%),#181318'
+    : selectedSubject?.id === 'pgw'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.44 0.075 320/.85),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.38 0.06 300/.65),transparent 65%),#17131a'
+    : selectedSubject?.id === 'philosophie'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.42 0.05 78/.8),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.36 0.04 60/.6),transparent 65%),#181512'
+    : selectedSubject?.id === 'englisch'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.44 0.07 26/.85),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.36 0.05 10/.6),transparent 65%),#191415'
+    : selectedSubject?.id === 'spanisch'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.45 0.08 55/.85),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.38 0.06 40/.6),transparent 65%),#191512'
+    : 'radial-gradient(720px 420px at 10% -6%,oklch(0.42 0.055 260/.85),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.42 0.045 200/.7),transparent 64%),radial-gradient(780px 520px at 58% 108%,oklch(0.42 0.05 55/.6),transparent 66%),#17161A';
+
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#17161A', fontFamily: 'Manrope,sans-serif', color: '#E9E6DF' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(720px 420px at 10% -6%,oklch(0.42 0.055 260/.85),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.42 0.045 200/.7),transparent 64%),radial-gradient(780px 520px at 58% 108%,oklch(0.42 0.05 55/.6),transparent 66%),#17161A' }} />
+      {/* Dynamic Thematic Ambient Lighting */}
+      <div style={{ position: 'absolute', inset: 0, background: bgGradient, transition: 'background 0.4s ease' }} />
 
       {/* sidebar rail */}
-      <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, background: 'linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.04))', backdropFilter: 'blur(30px) saturate(1.35)', border: '1px solid rgba(255,255,255,.13)', boxShadow: '0 1px 0 rgba(255,255,255,.22) inset,0 28px 60px -26px rgba(0,0,0,.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6 }}>
+      <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, background: 'linear-gradient(160deg,rgba(255,255,255,.13),rgba(255,255,255,.04))', backdropFilter: 'blur(30px) saturate(1.35)', border: '1px solid rgba(255,255,255,.13)', boxShadow: '0 1px 0 rgba(255,255,255,.22) inset,0 28px 60px -26px rgba(0,0,0,.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
         <div style={{ width: 34, height: 34, borderRadius: 12, background: '#E9E6DF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#17161A', font: '800 15px "Bricolage Grotesque",sans-serif', marginBottom: 10 }}>N</div>
         <div style={{ width: 44, height: 44, borderRadius: 15, background: 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F1EEE7' }}><LayoutGrid size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Clock size={19} /></div>
@@ -486,14 +962,16 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* search pill */}
-      <div className="lib-glass" style={{ position: 'absolute', left: 108, top: 24, width: 404, height: 50, borderRadius: 25, background: 'linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.035))', backdropFilter: 'blur(28px) saturate(1.35)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 20px 40px -22px rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px' }}>
+      <div className="lib-glass" style={{ position: 'absolute', left: 108, top: 24, width: 404, height: 50, borderRadius: 25, background: 'linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.035))', backdropFilter: 'blur(28px) saturate(1.35)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 20px 40px -22px rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px', zIndex: 15 }}>
         <Search size={17} color="rgba(233,230,223,.45)" />
-        <span style={{ font: '400 13.5px Manrope,sans-serif', color: 'rgba(233,230,223,.4)' }}>Notizen, Fächer, Handschrift durchsuchen</span>
+        <span style={{ font: '400 13.5px Manrope,sans-serif', color: 'rgba(233,230,223,.4)' }}>
+          {selectedSubject ? `${selectedSubject.name}-Notizen durchsuchen…` : 'Notizen, Fächer, Handschrift durchsuchen'}
+        </span>
         <span style={{ marginLeft: 'auto', font: '500 10px ui-monospace,monospace', padding: '3px 6px', borderRadius: 6, background: 'rgba(255,255,255,.09)', color: 'rgba(233,230,223,.42)' }}>⌘K</span>
       </div>
 
       {/* view toggle + new note (right aligned) */}
-      <div style={{ position: 'absolute', right: 300, top: 24, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
+      <div style={{ position: 'absolute', right: 300, top: 24, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15 }}>
         <div className="lib-glass" style={{ height: 50, borderRadius: 25, background: 'linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.035))', backdropFilter: 'blur(28px) saturate(1.35)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 20px 40px -22px rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', padding: '0 6px', gap: 2 }}>
           <button 
             className={`lib-view-btn ${viewMode === 'masonry' ? 'active' : ''}`} 
@@ -523,9 +1001,16 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             <ArrowUpDown size={17} />
           </button>
         </div>
-        <div onClick={() => onOpenNote?.({ title: 'Neue Notiz', subject: '' })} className="lib-newnote" style={{ height: 50, borderRadius: 25, padding: '0 20px 0 16px', display: 'flex', alignItems: 'center', gap: 9, background: '#E9E6DF', boxShadow: '0 20px 40px -20px rgba(0,0,0,.9)', color: '#17161A', cursor: 'pointer' }}>
+        <div 
+          onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })} 
+          className="lib-newnote" 
+          style={{ height: 50, borderRadius: 25, padding: '0 20px 0 16px', display: 'flex', alignItems: 'center', gap: 9, background: '#E9E6DF', boxShadow: '0 20px 40px -20px rgba(0,0,0,.9)', color: '#17161A', cursor: 'pointer' }}
+          data-testid="new-note-btn"
+        >
           <PenLine size={17} />
-          <span style={{ font: '700 13px "Bricolage Grotesque",sans-serif', whiteSpace: 'nowrap' }}>Neue Notiz</span>
+          <span style={{ font: '700 13px "Bricolage Grotesque",sans-serif', whiteSpace: 'nowrap' }}>
+            {selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz'}
+          </span>
         </div>
       </div>
 
@@ -538,20 +1023,41 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       )}
 
       {/* main content */}
-      <div className="lib-scroll" style={{ position: 'absolute', left: 100, top: 92, right: 300, bottom: 26, overflow: 'auto', paddingRight: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
-          <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em' }}>Bibliothek</h2>
-          <span style={{ font: '500 10.5px ui-monospace,monospace', letterSpacing: '.11em', color: 'rgba(233,230,223,.4)', paddingBottom: 8 }}>{SUBJECTS.length} FÄCHER · {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN</span>
-        </div>
+      <div className="lib-scroll" style={{ position: 'absolute', left: 100, top: 92, right: 300, bottom: 26, overflow: 'auto', paddingRight: 10 }}>
+        {/* Header or Thematic Subject Decor */}
+        {selectedSubject ? (
+          <ThematicSubjectHeader 
+            subject={selectedSubject} 
+            onClearFilter={() => { setSelectedSubject(null); showToast('Alle Fächer werden angezeigt'); }}
+            onNewNote={() => onOpenNote?.({ title: `Neue ${selectedSubject.name}-Notiz`, subject: selectedSubject.name })}
+          />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
+            <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em' }}>Bibliothek</h2>
+            <span style={{ font: '500 10.5px ui-monospace,monospace', letterSpacing: '.11em', color: 'rgba(233,230,223,.4)', paddingBottom: 8 }}>{SUBJECTS.length} FÄCHER · {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN</span>
+          </div>
+        )}
 
+        {/* Subjects horizontal selector row */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '0 0 28px' }}>
-          {SUBJECTS.map(s => <SubjectTile key={s.id} s={s} onOpen={() => onOpenNote?.({ title: `${s.name} — Notiz`, subject: s.name })} />)}
+          {SUBJECTS.map(s => (
+            <SubjectTile 
+              key={s.id} 
+              s={s} 
+              isSelected={selectedSubject?.id === s.id}
+              isOtherSelected={selectedSubject && selectedSubject.id !== s.id}
+              onToggle={() => handleToggleSubject(s)} 
+            />
+          ))}
         </div>
 
+        {/* Section title & count */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 11, margin: '0 0 14px' }}>
-          <h3 style={{ margin: 0, font: '600 21px/1 "Bricolage Grotesque",sans-serif', letterSpacing: '-.025em' }}>Zuletzt bearbeitet</h3>
+          <h3 style={{ margin: 0, font: '600 21px/1 "Bricolage Grotesque",sans-serif', letterSpacing: '-.025em' }}>
+            {selectedSubject ? `${selectedSubject.name} Notizen` : 'Zuletzt bearbeitet'}
+          </h3>
           <span style={{ font: '500 9.5px ui-monospace,monospace', letterSpacing: '.11em', color: 'rgba(233,230,223,.3)' }}>
-            {viewMode === 'masonry' ? 'MOODBOARD-RASTER' : 'LISTENANSICHT'}
+            {sortedRecent.length} {sortedRecent.length === 1 ? 'NOTIZ' : 'NOTIZEN'} {selectedSubject ? `IN ${selectedSubject.name.toUpperCase()}` : 'DIESE WOCHE'} · {viewMode === 'masonry' ? 'MOODBOARD-RASTER' : 'LISTENANSICHT'}
           </span>
         </div>
 
@@ -568,7 +1074,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* agent panel */}
-      <div className="lib-glass" style={{ position: 'absolute', right: 14, top: 14, bottom: 14, width: 274, borderRadius: 30, background: 'linear-gradient(165deg,rgba(255,255,255,.135),rgba(255,255,255,.045))', backdropFilter: 'blur(34px) saturate(1.4)', border: '1px solid rgba(255,255,255,.14)', boxShadow: '0 1px 0 rgba(255,255,255,.24) inset,0 30px 64px -26px rgba(0,0,0,.9)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="lib-glass" style={{ position: 'absolute', right: 14, top: 14, bottom: 14, width: 274, borderRadius: 30, background: 'linear-gradient(165deg,rgba(255,255,255,.135),rgba(255,255,255,.045))', backdropFilter: 'blur(34px) saturate(1.4)', border: '1px solid rgba(255,255,255,.14)', boxShadow: '0 1px 0 rgba(255,255,255,.24) inset,0 30px 64px -26px rgba(0,0,0,.9)', overflow: 'hidden', display: 'flex', flexDirection: 'column', zIndex: 20 }}>
         <div style={{ padding: '18px 18px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="lib-agent-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'oklch(0.68 0.09 150)' }} />
           <span style={{ font: '700 13.5px "Bricolage Grotesque",sans-serif', letterSpacing: '-.02em' }}>Agent</span>
@@ -581,7 +1087,9 @@ export default function Library({ onOpenNote, onOpenSettings }) {
               <Globe size={12} color="oklch(0.76 0.06 320)" />
               <span style={{ font: '600 9.5px ui-monospace,monospace', letterSpacing: '.05em', color: 'oklch(0.8 0.05 320)' }}>RECHERCHIERT</span>
             </div>
-            <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif' }}>Wahlsystem BRD vs. USA — Vergleichstabelle</div>
+            <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif' }}>
+              {selectedSubject ? `${selectedSubject.name}: Fachbegriffe & Zusammenfassung` : 'Wahlsystem BRD vs. USA — Vergleichstabelle'}
+            </div>
             <div style={{ marginTop: 10, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.11)', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '64%', borderRadius: 2, background: 'linear-gradient(90deg,oklch(0.6 0.075 320),oklch(0.72 0.06 340))' }} />
             </div>
@@ -593,7 +1101,9 @@ export default function Library({ onOpenNote, onOpenSettings }) {
               <ScanText size={12} color="oklch(0.76 0.055 235)" />
               <span style={{ font: '600 9.5px ui-monospace,monospace', letterSpacing: '.05em', color: 'oklch(0.8 0.05 235)' }}>LIEST HANDSCHRIFT</span>
             </div>
-            <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif' }}>Mathe-Notizen der Woche → Formelsammlung</div>
+            <div style={{ font: '500 12.5px/1.42 Manrope,sans-serif' }}>
+              {selectedSubject ? `${selectedSubject.name}-Notizen der Woche → Formelsammlung` : 'Mathe-Notizen der Woche → Formelsammlung'}
+            </div>
             <div style={{ marginTop: 9, display: 'flex', gap: 4 }}>
               {[1, 1, 1, 0, 0].map((on, i) => <span key={i} style={{ height: 3, flex: 1, borderRadius: 2, background: on ? 'oklch(0.68 0.055 235)' : 'rgba(255,255,255,.13)' }} />)}
             </div>
@@ -613,7 +1123,9 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
         <div style={{ marginTop: 'auto', padding: '12px 14px 14px' }}>
           <div style={{ height: 44, borderRadius: 22, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.13)', display: 'flex', alignItems: 'center', gap: 9, padding: '0 7px 0 15px' }}>
-            <span style={{ flex: 1, font: '400 12.5px Manrope,sans-serif', color: 'rgba(233,230,223,.42)' }}>Auftrag an den Agenten…</span>
+            <span style={{ flex: 1, font: '400 12.5px Manrope,sans-serif', color: 'rgba(233,230,223,.42)' }}>
+              {selectedSubject ? `Auftrag für ${selectedSubject.name}…` : 'Auftrag an den Agenten…'}
+            </span>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(140deg,oklch(0.6 0.08 320),oklch(0.44 0.09 300))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><ArrowUp size={15} /></div>
           </div>
         </div>

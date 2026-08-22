@@ -77,4 +77,26 @@ describe('App Component', () => {
     expect(screen.getByTestId('sort-toast')).toBeInTheDocument();
     expect(screen.getByText('Sortierung: Titel (A–Z)')).toBeInTheDocument();
   });
+
+  it('filters notes and displays thematic banner when selecting a subject', () => {
+    render(<App />);
+
+    // Click Mathe subject tile
+    const matheTile = screen.getByTestId('subject-tile-mathe');
+    fireEvent.click(matheTile);
+
+    // Thematic banner appears
+    expect(screen.getByTestId('thematic-banner-mathe')).toBeInTheDocument();
+    expect(screen.getByText('Mathematik & Analysis')).toBeInTheDocument();
+
+    // Only Mathe notes should be shown
+    expect(screen.getByText('Ableitungsregeln')).toBeInTheDocument();
+    expect(screen.getByText('Integralrechnung & Stammfunktionen')).toBeInTheDocument();
+    expect(screen.queryByText('Titrationskurve & Tafelbild')).not.toBeInTheDocument();
+
+    // Click "Alle Fächer" to reset
+    fireEvent.click(screen.getByTitle('Alle Fächer anzeigen'));
+    expect(screen.queryByTestId('thematic-banner-mathe')).not.toBeInTheDocument();
+    expect(screen.getByText('Titrationskurve & Tafelbild')).toBeInTheDocument();
+  });
 });

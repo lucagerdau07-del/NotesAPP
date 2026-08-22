@@ -301,6 +301,61 @@ body {
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* Thematic Subject Decor & Hero Banners */
+.lib-thematic-banner {
+  position: relative;
+  width: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(30px);
+  animation: bannerFadeSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bannerFadeSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.lib-tile.active {
+  transform: translateY(-5px) scale(1.03);
+  box-shadow: 0 0 0 2.5px #0a84ff, 0 16px 36px -12px rgba(10, 132, 255, 0.5) !important;
+}
+
+.lib-tile-inactive {
+  opacity: 0.55;
+  filter: grayscale(0.2);
+  transition: all 0.2s ease;
+}
+
+.lib-tile-inactive:hover {
+  opacity: 0.9;
+  filter: grayscale(0);
+}
+
+.lib-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font: 600 12px 'Manrope', sans-serif;
+  color: #F1EEE7;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lib-filter-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
 /* Card Action Hover Buttons on Inspect Images */
 .lib-inspect-action-btn {
   width: 32px;
