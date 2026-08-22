@@ -207,6 +207,11 @@ body {
 .lib-tile:hover, .lib-card:hover, .lib-newnote:hover {
   transform: translateY(-3px);
 }
+.lib-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #F1EEE7 !important;
+  transform: rotate(25deg);
+}
 .lib-agent-done:hover {
   background: rgba(255,255,255,.07);
 }

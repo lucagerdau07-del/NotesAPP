@@ -1,4 +1,4 @@
-import { LayoutGrid, Rows3, ArrowUpDown, Search, PenLine, Clock, Star, Tag, Sparkles, Globe, ScanText, Check, ArrowUp } from 'lucide-react';
+import { LayoutGrid, Rows3, ArrowUpDown, Search, PenLine, Clock, Star, Tag, Sparkles, Globe, ScanText, Check, ArrowUp, Settings } from 'lucide-react';
 
 const SUBJECTS = [
   { id: 'mathe', name: 'Mathe', count: 24 },
@@ -205,13 +205,15 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Clock size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Star size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Tag size={19} /></div>
-        <div 
+        <button 
           onClick={onOpenSettings} 
-          style={{ marginTop: 'auto', width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(140deg,oklch(0.62 0.075 55),oklch(0.48 0.08 20))', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', transition: 'transform 0.15s' }}
+          style={{ marginTop: 'auto', width: 44, height: 44, borderRadius: 15, background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)', cursor: 'pointer', transition: 'all 0.15s' }}
           className="lib-settings-btn"
-          title="Einstellungen öffnen"
+          title="Einstellungen"
           data-testid="settings-nav-btn"
-        />
+        >
+          <Settings size={20} />
+        </button>
       </div>
 
       {/* search pill */}
