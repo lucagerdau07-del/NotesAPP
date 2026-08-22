@@ -311,14 +311,14 @@ export default function Settings({ onBack }) {
                     <div className="settings-row-title">Erscheinungsbild</div>
                     <div className="settings-row-copy">Dunkles Glasmorphism-Design aktiv</div>
                   </div>
-                  <span style={{ fontSize: 11, color: '#96969e' }}>Dunkel</span>
+                  <span style={{ fontSize: 11, color: '#FFFFFF' }}>Dunkel</span>
                 </div>
                 <div className="settings-row">
                   <div className="settings-row-main">
                     <div className="settings-row-title">Sprache</div>
                     <div className="settings-row-copy">Deutsch (Deutschland)</div>
                   </div>
-                  <span style={{ fontSize: 11, color: '#96969e' }}>Deutsch</span>
+                  <span style={{ fontSize: 11, color: '#FFFFFF' }}>Deutsch</span>
                 </div>
               </div>
             </div>
@@ -386,10 +386,10 @@ export default function Settings({ onBack }) {
         <div className="settings-modal-overlay">
           <div className="settings-modal-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <h3 style={{ margin: 0, font: '700 15px sans-serif' }}>Handballen-Kalibrierung</h3>
+              <h3 style={{ margin: 0, font: '700 15px sans-serif', color: '#FFFFFF' }}>Handballen-Kalibrierung</h3>
               <button 
                 onClick={() => setIsCalibrating(false)}
-                style={{ background: 'none', border: 'none', color: '#96969e', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
@@ -397,10 +397,10 @@ export default function Settings({ onBack }) {
 
             {calibrationStep === 1 && (
               <div>
-                <p style={{ color: '#d3d3d8', fontSize: 13, lineHeight: 1.5 }}>
+                <p style={{ color: '#FFFFFF', fontSize: 13, lineHeight: 1.5 }}>
                   <strong>Schritt 1:</strong> Lege deinen Handballen in deiner gewohnten Schreibhaltung auf das Display.
                 </p>
-                <div style={{ height: 110, borderRadius: 12, background: '#242428', border: '1px dashed rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#96969e', fontSize: 12, margin: '14px 0' }}>
+                <div style={{ height: 110, borderRadius: 12, background: '#121118', border: '1px dashed rgba(255,255,255,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', fontSize: 12, margin: '14px 0' }}>
                   Handballen hier auflegen...
                 </div>
                 <button 
@@ -415,10 +415,10 @@ export default function Settings({ onBack }) {
 
             {calibrationStep === 2 && (
               <div>
-                <p style={{ color: '#d3d3d8', fontSize: 13, lineHeight: 1.5 }}>
+                <p style={{ color: '#FFFFFF', fontSize: 13, lineHeight: 1.5 }}>
                   <strong>Schritt 2:</strong> Schreibe oder zeichne ein beliebiges Muster mit dem Stift.
                 </p>
-                <div style={{ height: 110, borderRadius: 12, background: '#242428', border: '1px dashed rgba(10,132,255,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#69b1ff', fontSize: 12, margin: '14px 0' }}>
+                <div style={{ height: 110, borderRadius: 12, background: '#121118', border: '1px dashed rgba(10,132,255,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8ac0ff', fontSize: 12, margin: '14px 0' }}>
                   Stiftbewegungen erfassen...
                 </div>
                 <button 
@@ -442,26 +442,26 @@ export default function Settings({ onBack }) {
         <div className="settings-modal-overlay">
           <div className="settings-modal-card" style={{ width: 440 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <h3 style={{ margin: 0, font: '700 15px sans-serif' }}>Palm-Schutz Testfläche</h3>
+              <h3 style={{ margin: 0, font: '700 15px sans-serif', color: '#FFFFFF' }}>Palm-Schutz Testfläche</h3>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button 
                   onClick={clearTestCanvas}
-                  style={{ background: 'rgba(255,255,255,.08)', border: 'none', color: '#d3d3d8', padding: '4px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  style={{ background: 'rgba(255,255,255,.12)', border: 'none', color: '#FFFFFF', padding: '4px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
                 >
                   <RotateCcw size={12} /> Leeren
                 </button>
                 <button 
                   onClick={() => setIsTestAreaOpen(false)}
-                  style={{ background: 'none', border: 'none', color: '#96969e', cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer' }}
                 >
                   <X size={18} />
                 </button>
               </div>
             </div>
-            <p style={{ color: '#96969e', fontSize: 11, margin: '0 0 10px' }}>
+            <p style={{ color: '#FFFFFF', fontSize: 11, margin: '0 0 10px' }}>
               Lege die Hand auf und zeichne, um die Unterdrückung zu überprüfen:
             </p>
-            <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,.12)', background: '#121215' }}>
+            <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,.15)', background: '#08080A' }}>
               <canvas
                 ref={testCanvasRef}
                 width={400}

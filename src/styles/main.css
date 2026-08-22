@@ -13,8 +13,8 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  color: var(--text-color);
-  background: linear-gradient(135deg, #2C1E16 0%, #4A3320 50%, #3D2B1F 100%);
+  color: #FFFFFF;
+  background: #08080A;
   min-height: 100vh;
 }
 
@@ -30,6 +30,7 @@ body {
   padding: 16px 8px;
   box-sizing: border-box;
   overflow: hidden;
+  background: #08080A;
 }
 
 .split-layout.full-mode .document-view {
@@ -38,20 +39,20 @@ body {
 
 .document-view {
   width: 75%;
-  background-color: #1D1B21;
+  background-color: #0D0C11;
   border-radius: 24px;
-  box-shadow: 0 20px 42px -22px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.06);
+  box-shadow: 0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08);
   position: relative;
   overflow: hidden;
 }
 
 .writing-zone {
   width: 25%;
-  background-color: #19171C;
-  background-image: radial-gradient(rgba(255,255,255,.07) 1.5px, transparent 1.5px);
+  background-color: #0A090D;
+  background-image: radial-gradient(rgba(255,255,255,.1) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
   border-radius: 24px;
-  box-shadow: 0 20px 42px -22px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.06);
+  box-shadow: 0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08);
   overflow: hidden;
 }
 
@@ -262,29 +263,29 @@ body {
   gap: 14px;
   padding: 12px 18px;
   border-radius: 16px;
-  background: #1D1B21;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.8);
+  background: #0E0D13;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.95);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .lib-list-row:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateX(4px);
 }
 
 .lib-list-title {
   font: 700 14px 'Bricolage Grotesque', sans-serif;
-  color: #F1EEE7;
+  color: #FFFFFF;
   white-space: nowrap;
 }
 
 .lib-list-body {
   flex: 1;
   font: 400 12px 'Manrope', sans-serif;
-  color: rgba(233, 230, 223, 0.55);
+  color: #FFFFFF;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -295,10 +296,10 @@ body {
   align-items: center;
   gap: 6px;
   font: 600 11px 'Manrope', sans-serif;
-  color: #EFECE4;
+  color: #FFFFFF;
   padding: 3px 8px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Thematic Subject Decor & Hero Banners */
@@ -925,10 +926,10 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: radial-gradient(circle at 12% 8%, rgba(10,132,255,.11), transparent 24%),
-              radial-gradient(circle at 88% 88%, rgba(90,200,250,.05), transparent 26%),
-              #101012;
-  color: #f5f5f7;
+  background: radial-gradient(circle at 12% 8%, rgba(10,132,255,.08), transparent 24%),
+              radial-gradient(circle at 88% 88%, rgba(90,200,250,.04), transparent 26%),
+              #08080A;
+  color: #FFFFFF;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   padding: 16px;
   display: flex;
@@ -943,8 +944,9 @@ body {
   justify-content: space-between;
   padding: 0 16px;
   border-radius: 24px;
-  background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(255,255,255,.025) 45%, rgba(255,255,255,.07)), rgba(80,80,88,.3);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.24), inset 0 -1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.35);
+  background: rgba(14, 13, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.24), inset 0 -1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.5);
   backdrop-filter: blur(24px) saturate(1.5);
   margin-bottom: 14px;
   flex-shrink: 0;
@@ -956,7 +958,7 @@ body {
   gap: 6px;
   background: none;
   border: none;
-  color: #fff;
+  color: #FFFFFF;
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 12px;
@@ -964,12 +966,13 @@ body {
 }
 
 .settings-back-btn:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.1);
 }
 
 .settings-title {
   font: 700 15px 'Bricolage Grotesque', sans-serif;
   letter-spacing: -0.01em;
+  color: #FFFFFF;
 }
 
 .settings-done-btn {
@@ -977,7 +980,7 @@ body {
   border-radius: 999px;
   background: #0a84ff;
   border: none;
-  color: #fff;
+  color: #FFFFFF;
   font: 700 12px 'Manrope', sans-serif;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 14px rgba(10,132,255,.35);
   cursor: pointer;
@@ -999,8 +1002,9 @@ body {
 .settings-sidebar {
   width: 190px;
   border-radius: 22px;
-  background: linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.02) 45%, rgba(255,255,255,.06)), rgba(50,50,56,.35);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.3);
+  background: rgba(14, 13, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.45);
   backdrop-filter: blur(24px);
   padding: 14px 10px;
   display: flex;
@@ -1011,7 +1015,7 @@ body {
 
 .settings-nav-label {
   margin: 8px 10px 4px;
-  color: #9a9aa2;
+  color: #FFFFFF;
   font: 700 9.5px ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1026,7 +1030,7 @@ body {
   border-radius: 12px;
   background: none;
   border: none;
-  color: #d3d3d8;
+  color: #FFFFFF;
   font: 600 12.5px 'Manrope', sans-serif;
   cursor: pointer;
   transition: all 0.15s;
@@ -1034,14 +1038,14 @@ body {
 }
 
 .settings-nav-item:hover {
-  background: rgba(255,255,255,0.06);
-  color: #fff;
+  background: rgba(255,255,255,0.08);
+  color: #FFFFFF;
 }
 
 .settings-nav-item.active {
-  background: rgba(10,132,255,.2);
-  color: #69b1ff;
-  box-shadow: inset 0 0 0 1px rgba(10,132,255,.25);
+  background: rgba(10,132,255,.25);
+  color: #8ac0ff;
+  box-shadow: inset 0 0 0 1px rgba(10,132,255,.35);
 }
 
 .settings-content {
@@ -1049,9 +1053,9 @@ body {
   overflow-y: auto;
   padding: 22px 28px;
   border-radius: 22px;
-  border: 1px solid rgba(255,255,255,.07);
-  background: rgba(25,25,28,.92);
-  box-shadow: 0 12px 36px rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.1);
+  background: #0E0D13;
+  box-shadow: 0 12px 36px rgba(0,0,0,.5);
   backdrop-filter: blur(20px);
 }
 
@@ -1059,12 +1063,12 @@ body {
   margin: 0;
   font: 800 24px 'Bricolage Grotesque', sans-serif;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: #FFFFFF;
 }
 
 .settings-detail-copy {
   margin: 5px 0 0;
-  color: #96969e;
+  color: #FFFFFF;
   font: 400 13px 'Manrope', sans-serif;
   line-height: 1.45;
 }
@@ -1086,20 +1090,20 @@ body {
 
 .settings-status strong {
   font-size: 13px;
-  color: #fff;
+  color: #FFFFFF;
 }
 
 .settings-status span {
-  color: #96969e;
+  color: #FFFFFF;
   font-size: 11.5px;
 }
 
 .settings-group {
   width: min(600px, 100%);
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.1);
   border-radius: 18px;
-  background: #242428;
+  background: #141319;
 }
 
 .settings-row {
@@ -1111,7 +1115,7 @@ body {
 }
 
 .settings-row + .settings-row {
-  border-top: 1px solid rgba(255,255,255,.08);
+  border-top: 1px solid rgba(255,255,255,.1);
 }
 
 .settings-row-clickable {
@@ -1120,7 +1124,7 @@ body {
 }
 
 .settings-row-clickable:hover {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.06);
 }
 
 .settings-row-main {
@@ -1129,13 +1133,13 @@ body {
 }
 
 .settings-row-title {
-  color: #f1f1f4;
+  color: #FFFFFF;
   font: 700 13.5px 'Manrope', sans-serif;
 }
 
 .settings-row-copy {
   margin-top: 3px;
-  color: #8e8e96;
+  color: #FFFFFF;
   font: 400 11.5px 'Manrope', sans-serif;
   line-height: 1.35;
 }
@@ -1145,7 +1149,7 @@ body {
   border-radius: 999px;
   background: #0a84ff;
   border: none;
-  color: #fff;
+  color: #FFFFFF;
   font: 700 12px 'Manrope', sans-serif;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 4px 12px rgba(10,132,255,.24);
@@ -1163,7 +1167,7 @@ body {
   height: 26px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #505057;
+  background: #3a3942;
   cursor: pointer;
   transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1176,7 +1180,7 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: #FFFFFF;
   box-shadow: 0 2px 5px rgba(0,0,0,.35);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1190,7 +1194,7 @@ body {
 }
 
 .settings-chevron {
-  color: #85858d;
+  color: #FFFFFF;
   font-size: 22px;
   line-height: 1;
   font-weight: 300;
@@ -1221,7 +1225,7 @@ body {
 
 .settings-section-caption {
   margin: 16px 4px 8px;
-  color: #7f7f87;
+  color: #FFFFFF;
   font: 700 10.5px ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1237,17 +1241,17 @@ body {
 }
 
 .settings-control-row + .settings-control-row {
-  border-top: 1px solid rgba(255,255,255,.08);
+  border-top: 1px solid rgba(255,255,255,.1);
 }
 
 .settings-control-title {
-  color: #eeeef1;
+  color: #FFFFFF;
   font: 700 13px 'Manrope', sans-serif;
 }
 
 .settings-control-copy {
   margin-top: 3px;
-  color: #8e8e96;
+  color: #FFFFFF;
   font: 400 11px 'Manrope', sans-serif;
 }
 
@@ -1261,7 +1265,7 @@ body {
   appearance: none;
   height: 6px;
   border-radius: 999px;
-  background: #4d4d54;
+  background: #3a3942;
   outline: none;
 }
 
@@ -1271,10 +1275,10 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: #FFFFFF;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,.4);
-  border: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  border: 1px solid rgba(0,0,0,0.2);
 }
 
 .settings-actions {
@@ -1288,9 +1292,9 @@ body {
   flex: 1;
   padding: 11px 16px;
   border-radius: 12px;
-  background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.08);
-  color: #dadade;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.12);
+  color: #FFFFFF;
   text-align: center;
   font: 700 12px 'Manrope', sans-serif;
   cursor: pointer;
@@ -1298,8 +1302,8 @@ body {
 }
 
 .settings-secondary-btn:hover {
-  background: rgba(255,255,255,.12);
-  color: #fff;
+  background: rgba(255,255,255,.16);
+  color: #FFFFFF;
 }
 
 .settings-secondary-btn.danger {
@@ -1307,15 +1311,15 @@ body {
 }
 
 .settings-secondary-btn.danger:hover {
-  background: rgba(255,105,97,0.14);
+  background: rgba(255,105,97,0.18);
 }
 
 /* Modals */
 .settings-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1325,12 +1329,12 @@ body {
 
 .settings-modal-card {
   width: 380px;
-  background: #1d1b22;
-  border: 1px solid rgba(255,255,255,0.14);
+  background: #0E0D13;
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 20px;
   padding: 20px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.8);
-  color: #f1eee7;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.9);
+  color: #FFFFFF;
 }
 
 .settings-toast {
@@ -1338,17 +1342,17 @@ body {
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(26,24,30,0.92);
+  background: rgba(14, 13, 18, 0.95);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.18);
   border-radius: 16px;
   padding: 10px 20px;
-  color: #fff;
+  color: #FFFFFF;
   font: 600 13px 'Manrope', sans-serif;
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.8);
   z-index: 9999;
   animation: toastFade 0.2s ease-out;
 }
