@@ -1,18 +1,33 @@
 package com.notes.school.ui.files
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.notes.school.ui.LocalViewModelFactory
 
 @Composable
 fun FilesRoute(onOpenDocument: (String) -> Unit, onOpenSettings: () -> Unit) {
-    Column(Modifier.fillMaxSize().testTag("files-screen")) {
-        TextButton(onClick = onOpenSettings, modifier = Modifier.testTag("sidebar-settings")) {
-            Text("Settings")
-        }
+    val factory = LocalViewModelFactory.current
+    if (factory != null) {
+        val viewModel: FilesViewModel = viewModel(factory = factory)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        FilesScreen(
+            state = state,
+            onSection = viewModel::select,
+            onSearch = viewModel::search,
+            onOpenDocument = onOpenDocument,
+            onOpenSettings = onOpenSettings,
+            onNewDocument = { kind -> viewModel.createDocument(kind, "Untitled", onOpenDocument) }
+        )
+    } else {
+        FilesScreen(
+            state = FilesUiState(),
+            onSection = {},
+            onSearch = {},
+            onOpenDocument = onOpenDocument,
+            onOpenSettings = onOpenSettings,
+            onNewDocument = {}
+        )
     }
 }

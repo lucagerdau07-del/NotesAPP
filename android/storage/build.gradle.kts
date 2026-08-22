@@ -27,8 +27,8 @@ ksp {
 
 dependencies {
     api(project(":core-model"))
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
+    api(libs.room.runtime)
+    api(libs.room.ktx)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     ksp(libs.room.compiler)

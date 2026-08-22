@@ -55,6 +55,7 @@ dependencies {
     implementation(project(":touch-engine"))
     implementation(project(":document-engine"))
     implementation(project(":storage"))
+    implementation(libs.room.runtime)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
