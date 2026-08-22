@@ -52,4 +52,29 @@ describe('App Component', () => {
     fireEvent.click(screen.getByText('Fertig'));
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
+
+  it('switches between masonry grid and list view and handles sorting', () => {
+    render(<App />);
+
+    // Initially in masonry grid mode
+    expect(screen.getByTestId('masonry-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('list-view')).not.toBeInTheDocument();
+
+    // Switch to list view
+    const listBtn = screen.getByTestId('view-list-btn');
+    fireEvent.click(listBtn);
+    expect(screen.getByTestId('list-view')).toBeInTheDocument();
+    expect(screen.queryByTestId('masonry-grid')).not.toBeInTheDocument();
+
+    // Switch back to masonry grid view
+    const masonryBtn = screen.getByTestId('view-masonry-btn');
+    fireEvent.click(masonryBtn);
+    expect(screen.getByTestId('masonry-grid')).toBeInTheDocument();
+
+    // Trigger sort
+    const sortBtn = screen.getByTestId('view-sort-btn');
+    fireEvent.click(sortBtn);
+    expect(screen.getByTestId('sort-toast')).toBeInTheDocument();
+    expect(screen.getByText('Sortierung: Titel (A–Z)')).toBeInTheDocument();
+  });
 });

@@ -223,6 +223,106 @@ body {
   animation: lib-agent-pulse 2.2s ease-in-out infinite;
 }
 
+/* Masonry Board (Image 2 style) */
+.lib-masonry-grid {
+  column-count: 3;
+  column-gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 1280px) {
+  .lib-masonry-grid {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .lib-masonry-grid {
+    column-count: 1;
+  }
+}
+
+.lib-masonry-grid .lib-card {
+  break-inside: avoid;
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* List View */
+.lib-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.lib-list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  background: #1D1B21;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lib-list-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateX(4px);
+}
+
+.lib-list-title {
+  font: 700 14px 'Bricolage Grotesque', sans-serif;
+  color: #F1EEE7;
+  white-space: nowrap;
+}
+
+.lib-list-body {
+  flex: 1;
+  font: 400 12px 'Manrope', sans-serif;
+  color: rgba(233, 230, 223, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-list-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 11px 'Manrope', sans-serif;
+  color: #EFECE4;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Card Action Hover Buttons on Inspect Images */
+.lib-inspect-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(30, 28, 35, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lib-inspect-action-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #17161A;
+  transform: scale(1.1);
+}
+
 /* Glanzkante oben auf den Glaspanels der Bibliothek */
 .lib-glass {
   position: relative;
