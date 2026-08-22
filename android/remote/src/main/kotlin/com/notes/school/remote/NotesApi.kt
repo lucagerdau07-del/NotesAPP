@@ -26,7 +26,7 @@ interface NotesApi {
  * REST submit-then-poll client. No WebSockets, no streaming: a sleeping Space and a lost
  * Wi-Fi connection must both be ordinary, resumable conditions.
  *
- * The app only ever holds the restricted Notes token. GRAVITY_TOKEN and provider API keys
+ * The app only ever holds the restricted Notes token. Backend and provider API keys
  * stay server-side and are never shipped in the APK.
  */
 class NotesApiClient(

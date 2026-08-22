@@ -72,4 +72,10 @@ dependencies {
     testImplementation(libs.compose.ui.test.junit4)
     testImplementation("androidx.navigation:navigation-testing:2.7.7")
     debugImplementation(libs.compose.ui.test.manifest)
+
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
 }
