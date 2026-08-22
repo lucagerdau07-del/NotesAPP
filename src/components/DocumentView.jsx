@@ -937,9 +937,9 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           // Vollmodus: der Scroll-Container IST das Papier (Design: left:96 right:24 top/bottom:22).
           margin: isFullMode ? '22px 24px 22px 96px' : 0,
           borderRadius: isFullMode ? '22px' : 0,
-          backgroundColor: isFullMode ? '#1D1B21' : 'transparent',
+          backgroundColor: isFullMode ? '#0D0C12' : 'transparent',
           boxShadow: isFullMode
-            ? '0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.06)'
+            ? '0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)'
             : 'none'
         }}
         onPointerDown={handleGestureStart}

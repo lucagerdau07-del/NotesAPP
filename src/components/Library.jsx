@@ -3,7 +3,8 @@ import {
   LayoutGrid, Rows3, ArrowUpDown, Search, PenLine, 
   Clock, Star, Tag, Sparkles, Globe, ScanText, Check, 
   ArrowUp, Settings, Download, ZoomIn, Code2, Quote, 
-  X, ArrowLeft, BookOpen, Layers, Sparkle
+  X, ArrowLeft, BookOpen, Layers, Sparkle, Plus, Mic, 
+  SlidersHorizontal, Sparkles as SparklesIcon
 } from 'lucide-react';
 
 const SUBJECTS = [
@@ -879,6 +880,8 @@ export default function Library({ onOpenNote, onOpenSettings }) {
   const [selectedSubject, setSelectedSubject] = useState(null); // null = all subjects
   const [viewMode, setViewMode] = useState('masonry'); // 'masonry' | 'list'
   const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'title' | 'subject'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isMicActive, setIsMicActive] = useState(false);
   const [sortToast, setSortToast] = useState(null);
   const toastTimeoutRef = useRef(null);
 
@@ -911,10 +914,21 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     }
   };
 
-  // Filter notes by selected subject
-  const filteredNotes = selectedSubject 
-    ? RECENT.filter(n => n.subject.toLowerCase() === selectedSubject.name.toLowerCase() || n.subject.toLowerCase() === selectedSubject.id.toLowerCase())
-    : RECENT;
+  // Filter notes by selected subject and search query
+  const filteredNotes = RECENT.filter(n => {
+    const matchesSubject = !selectedSubject || (
+      n.subject.toLowerCase() === selectedSubject.name.toLowerCase() || 
+      n.subject.toLowerCase() === selectedSubject.id.toLowerCase()
+    );
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || (
+      n.title.toLowerCase().includes(q) ||
+      (n.body && n.body.toLowerCase().includes(q)) ||
+      (n.tag && n.tag.toLowerCase().includes(q)) ||
+      n.subject.toLowerCase().includes(q)
+    );
+    return matchesSubject && matchesSearch;
+  });
 
   const sortedRecent = [...filteredNotes].sort((a, b) => {
     if (sortBy === 'title') return a.title.localeCompare(b.title);
@@ -922,35 +936,38 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     return a.id - b.id;
   });
 
-  // Dynamic Background Gradient depending on selected subject - Deep almost-black tones
+  // Dynamic Background Gradient depending on selected subject - Deep almost-black tones with reeded glass
   const bgGradient = selectedSubject?.id === 'mathe' 
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.08 258/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.06 240/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.08 258/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.06 240/.3),transparent 65%)'
     : selectedSubject?.id === 'chemie'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.07 160/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.05 180/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.07 160/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.05 180/.3),transparent 65%)'
     : selectedSubject?.id === 'kunst'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.085 330/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.07 280/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.35 0.085 330/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.07 280/.3),transparent 65%)'
     : selectedSubject?.id === 'pgw'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.075 320/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.06 300/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.075 320/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.28 0.06 300/.3),transparent 65%)'
     : selectedSubject?.id === 'philosophie'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.05 78/.55),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.04 60/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.05 78/.4),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.04 60/.3),transparent 65%)'
     : selectedSubject?.id === 'englisch'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.07 26/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.05 10/.4),transparent 65%),#08080A'
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.32 0.07 26/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.05 10/.3),transparent 65%)'
     : selectedSubject?.id === 'spanisch'
-    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.33 0.08 55/.6),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.06 40/.4),transparent 65%),#08080A'
-    : 'radial-gradient(720px 420px at 10% -6%,oklch(0.32 0.055 260/.55),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.3 0.045 200/.4),transparent 64%),radial-gradient(780px 520px at 58% 108%,oklch(0.3 0.05 55/.35),transparent 66%),#08080A';
+    ? 'radial-gradient(820px 480px at 15% -4%,oklch(0.33 0.08 55/.45),transparent 68%),radial-gradient(640px 480px at 90% 12%,oklch(0.26 0.06 40/.3),transparent 65%)'
+    : 'radial-gradient(720px 420px at 10% -6%,oklch(0.32 0.055 260/.35),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.3 0.045 200/.25),transparent 64%)';
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#08080A', fontFamily: 'Manrope,sans-serif', color: '#FFFFFF' }}>
-      {/* Dynamic Thematic Ambient Lighting */}
-      <div style={{ position: 'absolute', inset: 0, background: bgGradient, transition: 'background 0.4s ease' }} />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#060608', fontFamily: 'Manrope,sans-serif', color: '#FFFFFF' }}>
+      {/* 1. Fluted Reeded Glass Textured Dark Background Layer (Image 1 reference) */}
+      <div className="liquid-fluted-bg" />
+
+      {/* 2. Dynamic Thematic Ambient Lighting overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: bgGradient, transition: 'background 0.4s ease', pointerEvents: 'none' }} />
 
       {/* sidebar rail */}
-      <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, background: 'rgba(14, 13, 18, 0.85)', backdropFilter: 'blur(30px) saturate(1.35)', border: '1px solid rgba(255,255,255,.1)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 28px 60px -26px rgba(0,0,0,.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
+      <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
         <div style={{ width: 34, height: 34, borderRadius: 12, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#08080A', font: '800 15px "Bricolage Grotesque",sans-serif', marginBottom: 10 }}>N</div>
-        <div style={{ width: 44, height: 44, borderRadius: 15, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}><LayoutGrid size={19} /></div>
-        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}><Clock size={19} /></div>
-        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}><Star size={19} /></div>
-        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF' }}><Tag size={19} /></div>
+        <div style={{ width: 44, height: 44, borderRadius: 15, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.4)' }}><LayoutGrid size={19} /></div>
+        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}><Clock size={19} /></div>
+        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}><Star size={19} /></div>
+        <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}><Tag size={19} /></div>
         <button 
           onClick={onOpenSettings} 
           style={{ marginTop: 'auto', width: 44, height: 44, borderRadius: 15, background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }}
@@ -962,21 +979,100 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         </button>
       </div>
 
-      {/* search pill */}
-      <div className="lib-glass" style={{ position: 'absolute', left: 108, top: 24, width: 404, height: 50, borderRadius: 25, background: 'rgba(14, 13, 18, 0.85)', backdropFilter: 'blur(28px) saturate(1.35)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 20px 40px -22px rgba(0,0,0,.9)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px', zIndex: 15 }}>
-        <Search size={17} color="#FFFFFF" />
-        <span style={{ font: '500 13.5px Manrope,sans-serif', color: '#FFFFFF' }}>
-          {selectedSubject ? `${selectedSubject.name}-Notizen durchsuchen…` : 'Notizen, Fächer, Handschrift durchsuchen'}
-        </span>
-        <span style={{ marginLeft: 'auto', font: '600 10px ui-monospace,monospace', padding: '3px 6px', borderRadius: 6, background: 'rgba(255,255,255,.12)', color: '#FFFFFF' }}>⌘K</span>
+      {/* Liquid Glass Search & AI Capsule + Standalone Circle Button (Exact Image 1 Style) */}
+      <div style={{ position: 'absolute', left: 106, top: 20, display: 'flex', alignItems: 'center', gap: 10, zIndex: 30 }}>
+        {/* Main Liquid Glass Pill */}
+        <div 
+          className="liquid-glass-pill" 
+          style={{ 
+            height: 52, 
+            width: 440, 
+            padding: '0 20px 0 16px', 
+            gap: 12, 
+            cursor: 'text' 
+          }}
+        >
+          <button 
+            onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })}
+            style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            title="Neue Notiz erstellen"
+          >
+            <Plus size={20} strokeWidth={2.4} />
+          </button>
+
+          <input 
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={selectedSubject ? `Ask AI zu ${selectedSubject.name}…` : 'Ask AI'}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: '#FFFFFF',
+              font: '500 15px/1 Manrope, -apple-system, sans-serif',
+              letterSpacing: '-0.01em',
+              caretColor: '#0a84ff'
+            }}
+          />
+
+          {/* Microphone Icon */}
+          <button 
+            onClick={() => {
+              const nextState = !isMicActive;
+              setIsMicActive(nextState);
+              showToast(nextState ? 'Sprachassistent aktiv — Sprich jetzt…' : 'Spracheingabe beendet');
+            }}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: isMicActive ? '#30d158' : '#FFFFFF', 
+              padding: 4, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              cursor: 'pointer',
+              transition: 'all 0.15s'
+            }}
+            title="Spracheingabe"
+          >
+            <Mic size={18} strokeWidth={2} />
+          </button>
+
+          {/* Live Audio Waveform Indicator (Image 1) */}
+          <div 
+            style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '0 2px', height: 20 }}
+            title="Audio-Wellenform"
+          >
+            <span className="liquid-wave-bar" />
+            <span className="liquid-wave-bar" />
+            <span className="liquid-wave-bar" />
+            <span className="liquid-wave-bar" />
+            <span className="liquid-wave-bar" />
+          </div>
+        </div>
+
+        {/* Standalone Liquid Glass Circle Button (Image 1 Close / Reset Pod) */}
+        <button 
+          className="liquid-glass-circle"
+          onClick={() => { 
+            setSearchQuery(''); 
+            if (selectedSubject) setSelectedSubject(null);
+            showToast('Filter & Suche zurückgesetzt');
+          }}
+          title="Schließen / Filter leeren"
+        >
+          <X size={19} strokeWidth={2.4} />
+        </button>
       </div>
 
       {/* view toggle + new note (right aligned) */}
-      <div style={{ position: 'absolute', right: 300, top: 24, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15 }}>
-        <div className="lib-glass" style={{ height: 50, borderRadius: 25, background: 'rgba(14, 13, 18, 0.85)', backdropFilter: 'blur(28px) saturate(1.35)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 1px 0 rgba(255,255,255,.2) inset,0 20px 40px -22px rgba(0,0,0,.9)', display: 'flex', alignItems: 'center', padding: '0 6px', gap: 2 }}>
+      <div style={{ position: 'absolute', right: 300, top: 20, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15 }}>
+        <div className="liquid-glass-pill" style={{ height: 52, padding: '0 6px', gap: 2 }}>
           <button 
             className={`lib-view-btn ${viewMode === 'masonry' ? 'active' : ''}`} 
-            style={{ width: 38, height: 38, borderRadius: 19, background: viewMode === 'masonry' ? 'rgba(255,255,255,.22)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
+            style={{ width: 40, height: 40, borderRadius: 20, background: viewMode === 'masonry' ? 'rgba(255,255,255,.24)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
             onClick={() => setViewMode('masonry')}
             title="Masonry-Rasteransicht"
             data-testid="view-masonry-btn"
@@ -985,7 +1081,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           </button>
           <button 
             className={`lib-view-btn ${viewMode === 'list' ? 'active' : ''}`} 
-            style={{ width: 38, height: 38, borderRadius: 19, background: viewMode === 'list' ? 'rgba(255,255,255,.22)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
+            style={{ width: 40, height: 40, borderRadius: 20, background: viewMode === 'list' ? 'rgba(255,255,255,.24)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
             onClick={() => setViewMode('list')}
             title="Listenansicht"
             data-testid="view-list-btn"
@@ -994,7 +1090,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           </button>
           <button 
             className="lib-view-btn" 
-            style={{ width: 38, height: 38, borderRadius: 19, background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
+            style={{ width: 40, height: 40, borderRadius: 20, background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
             onClick={cycleSort}
             title="Sortieren"
             data-testid="view-sort-btn"
@@ -1002,10 +1098,11 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             <ArrowUpDown size={17} />
           </button>
         </div>
+
         <div 
           onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })} 
-          className="lib-newnote" 
-          style={{ height: 50, borderRadius: 25, padding: '0 20px 0 16px', display: 'flex', alignItems: 'center', gap: 9, background: '#FFFFFF', boxShadow: '0 20px 40px -20px rgba(0,0,0,.95)', color: '#08080A', cursor: 'pointer' }}
+          className="liquid-glass-pill lib-newnote" 
+          style={{ height: 52, padding: '0 22px 0 18px', gap: 10, background: '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: '0 20px 48px -12px rgba(0,0,0,0.95)' }}
           data-testid="new-note-btn"
         >
           <PenLine size={17} />
@@ -1017,14 +1114,14 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
       {/* Sort Toast */}
       {sortToast && (
-        <div style={{ position: 'fixed', top: 84, right: 300, background: 'rgba(14, 13, 18, 0.95)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 14, padding: '8px 16px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000, boxShadow: '0 12px 28px rgba(0,0,0,0.8)' }} data-testid="sort-toast">
+        <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: 300, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000 }} data-testid="sort-toast">
           <ArrowUpDown size={14} color="#0a84ff" />
           <span>{sortToast}</span>
         </div>
       )}
 
       {/* main content */}
-      <div className="lib-scroll" style={{ position: 'absolute', left: 100, top: 92, right: 300, bottom: 26, overflow: 'auto', paddingRight: 10 }}>
+      <div className="lib-scroll" style={{ position: 'absolute', left: 106, top: 92, right: 300, bottom: 26, overflow: 'auto', paddingRight: 10 }}>
         {/* Header or Thematic Subject Decor */}
         {selectedSubject ? (
           <ThematicSubjectHeader 
