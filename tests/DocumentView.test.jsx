@@ -14,7 +14,7 @@ test('renders DocumentView with master canvas and focus box', () => {
     handleDrag
   };
 
-  render(<DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} />);
+  render(<DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={{ layoutMode: 'split' }} />);
 
   // Check master canvas
   const canvas = screen.getByTestId('master-canvas');
@@ -81,4 +81,81 @@ test('synced undo and clear canvas', () => {
   fireEvent.click(clearBtn);
   expect(clearCanvas).toHaveBeenCalled();
   expect(padActionsRef.current.clearCanvas).toHaveBeenCalled();
+});
+
+test('opens and interacts with pen settings popover', () => {
+  const setTool = vi.fn();
+  const setLineWidth = vi.fn();
+  const toolbarState = {
+    tool: 'pen',
+    setTool,
+    rawLineWidth: 3,
+    setLineWidth,
+    isEraser: false,
+    color: '#EFECE4'
+  };
+
+  render(<DocumentView toolbarState={toolbarState} />);
+
+  // Click pen button to open settings
+  const penBtn = screen.getByTestId('pen-tool-btn');
+  fireEvent.click(penBtn);
+
+  const popover = screen.getByTestId('pen-settings-popover');
+  expect(popover).toBeTruthy();
+  expect(screen.getByText('Stift-Einstellungen')).toBeTruthy();
+
+  // Switch to Füller
+  const fountainBtn = screen.getByText('Füller');
+  fireEvent.click(fountainBtn);
+  expect(setTool).toHaveBeenCalledWith('fountain');
+
+  // Click a thickness preset (e.g. 5px)
+  const presetBtn = screen.getByTitle('5px');
+  fireEvent.click(presetBtn);
+  expect(setLineWidth).toHaveBeenCalledWith(5);
+});
+
+test('opens color wheel popover and updates color', () => {
+  const setColor = vi.fn();
+  const toolbarState = {
+    color: '#EFECE4',
+    rawColor: '#EFECE4',
+    setColor,
+    isEraser: false
+  };
+
+  render(<DocumentView toolbarState={toolbarState} />);
+
+  // Click the active first color slot to open the color popover
+  const colorSlots = document.querySelectorAll('.rail-color-wrapper');
+  expect(colorSlots.length).toBe(5);
+
+  fireEvent.click(colorSlots[0]);
+
+  const colorPopover = screen.getByTestId('color-wheel-popover');
+  expect(colorPopover).toBeTruthy();
+  expect(screen.getByText('Farbrad & Palette')).toBeTruthy();
+
+  // Click a preset color in the palette
+  const preset = screen.getByTitle('#3E7BD8');
+  fireEvent.click(preset);
+  expect(setColor).toHaveBeenCalledWith('#3E7BD8');
+});
+
+test('cycles paper style on click and triggers setPaperStyle', () => {
+  const setPaperStyle = vi.fn();
+  const toolbarState = {
+    paperStyle: 'lined',
+    setPaperStyle
+  };
+
+  render(<DocumentView toolbarState={toolbarState} />);
+
+  const paperBtn = screen.getByTestId('paper-style-btn');
+  fireEvent.click(paperBtn);
+
+  expect(setPaperStyle).toHaveBeenCalledWith('grid');
+  expect(screen.getByTestId('paper-toast')).toBeTruthy();
+  expect(screen.getByText('Papierstil: Kariert')).toBeTruthy();
 });

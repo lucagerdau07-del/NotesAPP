@@ -1,15 +1,48 @@
 import React, { useState } from 'react';
+import { Sparkles, Share, MoreHorizontal } from 'lucide-react';
 import './styles/main.css';
 import SplitLayout from './components/SplitLayout';
-import TabBar from './components/TabBar';
+import Library from './components/Library';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('smartCanvas');
+  const [screen, setScreen] = useState('library');
+  const [activeNote, setActiveNote] = useState(null);
+  const activeTab = 'smartCanvas';
+
+  const openNote = (note) => {
+    setActiveNote(note);
+    setScreen('editor');
+  };
+
+  if (screen === 'library') {
+    return <Library onOpenNote={openNote} />;
+  }
 
   return (
-    <div>
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-      <SplitLayout activeTab={activeTab} />
+    <div className="editor-shell">
+      <div className="editor-title-pill">
+        <span className="editor-title">{activeNote?.title || 'Neue Notiz'}</span>
+        {activeNote?.subject && (
+          <>
+            <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,.14)' }} />
+            <span className="editor-subject">{activeNote.subject} · Seite 1</span>
+          </>
+        )}
+      </div>
+      <div className="editor-actions-pill">
+        <button className="editor-ai-btn" title="Erklären (KI)">
+          <Sparkles size={14} />
+        </button>
+        <button className="rail-btn" title="Teilen">
+          <Share size={16} />
+        </button>
+        <button className="rail-btn" title="Mehr">
+          <MoreHorizontal size={16} />
+        </button>
+      </div>
+      <div className="editor-body">
+        <SplitLayout activeTab={activeTab} onBack={() => setScreen('library')} />
+      </div>
     </div>
   );
 }

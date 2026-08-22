@@ -4,15 +4,18 @@ import '@testing-library/jest-dom';
 import App from '../src/App';
 
 describe('App Component', () => {
-  it('renders without crashing', () => {
+  it('renders the library without crashing', () => {
     render(<App />);
-    expect(screen.getByText('Smart Canvas')).toBeInTheDocument();
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
-  it('updates view when Delegation tab is clicked', () => {
+  it('opens the editor from a note and can return to the library', () => {
     render(<App />);
-    const delegationTab = screen.getByRole('button', { name: /delegation/i });
-    fireEvent.click(delegationTab);
-    expect(screen.getByText('Delegation Mode (TBD)')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    expect(screen.getByTestId('document-view')).toBeInTheDocument();
+    expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 });

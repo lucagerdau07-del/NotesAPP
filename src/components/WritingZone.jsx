@@ -155,11 +155,11 @@ export default function WritingZone({ masterCanvasState, focusBoxState, toolbarS
     const offsetX = fb ? -(fb.x * scaleX) : 0;
     const offsetY = fb ? -(fb.y * scaleY) : 0;
 
-    const marginLineLeft = `linear-gradient(to right, transparent, transparent calc(${80 * scaleX}px - 1px), #ccc calc(${80 * scaleX}px - 1px), #ccc calc(${80 * scaleX}px + 1px), transparent calc(${80 * scaleX}px + 1px))`;
-    const marginLineRight = `linear-gradient(to left, transparent, transparent calc(${80 * scaleX}px - 1px), #ccc calc(${80 * scaleX}px - 1px), #ccc calc(${80 * scaleX}px + 1px), transparent calc(${80 * scaleX}px + 1px))`;
+    const marginLineLeft = `linear-gradient(to right, transparent, transparent calc(${80 * scaleX}px - 1px), rgba(255,255,255,.14) calc(${80 * scaleX}px - 1px), rgba(255,255,255,.14) calc(${80 * scaleX}px + 1px), transparent calc(${80 * scaleX}px + 1px))`;
+    const marginLineRight = `linear-gradient(to left, transparent, transparent calc(${80 * scaleX}px - 1px), rgba(255,255,255,.14) calc(${80 * scaleX}px - 1px), rgba(255,255,255,.14) calc(${80 * scaleX}px + 1px), transparent calc(${80 * scaleX}px + 1px))`;
     
-    const horizLines = `linear-gradient(to bottom, transparent, transparent calc(100% - 1px), #ccc calc(100% - 1px), #ccc 100%)`;
-    const vertLines = `linear-gradient(to right, transparent, transparent calc(100% - 1px), #ccc calc(100% - 1px), #ccc 100%)`;
+    const horizLines = `linear-gradient(to bottom, transparent, transparent calc(100% - 1px), rgba(255,255,255,.14) calc(100% - 1px), rgba(255,255,255,.14) 100%)`;
+    const vertLines = `linear-gradient(to right, transparent, transparent calc(100% - 1px), rgba(255,255,255,.14) calc(100% - 1px), rgba(255,255,255,.14) 100%)`;
 
     if (paperStyle === 'lined') {
       return {
@@ -187,10 +187,10 @@ export default function WritingZone({ masterCanvasState, focusBoxState, toolbarS
   const maskPosition = showPageBreaks && fb ? `0px ${-(fb.y * scaleY)}px` : '0px 0px';
   const maskRepeat = showPageBreaks ? 'repeat-y' : 'repeat';
 
-  const paperBgColor = paperStyle === 'grid' ? '#f5f5f0' : 'var(--off-white)';
+  const paperBgColor = paperStyle === 'grid' ? '#1a1820' : '#1D1B21';
 
   return (
-    <div className={`writing-zone`} data-testid="writing-zone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e0e0e0', backgroundImage: 'none' }}>
+    <div className={`writing-zone`} data-testid="writing-zone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f0e11', backgroundImage: 'none' }}>
       <div style={{ 
         position: 'relative',
         maxWidth: '100%', 

@@ -1,42 +1,279 @@
 import { useState, useRef, useEffect } from 'react';
-import { Eraser, Trash2, Undo2, Redo2, SquareDashed, AlignJustify, File, Grid } from 'lucide-react';
+import { 
+  Eraser, Trash2, Undo2, Redo2, Lasso, Highlighter, PenLine, 
+  Layers, AlignJustify, File, Grid, Columns2, ArrowLeft, 
+  X, Palette, Sliders, PenTool, Pencil, Sparkles 
+} from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
 
-function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onChange, activePickerIndex, setActivePickerIndex }) {
-  const wrapperRef = useRef(null);
-  const isPickerOpen = activePickerIndex === index;
-
-  const longPressHandlers = useLongPress(
-    () => { setActivePickerIndex(index); },
-    () => { onSelect(); }
-  );
+function PenSettingsPopover({
+  tool,
+  setTool,
+  rawLineWidth,
+  setLineWidth,
+  penColor,
+  onClose,
+  setIsEraser,
+  setIsSelectMode
+}) {
+  const popoverRef = useRef(null);
 
   useEffect(() => {
-    if (!isPickerOpen) return;
-    const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-        setActivePickerIndex(null);
+    const handleDown = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.('.pen-rail-btn')) {
+        onClose();
       }
     };
-    document.addEventListener('pointerdown', handleClickOutside);
-    return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [isPickerOpen, setActivePickerIndex]);
+    document.addEventListener('pointerdown', handleDown);
+    return () => document.removeEventListener('pointerdown', handleDown);
+  }, [onClose]);
+
+  const isHighlighter = tool === 'highlighter';
+  const thicknessPresets = isHighlighter ? [10, 16, 24, 32, 44] : [1.5, 3, 5, 8, 14];
+
+  const tools = [
+    { id: 'pen', name: 'Stift', icon: <PenLine size={15} /> },
+    { id: 'fountain', name: 'Füller', icon: <PenTool size={15} /> },
+    { id: 'highlighter', name: 'Marker', icon: <Highlighter size={15} /> },
+    { id: 'pencil', name: 'Bleistift', icon: <Pencil size={15} /> },
+  ];
 
   return (
-    <div 
-      ref={wrapperRef}
-      className={`color-btn-wrapper ${isActive && !isEraser ? 'active' : ''}`}
+    <div
+      ref={popoverRef}
+      className="editor-popover pen-settings-popover"
+      style={{ top: 120, width: 250 }}
+      data-testid="pen-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Sliders size={14} /> Stift-Einstellungen
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Tool selector */}
+      <div className="tool-types-grid">
+        {tools.map(t => (
+          <button
+            key={t.id}
+            className={`tool-type-btn ${tool === t.id ? 'active' : ''}`}
+            onClick={() => {
+              setTool?.(t.id);
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+            }}
+          >
+            {t.icon}
+            <span>{t.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Thickness Presets */}
+      <div style={{ font: '600 10px ui-monospace, monospace', letterSpacing: '.06em', color: 'rgba(233,230,223,0.5)', marginBottom: 6 }}>
+        STRICHSTÄRKE ({rawLineWidth || 3}px)
+      </div>
+      <div className="thickness-presets">
+        {thicknessPresets.map((val) => (
+          <button
+            key={val}
+            className={`thickness-preset-btn ${Math.abs((rawLineWidth || 3) - val) < 0.5 ? 'active' : ''}`}
+            onClick={() => setLineWidth?.(val)}
+            title={`${val}px`}
+          >
+            <span
+              className="thickness-dot"
+              style={{
+                width: Math.max(3, Math.min(20, val * (isHighlighter ? 0.38 : 1.3))),
+                height: Math.max(3, Math.min(20, val * (isHighlighter ? 0.38 : 1.3))),
+                background: penColor
+              }}
+            />
+          </button>
+        ))}
+      </div>
+
+      {/* Continuous Slider */}
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min={isHighlighter ? "8" : "1"}
+          max={isHighlighter ? "48" : "20"}
+          step={isHighlighter ? "1" : "0.5"}
+          value={rawLineWidth || 3}
+          onChange={(e) => setLineWidth?.(parseFloat(e.target.value))}
+          className="thickness-slider"
+        />
+        <span className="thickness-val">{rawLineWidth || 3}px</span>
+      </div>
+
+      {/* Stroke Preview */}
+      <div className="stroke-preview-box">
+        <svg width="220" height="36" viewBox="0 0 220 36" style={{ overflow: 'visible' }}>
+          <path
+            d="M 15 18 Q 65 4, 110 18 T 205 18"
+            fill="none"
+            stroke={penColor}
+            strokeWidth={isHighlighter ? (rawLineWidth || 3) * 1.5 : (rawLineWidth || 3)}
+            strokeOpacity={isHighlighter ? 0.45 : tool === 'pencil' ? 0.75 : 1}
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function ColorWheelPopover({
+  customColors,
+  activePickerIndex,
+  setActivePickerIndex,
+  onColorChange,
+  onClose
+}) {
+  const popoverRef = useRef(null);
+  const curColor = customColors[activePickerIndex] || '#EFECE4';
+  const [hexInputValue, setHexInputValue] = useState(curColor);
+
+  useEffect(() => {
+    setHexInputValue(curColor);
+  }, [curColor]);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.('.rail-color-wrapper')) {
+        onClose();
+      }
+    };
+    document.addEventListener('pointerdown', handleDown);
+    return () => document.removeEventListener('pointerdown', handleDown);
+  }, [onClose]);
+
+  const presetPalette = [
+    '#EFECE4', '#A09D95', '#484441', '#3E7BD8', '#2AA9DF', '#4FA66B',
+    '#84CC16', '#D4A937', '#E87A38', '#D8615B', '#E05285', '#9353D3'
+  ];
+
+  const handleHexSubmit = (val) => {
+    setHexInputValue(val);
+    if (/^#[0-9A-F]{6}$/i.test(val)) {
+      onColorChange(activePickerIndex, val);
+    }
+  };
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover color-wheel-popover"
+      style={{ top: 220, width: 232 }}
+      data-testid="color-wheel-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Palette size={14} /> Farbrad & Palette
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Quick Slot Selector */}
+      <div className="color-slots-selector">
+        {customColors.map((col, idx) => (
+          <div
+            key={idx}
+            className={`slot-circle ${activePickerIndex === idx ? 'active' : ''}`}
+            style={{ backgroundColor: col }}
+            onClick={() => setActivePickerIndex(idx)}
+            title={`Slot ${idx + 1} anpassen`}
+          />
+        ))}
+      </div>
+
+      {/* Color Wheel Picker */}
+      <HexColorPicker
+        color={curColor}
+        onChange={(newColor) => {
+          onColorChange(activePickerIndex, newColor);
+          setHexInputValue(newColor.toUpperCase());
+        }}
+      />
+
+      {/* Color Presets Palette */}
+      <div className="color-presets-grid">
+        {presetPalette.map((pCol) => (
+          <button
+            key={pCol}
+            className={`color-preset-btn ${curColor.toLowerCase() === pCol.toLowerCase() ? 'active' : ''}`}
+            style={{ backgroundColor: pCol }}
+            onClick={() => {
+              onColorChange(activePickerIndex, pCol);
+              setHexInputValue(pCol);
+            }}
+            title={pCol}
+          />
+        ))}
+      </div>
+
+      {/* Hex Code Input */}
+      <div className="hex-input-row">
+        <span className="hex-preview-dot" style={{ backgroundColor: curColor }} />
+        <input
+          type="text"
+          className="hex-text-input"
+          value={hexInputValue}
+          onChange={(e) => handleHexSubmit(e.target.value)}
+          placeholder="#FFFFFF"
+          maxLength={7}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onOpenPicker }) {
+  const isLongPressRef = useRef(false);
+  const timerRef = useRef(null);
+
+  const handlePointerDown = () => {
+    isLongPressRef.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onOpenPicker?.();
+    }, 450);
+  };
+
+  const handlePointerUp = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const handleClick = () => {
+    if (isLongPressRef.current) {
+      isLongPressRef.current = false;
+      return;
+    }
+    onSelect();
+  };
+
+  return (
+    <div
+      className={`rail-color-wrapper ${isActive && !isEraser ? 'active' : ''}`}
       title="Klicken zum Auswählen, gedrückt halten für Farbrad"
       style={{ touchAction: 'none' }}
-      {...longPressHandlers}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onClick={handleClick}
+      data-testid={`color-slot-${index}`}
     >
-      <div className="color-btn" style={{ backgroundColor: colorValue, pointerEvents: 'none' }} />
-      {isPickerOpen && (
-        <div className="color-picker-popover">
-          <HexColorPicker color={colorValue} onChange={onChange} />
-        </div>
-      )}
+      <div className={`rail-color ${index === 0 ? 'rail-color-light' : ''}`} style={{ backgroundColor: colorValue, pointerEvents: 'none' }} />
     </div>
   );
 }
@@ -44,20 +281,29 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onChange, 
 const baseWidth = 800;
 const pageHeight = baseWidth * 1.414;
 
-export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState, padActionsRef }) {
+export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState, padActionsRef, onBack }) {
   const { 
     clearCanvas, undo, redo, canUndo, canRedo
   } = masterCanvasState || {};
   const { 
     color, setColor, 
     isEraser, setIsEraser, 
-    lineWidth, setLineWidth,
+    lineWidth, rawLineWidth, setLineWidth,
     eraserWidth, setEraserWidth,
     isSelectMode, setIsSelectMode,
-    paperStyle, setPaperStyle
+    paperStyle, setPaperStyle,
+    layoutMode, setLayoutMode,
+    rawColor, tool, setTool
   } = toolbarState || {};
-  const [customColors, setCustomColors] = useState(['#2C2825', '#D32F2F', '#1976D2', '#388E3C', '#F57C00']);
-  const [activePickerIndex, setActivePickerIndex] = useState(null);
+  const penColor = rawColor ?? color;
+  const isFullMode = layoutMode !== 'split';
+  const [customColors, setCustomColors] = useState(['#EFECE4', '#3E7BD8', '#D8615B', '#4FA66B', '#D4A937']);
+  const [activePickerIndex, setActivePickerIndex] = useState(0);
+  const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [paperToast, setPaperToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
   const [zoom, setZoom] = useState(1);
   const [pagesCount, setPagesCount] = useState(1);
   const pagesCountRef = useRef(1);
@@ -85,22 +331,80 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
   };
 
   const cyclePaperStyle = () => {
-    if (paperStyle === 'blank') setPaperStyle?.('lined');
-    else if (paperStyle === 'lined') setPaperStyle?.('grid');
-    else setPaperStyle?.('blank');
+    let nextStyle = 'lined';
+    let label = 'Liniert';
+    if (paperStyle === 'lined') {
+      nextStyle = 'grid';
+      label = 'Kariert';
+    } else if (paperStyle === 'grid') {
+      nextStyle = 'dotted';
+      label = 'Punktiert';
+    } else if (paperStyle === 'dotted') {
+      nextStyle = 'blank';
+      label = 'Blanko';
+    } else {
+      nextStyle = 'lined';
+      label = 'Liniert';
+    }
+    setPaperStyle?.(nextStyle);
+    setPaperToast(label);
+    clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setPaperToast(null);
+    }, 1600);
   };
 
   const getPaperStyleIcon = () => {
-    if (paperStyle === 'lined') return <AlignJustify size={24} />;
-    if (paperStyle === 'grid') return <Grid size={24} />;
-    return <File size={24} />;
+    if (paperStyle === 'lined') return <AlignJustify size={18} />;
+    if (paperStyle === 'grid') return <Grid size={18} />;
+    if (paperStyle === 'dotted') return <Sparkles size={18} />;
+    return <File size={18} />;
   };
 
   const [draftFocusBox, setDraftFocusBox] = useState(null);
   const containerRef = useRef(null);
+  const scrollRef = useRef(null);
+  const drawStateRef = useRef({ active: false, x: 0, y: 0 });
+  // Im Vollmodus füllt das Papier immer die Breite; gescrollt wird vertikal.
+  useEffect(() => {
+    if (!isFullMode) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (el.clientWidth > 0) setZoom(el.clientWidth / baseWidth);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isFullMode]);
+
+  const handleDrawStart = (e) => {
+    if (!isFullMode || isSelectMode || !masterCanvasState) return;
+    e.target.setPointerCapture?.(e.pointerId);
+    const rect = containerRef.current.getBoundingClientRect();
+    drawStateRef.current = { active: true, x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
+  };
+
+  const handleDrawMove = (e) => {
+    if (!drawStateRef.current.active || !masterCanvasState) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+    const width = isEraser ? eraserWidth : lineWidth;
+    masterCanvasState.drawLine(drawStateRef.current.x, drawStateRef.current.y, x, y, color, width, isEraser);
+    drawStateRef.current = { active: true, x, y };
+  };
+
+  const handleDrawEnd = () => {
+    if (drawStateRef.current.active) {
+      masterCanvasState?.endStroke?.();
+    }
+    drawStateRef.current = { active: false, x: 0, y: 0 };
+  };
 
   const handlePointerDown = (e) => {
-    if (!isSelectMode) return;
+    if (!isSelectMode) { handleDrawStart(e); return; }
     const rect = containerRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
@@ -108,7 +412,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
   };
 
   const handlePointerMove = (e) => {
-    if (!isSelectMode || !draftFocusBox) return;
+    if (!isSelectMode) { handleDrawMove(e); return; }
+    if (!draftFocusBox) return;
     const rect = containerRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(baseWidth, (e.clientX - rect.left) / zoom));
     const currentY = (e.clientY - rect.top) / zoom;
@@ -123,7 +428,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
   };
 
   const handlePointerUp = (e) => {
-    if (!isSelectMode || !draftFocusBox) return;
+    if (!isSelectMode) { handleDrawEnd(e); return; }
+    if (!draftFocusBox) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
         x: draftFocusBox.x,
@@ -411,134 +717,238 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
   const documentHeight = pageHeight * pagesCount;
 
   const getStaticBackgroundStyles = () => {
-    if (paperStyle === 'blank') return { backgroundImage: 'none', backgroundSize: 'auto', backgroundPositionY: '0px' };
+    const redMarginLine = `linear-gradient(to right, transparent, transparent 88px, oklch(0.62 0.09 26/.38) 88px, oklch(0.62 0.09 26/.38) 89.5px, transparent 89.5px)`;
 
-    const marginLineLeft = `linear-gradient(to right, transparent, transparent calc(80px - 1px), #ccc calc(80px - 1px), #ccc calc(80px + 1px), transparent calc(80px + 1px))`;
-    const marginLineRight = `linear-gradient(to left, transparent, transparent calc(80px - 1px), #ccc calc(80px - 1px), #ccc calc(80px + 1px), transparent calc(80px + 1px))`;
-    
-    const horizLines = `linear-gradient(to bottom, transparent, transparent calc(100% - 1px), #ccc calc(100% - 1px), #ccc 100%)`;
-    const vertLines = `linear-gradient(to right, transparent, transparent calc(100% - 1px), #ccc calc(100% - 1px), #ccc 100%)`;
+    if (paperStyle === 'blank') {
+      return { backgroundImage: 'none' };
+    }
 
     if (paperStyle === 'lined') {
       return {
-        backgroundImage: `${marginLineLeft}, ${marginLineRight}, ${horizLines}`,
-        backgroundSize: `100% 100%, 100% 100%, 100% 40px`,
-        backgroundPositionY: '0px, 0px, 0px',
-        backgroundRepeat: 'no-repeat, no-repeat, repeat-y'
+        backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.07) calc(100% - 1px))`,
+        backgroundSize: '100% 100%, 100% 34px',
+        backgroundPosition: '0 0, 0 92px',
+        backgroundRepeat: 'no-repeat, repeat-y'
       };
     }
+
     if (paperStyle === 'grid') {
       return {
-        backgroundImage: `${marginLineLeft}, ${marginLineRight}, ${horizLines}, ${vertLines}`,
-        backgroundSize: `100% 100%, 100% 100%, 100% 20px, 20px 100%`,
-        backgroundPositionY: '0px, 0px, 0px, 0px',
-        backgroundRepeat: 'no-repeat, no-repeat, repeat, repeat'
+        backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px))`,
+        backgroundSize: '100% 100%, 100% 24px, 24px 100%',
+        backgroundPosition: '0 0, 0 92px, 88px 0',
+        backgroundRepeat: 'no-repeat, repeat-y, repeat-x'
       };
     }
+
+    if (paperStyle === 'dotted') {
+      return {
+        backgroundImage: `${redMarginLine}, radial-gradient(circle, rgba(255,255,255,.18) 1.2px, transparent 1.3px)`,
+        backgroundSize: '100% 100%, 24px 24px',
+        backgroundPosition: '0 0, 16px 92px',
+        backgroundRepeat: 'no-repeat, repeat'
+      };
+    }
+
     return { backgroundImage: 'none' };
   };
 
   return (
-    <div className={`document-view paper-style-${paperStyle}`} data-testid="document-view" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="writing-toolbar" style={{ flexShrink: 0, zIndex: 20 }}>
-        <button 
-          className="tool-btn icon-btn"
+    <div className={`document-view paper-style-${paperStyle}`} data-testid="document-view" style={{ display: 'flex', height: '100%' }}>
+      <div className="editor-sidebar" style={{ flexShrink: 0, zIndex: 20 }}>
+        {onBack && (
+          <button className="rail-btn active" onClick={onBack} title="Zurück zur Bibliothek">
+            <ArrowLeft size={19} />
+          </button>
+        )}
+        <button
+          className="rail-btn"
           onClick={handleUndo}
           disabled={!canUndo}
-          style={{ opacity: canUndo ? 1 : 0.3, cursor: canUndo ? 'pointer' : 'default' }}
+          style={{ opacity: canUndo ? 1 : 0.35 }}
           title="Rückgängig"
         >
-          <Undo2 size={24} />
+          <Undo2 size={19} />
         </button>
-        <button 
-          className="tool-btn icon-btn"
+        <button
+          className="rail-btn"
           onClick={handleRedo}
           disabled={!canRedo}
-          style={{ opacity: canRedo ? 1 : 0.3, cursor: canRedo ? 'pointer' : 'default' }}
+          style={{ opacity: canRedo ? 1 : 0.35 }}
           title="Wiederholen"
         >
-          <Redo2 size={24} />
+          <Redo2 size={19} />
         </button>
-        <div className="toolbar-divider" />
-        <button 
-          className={`tool-btn icon-btn ${isSelectMode ? 'active' : ''}`}
-          onClick={() => { 
-            const newMode = !isSelectMode;
-            setIsSelectMode?.(newMode); 
-            setIsEraser?.(false);
-            if (newMode) {
-              focusBoxState?.setFocusBox(null);
+        <div className="rail-divider" />
+        <button
+          className={`rail-btn pen-rail-btn ${tool !== 'highlighter' && !isEraser && !isSelectMode ? 'active' : ''}`}
+          onClick={() => {
+            if (tool !== 'highlighter' && !isEraser && !isSelectMode) {
+              setIsPenSettingsOpen(prev => !prev);
+            } else {
+              setTool?.('pen');
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+              setIsPenSettingsOpen(true);
             }
+            setIsColorPickerOpen(false);
           }}
-          title="Fokus Box ziehen"
-          data-testid="select-mode-btn"
+          title="Stift & Einstellungen"
+          data-testid="pen-tool-btn"
         >
-          <SquareDashed size={24} />
+          <PenLine size={18} />
         </button>
-        <button 
-          className={`tool-btn icon-btn ${paperStyle !== 'blank' ? 'active' : ''}`}
-          onClick={cyclePaperStyle}
-          title="Papierstil ändern"
-          data-testid="paper-style-btn"
+        <button
+          className={`rail-btn ${tool === 'highlighter' && !isEraser && !isSelectMode ? 'active' : ''}`}
+          onClick={() => {
+            setTool?.('highlighter');
+            setIsEraser?.(false);
+            setIsSelectMode?.(false);
+            setIsPenSettingsOpen(true);
+            setIsColorPickerOpen(false);
+          }}
+          title="Textmarker"
         >
-          {getPaperStyleIcon()}
+          <Highlighter size={18} />
         </button>
-        <div className="toolbar-divider" />
+        <button
+          className={`rail-btn ${isEraser && !isSelectMode ? 'active' : ''}`}
+          onClick={() => {
+            setIsEraser?.(true);
+            setIsSelectMode?.(false);
+            setIsPenSettingsOpen(false);
+            setIsColorPickerOpen(false);
+          }}
+          title="Radiergummi"
+        >
+          <Eraser size={18} />
+        </button>
+        {!isFullMode && (
+          <button
+            className={`rail-btn ${isSelectMode ? 'active' : ''}`}
+            onClick={() => {
+              const newMode = !isSelectMode;
+              setIsSelectMode?.(newMode);
+              setIsEraser?.(false);
+              if (newMode) {
+                focusBoxState?.setFocusBox(null);
+              }
+            }}
+            title="Fokus Box ziehen"
+            data-testid="select-mode-btn"
+          >
+            <Lasso size={18} />
+          </button>
+        )}
+        <div className="rail-divider" />
         {customColors.map((c, index) => (
           <ColorSlot
             key={index}
             index={index}
             colorValue={c}
-            isActive={color === c && !isSelectMode}
+            isActive={penColor === c && !isEraser && !isSelectMode}
             isEraser={isEraser}
-            onSelect={() => { setColor?.(c); setIsEraser?.(false); setIsSelectMode?.(false); }}
-            onChange={(newColor) => handleColorChange(index, newColor)}
-            activePickerIndex={activePickerIndex}
-            setActivePickerIndex={setActivePickerIndex}
+            onSelect={() => {
+              if (penColor === c && !isEraser && !isSelectMode) {
+                setIsColorPickerOpen(prev => !prev);
+                setActivePickerIndex(index);
+              } else {
+                setColor?.(c);
+                setIsEraser?.(false);
+                setIsSelectMode?.(false);
+                setActivePickerIndex(index);
+              }
+              setIsPenSettingsOpen(false);
+            }}
+            onOpenPicker={() => {
+              setActivePickerIndex(index);
+              setIsColorPickerOpen(true);
+              setIsPenSettingsOpen(false);
+            }}
           />
         ))}
-        <div className="toolbar-divider" />
-        <button 
-          className={`tool-btn icon-btn ${isEraser && !isSelectMode ? 'active' : ''}`}
-          onClick={() => { setIsEraser?.(true); setIsSelectMode?.(false); }}
-          title="Radiergummi"
+        <div className="rail-divider" />
+        <button
+          className={`rail-btn ${paperStyle !== 'blank' ? 'active' : ''}`}
+          onClick={cyclePaperStyle}
+          title={`Papierstil: ${paperStyle} (Klicken zum Wechseln)`}
+          data-testid="paper-style-btn"
         >
-          <Eraser size={24} />
+          {getPaperStyleIcon()}
         </button>
-        <button className="tool-btn icon-btn danger" onClick={handleClearCanvas} title="Leeren">
-          <Trash2 size={24} />
+        <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
+          <Trash2 size={18} />
         </button>
-        <div className="toolbar-divider" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px' }}>
-          <input 
-            type="range" 
-            min="1" 
-            max={isEraser ? "50" : "20"}
-            value={isEraser ? eraserWidth : lineWidth}
-            onChange={(e) => isEraser ? setEraserWidth(Number(e.target.value)) : setLineWidth(Number(e.target.value))}
-            style={{ width: '80px', accentColor: isEraser ? '#666' : color }}
-            title={isEraser ? "Radierergröße" : "Stiftgröße"}
-          />
-        </div>
-        <div className="toolbar-divider" />
-        <button className="tool-btn" onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} title="Herauszoomen">-</button>
-        <span style={{ fontSize: '12px', minWidth: '40px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button className="tool-btn" onClick={() => setZoom(z => Math.min(3, z + 0.1))} title="Hineinzoomen">+</button>
-        <div className="toolbar-divider" />
-        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={showPageBreaks} onChange={(e) => setShowPageBreaks?.(e.target.checked)} />
-          Seiten
-        </label>
+        <div className="rail-divider" />
+        <button
+          className={`rail-btn ${!isFullMode ? 'active' : ''}`}
+          onClick={() => {
+            setIsSelectMode?.(false);
+            setLayoutMode?.(isFullMode ? 'split' : 'full');
+          }}
+          title={isFullMode ? 'Geteilte Ansicht (Fokus-Box) einschalten' : 'Geteilte Ansicht ausschalten'}
+          data-testid="layout-mode-btn"
+        >
+          <Columns2 size={18} />
+        </button>
+        <button className="rail-btn" style={{ marginTop: 'auto' }} title="Ebenen (bald verfügbar)" disabled>
+          <Layers size={19} />
+        </button>
       </div>
-      
-      <div 
-        style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', backgroundColor: '#e0e0e0', position: 'relative', textAlign: 'center', touchAction: 'pan-x pan-y' }}
+
+      {/* Floating Popovers */}
+      {isPenSettingsOpen && (
+        <PenSettingsPopover
+          tool={tool}
+          setTool={setTool}
+          rawLineWidth={rawLineWidth ?? lineWidth}
+          setLineWidth={setLineWidth}
+          penColor={penColor}
+          onClose={() => setIsPenSettingsOpen(false)}
+          setIsEraser={setIsEraser}
+          setIsSelectMode={setIsSelectMode}
+        />
+      )}
+      {isColorPickerOpen && (
+        <ColorWheelPopover
+          customColors={customColors}
+          activePickerIndex={activePickerIndex ?? 0}
+          setActivePickerIndex={setActivePickerIndex}
+          onColorChange={handleColorChange}
+          onClose={() => setIsColorPickerOpen(false)}
+        />
+      )}
+      {paperToast && (
+        <div className="paper-toast" data-testid="paper-toast">
+          {getPaperStyleIcon()}
+          <span>Papierstil: {paperToast}</span>
+        </div>
+      )}
+
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: isFullMode ? 'hidden' : 'auto',
+          position: 'relative',
+          textAlign: isFullMode ? 'left' : 'center',
+          touchAction: 'pan-x pan-y',
+          // Vollmodus: der Scroll-Container IST das Papier (Design: left:96 right:24 top/bottom:22).
+          margin: isFullMode ? '22px 24px 22px 96px' : 0,
+          borderRadius: isFullMode ? '22px' : 0,
+          backgroundColor: isFullMode ? '#1D1B21' : 'transparent',
+          boxShadow: isFullMode
+            ? '0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.06)'
+            : 'none'
+        }}
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}
         onPointerUp={handleGestureEnd}
         onPointerCancel={handleGestureEnd}
         onScroll={(e) => {
-          if (!showPageBreaks) {
+          // Notes-App: am unteren Ende wächst das Papier nach.
+          if (!showPageBreaks || isFullMode) {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
             if (scrollHeight - scrollTop - clientHeight < 200) {
               setPagesCount(prev => Math.min(maxPages, prev + 1));
@@ -554,12 +964,12 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             width: `${baseWidth * zoom}px`,
             height: `${documentHeight * zoom}px`,
             position: 'relative',
-            backgroundColor: 'white',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            margin: '96px 0 24px 0',
-            touchAction: isSelectMode ? 'none' : 'auto',
-            WebkitMaskImage: showPageBreaks ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none',
-            maskImage: showPageBreaks ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none'
+            backgroundColor: isFullMode ? 'transparent' : '#1D1B21',
+            boxShadow: isFullMode ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
+            margin: isFullMode ? 0 : '96px 0 24px 0',
+            touchAction: (isSelectMode || isFullMode) ? 'none' : 'auto',
+            WebkitMaskImage: (showPageBreaks && !isFullMode) ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none',
+            maskImage: (showPageBreaks && !isFullMode) ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none'
           }}
           ref={containerRef}
           onPointerDown={handlePointerDown}
@@ -597,8 +1007,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
               }}
             />
           )}
-          {focusBoxState && focusBoxState.focusBox && (
-            <div 
+          {!isFullMode && focusBoxState && focusBoxState.focusBox && (
+            <div
               ref={focusBoxRef}
               className="focus-box"
               data-testid="focus-box"
@@ -647,7 +1057,7 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             <button
               onClick={() => setPagesCount(p => Math.min(maxPages, p + 1))}
               style={{
-                backgroundColor: '#fff',
+                backgroundColor: 'rgba(255,255,255,.14)',
                 border: 'none',
                 borderRadius: '50%',
                 width: '48px',
