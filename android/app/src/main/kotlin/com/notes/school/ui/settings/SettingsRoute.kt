@@ -1,15 +1,33 @@
 package com.notes.school.ui.settings
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.notes.school.ui.LocalViewModelFactory
 
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onOpenAdvanced: () -> Unit, onRecalibrate: () -> Unit) {
-    Box(Modifier.fillMaxSize().testTag("settings-screen")) {
-        Text("Settings")
+    val factory = LocalViewModelFactory.current
+    if (factory != null) {
+        val viewModel: PalmSettingsViewModel = viewModel(factory = factory)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        SettingsScreen(
+            state = state,
+            onBack = onBack,
+            onOpenAdvanced = onOpenAdvanced,
+            onRecalibrate = onRecalibrate,
+            onAutoImprove = viewModel::setAutoImprove,
+            onSafetyMode = viewModel::setSafetyMode
+        )
+    } else {
+        SettingsScreen(
+            state = PalmSettingsUiState(),
+            onBack = onBack,
+            onOpenAdvanced = onOpenAdvanced,
+            onRecalibrate = onRecalibrate,
+            onAutoImprove = {},
+            onSafetyMode = {}
+        )
     }
 }

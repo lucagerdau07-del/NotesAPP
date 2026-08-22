@@ -1,15 +1,19 @@
 package com.notes.school.ui.settings
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.notes.school.ui.LocalViewModelFactory
 
 @Composable
 fun PalmAdvancedRoute(onBack: () -> Unit) {
-    Box(Modifier.fillMaxSize().testTag("palm-advanced-screen")) {
-        Text("Palm Advanced")
+    val factory = LocalViewModelFactory.current
+    if (factory != null) {
+        val viewModel: PalmSettingsViewModel = viewModel(factory = factory)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        PalmAdvancedScreen(state, onBack, viewModel::setThreshold, viewModel::resetProfile)
+    } else {
+        PalmAdvancedScreen(PalmSettingsUiState(), onBack, { _, _ -> }, {})
     }
 }
