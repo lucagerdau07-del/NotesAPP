@@ -3,6 +3,7 @@ import { Sparkles, Share, MoreHorizontal } from 'lucide-react';
 import './styles/main.css';
 import SplitLayout from './components/SplitLayout';
 import Library from './components/Library';
+import Settings from './components/Settings';
 
 export default function App() {
   const [screen, setScreen] = useState('library');
@@ -14,8 +15,12 @@ export default function App() {
     setScreen('editor');
   };
 
+  if (screen === 'settings') {
+    return <Settings onBack={() => setScreen('library')} />;
+  }
+
   if (screen === 'library') {
-    return <Library onOpenNote={openNote} />;
+    return <Library onOpenNote={openNote} onOpenSettings={() => setScreen('settings')} />;
   }
 
   return (

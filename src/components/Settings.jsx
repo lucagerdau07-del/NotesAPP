@@ -1,0 +1,495 @@
+import React, { useState, useRef } from 'react';
+import { 
+  ChevronLeft, Plus, PenLine, Folder, 
+  Wifi, RotateCcw, X, ShieldCheck, Check
+} from 'lucide-react';
+
+export default function Settings({ onBack }) {
+  const [activeNav, setActiveNav] = useState('palm');
+  const [isAdvanced, setIsAdvanced] = useState(false);
+  const [autoImprove, setAutoImprove] = useState(true);
+  const [safetyMode, setSafetyMode] = useState(false);
+
+  // Advanced sliders
+  const [detectionStrength, setDetectionStrength] = useState(56);
+  const [smallContacts, setSmallContacts] = useState(56);
+  const [contactWindow, setContactWindow] = useState(56);
+
+  // Modals & Overlays
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationStep, setCalibrationStep] = useState(1);
+  const [isTestAreaOpen, setIsTestAreaOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
+
+  const testCanvasRef = useRef(null);
+  const isDrawingRef = useRef(false);
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2000);
+  };
+
+  const handleResetProfile = () => {
+    setDetectionStrength(50);
+    setSmallContacts(50);
+    setContactWindow(50);
+    setAutoImprove(true);
+    setSafetyMode(false);
+    showToast('Profil auf Standardwerte zurückgesetzt');
+  };
+
+  // Test Canvas Handlers
+  const handlePointerDown = (e) => {
+    const canvas = testCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    isDrawingRef.current = true;
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!isDrawingRef.current) return;
+    const canvas = testCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    ctx.strokeStyle = '#0a84ff';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const handlePointerUp = () => {
+    isDrawingRef.current = false;
+  };
+
+  const clearTestCanvas = () => {
+    const canvas = testCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  return (
+    <div className="settings-shell" data-testid="settings-screen">
+      {/* Topbar */}
+      <header className="settings-topbar">
+        <button className="settings-back-btn" onClick={onBack} title="Zurück">
+          <ChevronLeft size={20} />
+          <span className="settings-title">Einstellungen</span>
+        </button>
+        <button className="settings-done-btn" onClick={onBack}>
+          Fertig
+        </button>
+      </header>
+
+      {/* Main Container */}
+      <div className="settings-container">
+        {/* Sidebar */}
+        <aside className="settings-sidebar">
+          <div className="settings-nav-label">APP</div>
+          <button 
+            className={`settings-nav-item ${activeNav === 'general' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('general'); setIsAdvanced(false); }}
+          >
+            <Plus size={15} />
+            <span>Allgemein</span>
+          </button>
+          <button 
+            className={`settings-nav-item ${activeNav === 'writing' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('writing'); setIsAdvanced(false); }}
+          >
+            <PenLine size={15} />
+            <span>Schreiben</span>
+          </button>
+          <button 
+            className={`settings-nav-item ${activeNav === 'palm' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('palm'); }}
+          >
+            <ShieldCheck size={15} />
+            <span>Palm-Schutz</span>
+          </button>
+          <button 
+            className={`settings-nav-item ${activeNav === 'files' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('files'); setIsAdvanced(false); }}
+          >
+            <Folder size={15} />
+            <span>Dateien</span>
+          </button>
+
+          <div className="settings-nav-label" style={{ marginTop: 16 }}>ONLINE</div>
+          <button 
+            className={`settings-nav-item ${activeNav === 'network' ? 'active' : ''}`}
+            onClick={() => { setActiveNav('network'); setIsAdvanced(false); }}
+          >
+            <Wifi size={15} />
+            <span>KI & Netzwerk</span>
+          </button>
+        </aside>
+
+        {/* Content Pane */}
+        <main className="settings-content">
+          {activeNav === 'palm' && (
+            <>
+              {!isAdvanced ? (
+                /* 1. Palm-Schutz Standardansicht */
+                <div>
+                  <h2 className="settings-detail-title">Palm-Schutz</h2>
+                  <p className="settings-detail-copy">
+                    Einfache Standardansicht mit deinem persönlichen Profil.
+                  </p>
+
+                  <div className="settings-status">
+                    <span className="settings-status-dot" />
+                    <strong>Bereit</strong>
+                    <span>· stabile Version 4</span>
+                  </div>
+
+                  <div className="settings-group">
+                    {/* Row 1: Neu kalibrieren */}
+                    <div className="settings-row">
+                      <div className="settings-row-main">
+                        <div className="settings-row-title">Neu kalibrieren</div>
+                        <div className="settings-row-copy">Handballen, Stift und kurze Bewegungen testen</div>
+                      </div>
+                      <button 
+                        className="settings-action-btn"
+                        onClick={() => { setIsCalibrating(true); setCalibrationStep(1); }}
+                        data-testid="recalibrate-btn"
+                      >
+                        Starten
+                      </button>
+                    </div>
+
+                    {/* Row 2: Profil automatisch verbessern */}
+                    <div className="settings-row">
+                      <div className="settings-row-main">
+                        <div className="settings-row-title">Profil automatisch verbessern</div>
+                        <div className="settings-row-copy">Nur eindeutige Muster; Änderungen nach der Sitzung</div>
+                      </div>
+                      <div 
+                        className={`settings-switch ${autoImprove ? 'on' : ''}`}
+                        onClick={() => setAutoImprove(!autoImprove)}
+                        data-testid="auto-improve-switch"
+                      />
+                    </div>
+
+                    {/* Row 3: 25-%-Sicherheitsmodus */}
+                    <div className="settings-row">
+                      <div className="settings-row-main">
+                        <div className="settings-row-title">25-%-Sicherheitsmodus</div>
+                        <div className="settings-row-copy">Schreibbereich rechts begrenzen</div>
+                      </div>
+                      <div 
+                        className={`settings-switch ${safetyMode ? 'on' : ''}`}
+                        onClick={() => setSafetyMode(!safetyMode)}
+                        data-testid="safety-mode-switch"
+                      />
+                    </div>
+
+                    {/* Row 4: Erweiterte Einstellungen */}
+                    <div 
+                      className="settings-row settings-row-clickable"
+                      onClick={() => setIsAdvanced(true)}
+                      data-testid="advanced-settings-btn"
+                    >
+                      <div className="settings-row-main">
+                        <div className="settings-row-title">Erweiterte Einstellungen</div>
+                        <div className="settings-row-copy">Manuelle Grundtendenz, Testfläche und Profil-Reset</div>
+                      </div>
+                      <span className="settings-chevron">›</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 2. Erweiterte Einstellungen Subpage */
+                <div>
+                  <div className="settings-advanced-head" onClick={() => setIsAdvanced(false)}>
+                    <button className="settings-back-icon-btn">
+                      <ChevronLeft size={20} />
+                    </button>
+                    <h2 className="settings-detail-title">Erweiterte Einstellungen</h2>
+                  </div>
+
+                  <p className="settings-detail-copy" style={{ marginBottom: 14 }}>
+                    Manuelle Grundtendenz; die automatische Anpassung bleibt innerhalb eines kleinen Bereichs darum herum.
+                  </p>
+
+                  <div className="settings-section-caption">ERKENNUNG</div>
+
+                  <div className="settings-group">
+                    {/* Slider 1 */}
+                    <div className="settings-control-row">
+                      <div>
+                        <div className="settings-control-title">Erkennungsstärke</div>
+                        <div className="settings-control-copy">Ausgewogen zwischen Schreiben und Blockieren</div>
+                      </div>
+                      <div className="settings-slider-container">
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={detectionStrength} 
+                          onChange={(e) => setDetectionStrength(Number(e.target.value))}
+                          className="settings-range-slider"
+                          data-testid="slider-detection-strength"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Slider 2 */}
+                    <div className="settings-control-row">
+                      <div>
+                        <div className="settings-control-title">Kleine Kontakte</div>
+                        <div className="settings-control-copy">Kurze Handkontakte stärker berücksichtigen</div>
+                      </div>
+                      <div className="settings-slider-container">
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={smallContacts} 
+                          onChange={(e) => setSmallContacts(Number(e.target.value))}
+                          className="settings-range-slider"
+                          data-testid="slider-small-contacts"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Slider 3 */}
+                    <div className="settings-control-row">
+                      <div>
+                        <div className="settings-control-title">Kontakt-Zeitfenster</div>
+                        <div className="settings-control-copy">{Math.round(contactWindow * 2.4)} ms für Auflegen und Bewegungswechsel</div>
+                      </div>
+                      <div className="settings-slider-container">
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={contactWindow} 
+                          onChange={(e) => setContactWindow(Number(e.target.value))}
+                          className="settings-range-slider"
+                          data-testid="slider-contact-window"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="settings-actions">
+                    <button 
+                      className="settings-secondary-btn"
+                      onClick={() => setIsTestAreaOpen(true)}
+                      data-testid="open-test-surface-btn"
+                    >
+                      Testfläche öffnen
+                    </button>
+                    <button 
+                      className="settings-secondary-btn danger"
+                      onClick={handleResetProfile}
+                      data-testid="reset-profile-btn"
+                    >
+                      Profil zurücksetzen
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeNav === 'general' && (
+            <div>
+              <h2 className="settings-detail-title">Allgemein</h2>
+              <p className="settings-detail-copy">App-Darstellung, Verhalten und Kontoeinstellungen.</p>
+              <div className="settings-group" style={{ marginTop: 14 }}>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Erscheinungsbild</div>
+                    <div className="settings-row-copy">Dunkles Glasmorphism-Design aktiv</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#96969e' }}>Dunkel</span>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Sprache</div>
+                    <div className="settings-row-copy">Deutsch (Deutschland)</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#96969e' }}>Deutsch</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeNav === 'writing' && (
+            <div>
+              <h2 className="settings-detail-title">Schreiben</h2>
+              <p className="settings-detail-copy">Stiftempfindlichkeit, Glättung und Werkzeugvoreinstellungen.</p>
+              <div className="settings-group" style={{ marginTop: 14 }}>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Strichglättung (Bezier)</div>
+                    <div className="settings-row-copy">Verfeinert handschriftliche Kurven automatisch</div>
+                  </div>
+                  <div className="settings-switch on" />
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Druckdynamik simulieren</div>
+                    <div className="settings-row-copy">Variiert die Strichstärke leicht nach Schreibtempo</div>
+                  </div>
+                  <div className="settings-switch on" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeNav === 'files' && (
+            <div>
+              <h2 className="settings-detail-title">Dateien & Speicher</h2>
+              <p className="settings-detail-copy">Lokale Notizdatenbank und automatische Sicherungen.</p>
+              <div className="settings-group" style={{ marginTop: 14 }}>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Lokaler Speicher</div>
+                    <div className="settings-row-copy">Notizen werden lokal auf dem Gerät gesichert</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#30d158' }}>Aktiv</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeNav === 'network' && (
+            <div>
+              <h2 className="settings-detail-title">KI & Netzwerk</h2>
+              <p className="settings-detail-copy">Intelligente Notizenanalyse, Handschrifterkennung und Sync.</p>
+              <div className="settings-group" style={{ marginTop: 14 }}>
+                <div className="settings-row">
+                  <div className="settings-row-main">
+                    <div className="settings-row-title">Notiz-Agent</div>
+                    <div className="settings-row-copy">Recherche und Zusammenfassungen im Hintergrund</div>
+                  </div>
+                  <div className="settings-switch on" />
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Calibration Modal */}
+      {isCalibrating && (
+        <div className="settings-modal-overlay">
+          <div className="settings-modal-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, font: '700 15px sans-serif' }}>Handballen-Kalibrierung</h3>
+              <button 
+                onClick={() => setIsCalibrating(false)}
+                style={{ background: 'none', border: 'none', color: '#96969e', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {calibrationStep === 1 && (
+              <div>
+                <p style={{ color: '#d3d3d8', fontSize: 13, lineHeight: 1.5 }}>
+                  <strong>Schritt 1:</strong> Lege deinen Handballen in deiner gewohnten Schreibhaltung auf das Display.
+                </p>
+                <div style={{ height: 110, borderRadius: 12, background: '#242428', border: '1px dashed rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#96969e', fontSize: 12, margin: '14px 0' }}>
+                  Handballen hier auflegen...
+                </div>
+                <button 
+                  className="settings-action-btn"
+                  style={{ width: '100%', padding: '10px 0', fontSize: 13 }}
+                  onClick={() => setCalibrationStep(2)}
+                >
+                  Weiter zu Schritt 2
+                </button>
+              </div>
+            )}
+
+            {calibrationStep === 2 && (
+              <div>
+                <p style={{ color: '#d3d3d8', fontSize: 13, lineHeight: 1.5 }}>
+                  <strong>Schritt 2:</strong> Schreibe oder zeichne ein beliebiges Muster mit dem Stift.
+                </p>
+                <div style={{ height: 110, borderRadius: 12, background: '#242428', border: '1px dashed rgba(10,132,255,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#69b1ff', fontSize: 12, margin: '14px 0' }}>
+                  Stiftbewegungen erfassen...
+                </div>
+                <button 
+                  className="settings-action-btn"
+                  style={{ width: '100%', padding: '10px 0', fontSize: 13 }}
+                  onClick={() => {
+                    setIsCalibrating(false);
+                    showToast('Kalibrierung erfolgreich abgeschlossen!');
+                  }}
+                >
+                  Kalibrierung abschließen
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Test Surface Modal */}
+      {isTestAreaOpen && (
+        <div className="settings-modal-overlay">
+          <div className="settings-modal-card" style={{ width: 440 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h3 style={{ margin: 0, font: '700 15px sans-serif' }}>Palm-Schutz Testfläche</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button 
+                  onClick={clearTestCanvas}
+                  style={{ background: 'rgba(255,255,255,.08)', border: 'none', color: '#d3d3d8', padding: '4px 8px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                >
+                  <RotateCcw size={12} /> Leeren
+                </button>
+                <button 
+                  onClick={() => setIsTestAreaOpen(false)}
+                  style={{ background: 'none', border: 'none', color: '#96969e', cursor: 'pointer' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <p style={{ color: '#96969e', fontSize: 11, margin: '0 0 10px' }}>
+              Lege die Hand auf und zeichne, um die Unterdrückung zu überprüfen:
+            </p>
+            <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,.12)', background: '#121215' }}>
+              <canvas
+                ref={testCanvasRef}
+                width={400}
+                height={200}
+                style={{ width: '100%', height: 200, display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+              />
+            </div>
+            <button 
+              className="settings-action-btn"
+              style={{ width: '100%', marginTop: 12, padding: '9px 0', fontSize: 12 }}
+              onClick={() => setIsTestAreaOpen(false)}
+            >
+              Fertig
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="settings-toast">
+          <Check size={14} color="#30d158" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -193,7 +193,7 @@ function RecentCard({ n, onOpen }) {
   );
 }
 
-export default function Library({ onOpenNote }) {
+export default function Library({ onOpenNote, onOpenSettings }) {
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#17161A', fontFamily: 'Manrope,sans-serif', color: '#E9E6DF' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(720px 420px at 10% -6%,oklch(0.42 0.055 260/.85),transparent 66%),radial-gradient(620px 460px at 94% 6%,oklch(0.42 0.045 200/.7),transparent 64%),radial-gradient(780px 520px at 58% 108%,oklch(0.42 0.05 55/.6),transparent 66%),#17161A' }} />
@@ -205,7 +205,13 @@ export default function Library({ onOpenNote }) {
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Clock size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Star size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(233,230,223,.42)' }}><Tag size={19} /></div>
-        <div style={{ marginTop: 'auto', width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(140deg,oklch(0.62 0.075 55),oklch(0.48 0.08 20))' }} />
+        <div 
+          onClick={onOpenSettings} 
+          style={{ marginTop: 'auto', width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(140deg,oklch(0.62 0.075 55),oklch(0.48 0.08 20))', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', transition: 'transform 0.15s' }}
+          className="lib-settings-btn"
+          title="Einstellungen öffnen"
+          data-testid="settings-nav-btn"
+        />
       </div>
 
       {/* search pill */}

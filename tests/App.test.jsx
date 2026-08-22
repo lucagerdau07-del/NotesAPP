@@ -18,4 +18,38 @@ describe('App Component', () => {
     fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
+
+  it('opens the settings screen from the library and navigates through palm settings and advanced view', () => {
+    render(<App />);
+
+    // Click settings button at bottom of sidebar rail
+    const settingsBtn = screen.getByTestId('settings-nav-btn');
+    fireEvent.click(settingsBtn);
+
+    expect(screen.getByTestId('settings-screen')).toBeInTheDocument();
+    expect(screen.getAllByText('Palm-Schutz').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Neu kalibrieren')).toBeInTheDocument();
+
+    // Toggle Auto-Improve switch
+    const autoSwitch = screen.getByTestId('auto-improve-switch');
+    expect(autoSwitch.classList.contains('on')).toBe(true);
+    fireEvent.click(autoSwitch);
+    expect(autoSwitch.classList.contains('on')).toBe(false);
+
+    // Open Advanced Settings subpage
+    const advBtn = screen.getByTestId('advanced-settings-btn');
+    fireEvent.click(advBtn);
+
+    expect(screen.getByText('Erweiterte Einstellungen')).toBeInTheDocument();
+    expect(screen.getByTestId('slider-detection-strength')).toBeInTheDocument();
+
+    // Test slider change
+    const slider = screen.getByTestId('slider-detection-strength');
+    fireEvent.change(slider, { target: { value: '75' } });
+    expect(slider.value).toBe('75');
+
+    // Return back to Library with Fertig button
+    fireEvent.click(screen.getByText('Fertig'));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
 });
