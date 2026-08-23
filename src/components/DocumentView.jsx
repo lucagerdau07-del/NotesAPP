@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { 
   Eraser, Trash2, Undo2, Redo2, Lasso, Highlighter, PenLine, 
   Layers, AlignJustify, File, Grid, Columns2, ArrowLeft, 
-  X, Palette, Sliders, PenTool, Pencil, Sparkles 
+  X, Palette, Sliders, PenTool, Pencil, Sparkles, Infinity, Files, Plus 
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
@@ -876,6 +876,19 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
         >
           {getPaperStyleIcon()}
         </button>
+        <button
+          className={`rail-btn ${showPageBreaks ? 'active' : ''}`}
+          onClick={() => {
+            const next = !showPageBreaks;
+            setShowPageBreaks?.(next);
+            setPaperToast(next ? 'Einzelseiten aktiv' : 'Unendliches Dokument aktiv');
+            setTimeout(() => setPaperToast(null), 1800);
+          }}
+          title={showPageBreaks ? 'Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)' : 'Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)'}
+          data-testid="page-mode-toggle-btn"
+        >
+          {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
+        </button>
         <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
           <Trash2 size={18} />
         </button>
@@ -953,8 +966,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
         onPointerUp={handleGestureEnd}
         onPointerCancel={handleGestureEnd}
         onScroll={(e) => {
-          // Notes-App: am unteren Ende wächst das Papier nach.
-          if (!showPageBreaks || isFullMode) {
+          // Notes-App: am unteren Ende wächst das Papier NUR im unendlichen Modus nach.
+          if (!showPageBreaks) {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
             if (scrollHeight - scrollTop - clientHeight < 200) {
               setPagesCount(prev => Math.min(maxPages, prev + 1));
@@ -974,8 +987,6 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             boxShadow: isFullMode ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
             margin: isFullMode ? 0 : '96px 0 24px 0',
             touchAction: (isSelectMode || isFullMode) ? 'none' : 'auto',
-            WebkitMaskImage: (showPageBreaks && !isFullMode) ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none',
-            maskImage: (showPageBreaks && !isFullMode) ? `repeating-linear-gradient(to bottom, black 0px, black ${(pageHeight - 16) * zoom}px, transparent ${(pageHeight - 16) * zoom}px, transparent ${pageHeight * zoom}px)` : 'none'
           }}
           ref={containerRef}
           onPointerDown={handlePointerDown}
@@ -997,6 +1008,41 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
               willChange: 'transform'
             }}
           />
+          {/* Page Breaks Indicators */}
+          {showPageBreaks && Array.from({ length: pagesCount - 1 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: `${(i + 1) * pageHeight * zoom}px`,
+                height: 0,
+                borderTop: '1.5px dashed rgba(255, 255, 255, 0.25)',
+                pointerEvents: 'none',
+                zIndex: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span
+                style={{
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(24, 24, 30, 0.95)',
+                  padding: '3px 12px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  font: '600 10px ui-monospace, monospace',
+                  color: 'rgba(255, 255, 255, 0.85)',
+                  letterSpacing: '.06em',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.5)'
+                }}
+              >
+                SEITE {i + 1} / {pagesCount}
+              </span>
+            </div>
+          ))}
           {masterCanvasState && (
             <canvas 
               ref={masterCanvasState.masterCanvasRef} 
@@ -1050,35 +1096,51 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             />
           )}
         </div>
+        {/* Plus Button under the page (only in showPageBreaks mode) */}
         {showPageBreaks && pagesCount < maxPages && (
           <div 
             style={{
-              position: 'absolute',
-              top: `${96 + documentHeight * zoom + 24}px`,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              paddingBottom: '48px'
+              display: 'flex',
+              justifyContent: 'center',
+              padding: '24px 0 54px',
+              position: 'relative',
+              zIndex: 10
             }}
           >
             <button
-              onClick={() => setPagesCount(p => Math.min(maxPages, p + 1))}
+              className="add-page-btn"
+              onClick={() => {
+                setPagesCount(p => {
+                  const next = Math.min(maxPages, p + 1);
+                  setTimeout(() => {
+                    if (scrollRef.current) {
+                      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                    }
+                  }, 50);
+                  return next;
+                });
+              }}
               style={{
-                backgroundColor: 'rgba(255,255,255,.14)',
-                border: 'none',
-                borderRadius: '50%',
-                width: '48px',
-                height: '48px',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                gap: 8,
+                padding: '10px 22px',
+                borderRadius: 9999,
+                background: 'linear-gradient(180deg, rgba(42, 42, 48, 0.78) 0%, rgba(18, 18, 22, 0.9) 100%)',
+                backdropFilter: 'blur(24px) saturate(1.8)',
+                WebkitBackdropFilter: 'blur(24px) saturate(1.8)',
+                border: '1px solid rgba(255, 255, 255, 0.22)',
+                boxShadow: 'inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.85), 0 16px 36px -12px rgba(0, 0, 0, 0.9)',
+                color: '#FFFFFF',
+                font: '600 13px Manrope, sans-serif',
                 cursor: 'pointer',
-                fontSize: '24px',
-                color: '#1976D2'
+                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               title="Neue Seite hinzufügen"
+              data-testid="add-page-btn"
             >
-              +
+              <Plus size={16} strokeWidth={2.4} />
+              <span>Neue Seite hinzufügen ({pagesCount + 1}/{maxPages})</span>
             </button>
           </div>
         )}
