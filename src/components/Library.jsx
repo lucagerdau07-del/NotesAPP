@@ -1234,8 +1234,6 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
       <div className="lib-glass agent-panel" data-open={agentOpen} data-testid="agent-panel">
         <div className="agent-panel-head">
-          <span className="lib-agent-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'oklch(0.72 0.14 150)', boxShadow: '0 0 10px oklch(0.72 0.14 150)' }} />
-          <span style={{ font: '700 13.5px "Bricolage Grotesque",sans-serif', letterSpacing: '-.02em', color: '#FFFFFF' }}>Agent</span>
           <span className="agent-badge">{2 + agentTasks.length} AKTIV</span>
           <button className="agent-close" onClick={() => setAgentOpen(false)} title="Agent schließen" data-testid="agent-close-btn">
             <X size={14} strokeWidth={2.4} />
