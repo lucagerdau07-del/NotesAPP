@@ -400,36 +400,36 @@ body::before,
      von hinten zu durchscheinen (Referenzbild-Look). */
   background-image:
     /* 1. Halftone-Dithering (Raster ganz oben) */
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.16) 0.9px, transparent 1.3px),
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.10) 0.9px, transparent 1.3px),
     /* 2. Gewebe — senkrechte Rippen (dünne Hell/Dunkel-Linien, Rest offen) */
     repeating-linear-gradient(90deg,
-      rgba(255, 255, 255, 0.30) 0px,
-      rgba(255, 255, 255, 0.30) 1px,
+      rgba(255, 255, 255, 0.18) 0px,
+      rgba(255, 255, 255, 0.18) 1px,
       transparent 1px,
       transparent 2.5px,
-      rgba(0, 0, 0, 0.48) 2.5px,
-      rgba(0, 0, 0, 0.48) 4px,
+      rgba(0, 0, 0, 0.32) 2.5px,
+      rgba(0, 0, 0, 0.32) 4px,
       transparent 4px,
       transparent 6px
     ),
     /* 3. Gewebe — waagerechte Rippen (ergibt Moiré-Kreuzung) */
     repeating-linear-gradient(0deg,
-      rgba(255, 255, 255, 0.22) 0px,
-      rgba(255, 255, 255, 0.22) 1px,
+      rgba(255, 255, 255, 0.13) 0px,
+      rgba(255, 255, 255, 0.13) 1px,
       transparent 1px,
       transparent 2.5px,
-      rgba(0, 0, 0, 0.38) 2.5px,
-      rgba(0, 0, 0, 0.38) 4px,
+      rgba(0, 0, 0, 0.25) 2.5px,
+      rgba(0, 0, 0, 0.25) 4px,
       transparent 4px,
       transparent 6px
     ),
     /* 4. Volumetrische Lichtblasen dahinter */
-    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.80), transparent 64%),
-    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.72), transparent 66%),
-    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.64), transparent 66%),
-    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.60), transparent 68%),
-    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.54), transparent 66%),
-    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.52), transparent 76%);
+    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.65), transparent 64%),
+    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.58), transparent 66%),
+    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.52), transparent 66%),
+    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.48), transparent 68%),
+    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.42), transparent 66%),
+    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.42), transparent 76%);
   background-size:
     5px 5px,
     6px 100%,
