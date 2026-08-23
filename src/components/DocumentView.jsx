@@ -934,10 +934,10 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           position: 'relative',
           textAlign: isFullMode ? 'left' : 'center',
           touchAction: 'pan-x pan-y',
-          // Vollmodus: der Scroll-Container IST das Papier (Design: left:96 right:24 top/bottom:22).
-          // Rahmen breit genug, dass die geriffelte Glastextur rundum sichtbar bleibt.
-          margin: isFullMode ? '34px 40px 34px 112px' : 0,
-          borderRadius: isFullMode ? '22px' : 0,
+          // Vollmodus: der Scroll-Container IST das Papier.
+          // Startet sauber unterhalb der oberen Pill-Buttons (top: 78px).
+          margin: isFullMode ? '78px 26px 20px 104px' : '78px 12px 20px 104px',
+          borderRadius: '22px',
           // Kein backdrop-filter: der Blur würde die Textur dahinter zu einem
           // glatten Verlauf verschmieren. Papier deshalb fast deckend.
           background: isFullMode
