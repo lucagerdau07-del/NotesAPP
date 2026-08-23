@@ -714,7 +714,9 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
 
   const { showPageBreaks, setShowPageBreaks } = toolbarState || {};
   const maxPages = 20;
+  const PAGE_GAP = 28;
   const documentHeight = pageHeight * pagesCount;
+  const totalDocumentHeight = showPageBreaks ? (pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP) : (documentHeight * zoom);
 
   const getStaticBackgroundStyles = () => {
     const redMarginLine = `linear-gradient(to right, transparent, transparent 88px, oklch(0.62 0.09 26/.38) 88px, oklch(0.62 0.09 26/.38) 89.5px, transparent 89.5px)`;
@@ -950,16 +952,8 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
           margin: isFullMode ? '78px 26px 0 104px' : '78px 12px 0 104px',
-          borderRadius: '22px 22px 0 0',
-          // Kein backdrop-filter: der Blur würde die Textur dahinter zu einem
-          // glatten Verlauf verschmieren. Papier deshalb fast deckend.
-          background: isFullMode
-            ? 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)'
-            : 'transparent',
+          background: 'transparent',
           color: '#FFFFFF',
-          boxShadow: isFullMode
-            ? 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)'
-            : 'none'
         }}
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}
@@ -981,10 +975,10 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
             display: 'inline-block',
             textAlign: 'left',
             width: `${baseWidth * zoom}px`,
-            height: `${documentHeight * zoom}px`,
+            height: `${totalDocumentHeight}px`,
             position: 'relative',
-            backgroundColor: isFullMode ? 'transparent' : '#1D1B21',
-            boxShadow: isFullMode ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
+            backgroundColor: 'transparent',
+            boxShadow: 'none',
             margin: isFullMode ? 0 : '96px 0 24px 0',
             touchAction: (isSelectMode || isFullMode) ? 'none' : 'auto',
           }}
@@ -994,55 +988,91 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
         >
-          <div 
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: `${baseWidth}px`,
-              height: `${documentHeight}px`,
-              transform: `scale(${zoom})`,
-              transformOrigin: '0 0',
-              ...getStaticBackgroundStyles(),
-              pointerEvents: 'none',
-              willChange: 'transform'
-            }}
-          />
-          {/* Page Breaks Indicators */}
-          {showPageBreaks && Array.from({ length: pagesCount - 1 }).map((_, i) => (
+          {/* Paper Background: 1 continuous paper for infinite mode, or discrete page cards with real gaps */}
+          {!showPageBreaks ? (
             <div
-              key={i}
               style={{
                 position: 'absolute',
+                top: 0,
                 left: 0,
-                right: 0,
-                top: `${(i + 1) * pageHeight * zoom}px`,
-                height: 0,
-                borderTop: '1.5px dashed rgba(255, 255, 255, 0.25)',
+                width: '100%',
+                height: `${documentHeight * zoom}px`,
+                borderRadius: isFullMode ? '22px 22px 0 0' : '20px',
+                background: 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
+                boxShadow: 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)',
+                overflow: 'hidden',
                 pointerEvents: 'none',
-                zIndex: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
               }}
             >
-              <span
+              <div 
                 style={{
-                  transform: 'translateY(-50%)',
-                  background: 'rgba(24, 24, 30, 0.95)',
-                  padding: '3px 12px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  font: '600 10px ui-monospace, monospace',
-                  color: 'rgba(255, 255, 255, 0.85)',
-                  letterSpacing: '.06em',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.5)'
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: `${baseWidth}px`,
+                  height: `${documentHeight}px`,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: '0 0',
+                  ...getStaticBackgroundStyles(),
+                  pointerEvents: 'none',
+                  willChange: 'transform'
                 }}
-              >
-                SEITE {i + 1} / {pagesCount}
-              </span>
+              />
             </div>
-          ))}
+          ) : (
+            Array.from({ length: pagesCount }).map((_, i) => {
+              const pageTop = i * (pageHeight * zoom + PAGE_GAP);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    top: `${pageTop}px`,
+                    left: 0,
+                    width: '100%',
+                    height: `${pageHeight * zoom}px`,
+                    borderRadius: '20px',
+                    background: 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
+                    boxShadow: 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 24px 50px -16px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)',
+                    overflow: 'hidden',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: `${baseWidth}px`,
+                      height: `${pageHeight}px`,
+                      transform: `scale(${zoom})`,
+                      transformOrigin: '0 0',
+                      ...getStaticBackgroundStyles(),
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: 18,
+                      top: 16,
+                      font: '600 10.5px ui-monospace, monospace',
+                      letterSpacing: '.08em',
+                      color: 'rgba(255,255,255,0.45)',
+                      background: 'rgba(255,255,255,0.06)',
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.09)',
+                      backdropFilter: 'blur(10px)',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    SEITE {i + 1} / {pagesCount}
+                  </span>
+                </div>
+              );
+            })
+          )}
           {masterCanvasState && (
             <canvas 
               ref={masterCanvasState.masterCanvasRef} 
