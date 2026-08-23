@@ -14,7 +14,7 @@
 body {
   font-family: 'Inter', sans-serif;
   color: #FFFFFF;
-  background: #08080A;
+  background: #140E0A;
   min-height: 100vh;
 }
 
@@ -387,49 +387,51 @@ body {
    Liquid Glass & Fluted Reeded Glass Dark Background Theme (Image 1 Style)
    ========================================================================== */
 
-/* Fluted Reeded Glass Textured Dark Background */
+/* Fluted Reeded Glass Textured Warm Beige & Dark Brown Background */
 body::before,
 .liquid-fluted-bg {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-color: #050506;
-  /* Reihenfolge zählt: erste Ebene liegt OBEN. Das Gewebe muss über den
-     Blooms liegen, sonst leuchtet das Licht die Rippen platt statt sie
-     von hinten zu durchscheinen (Referenzbild-Look). */
+  background-color: #120D09;
+  /* Reihenfolge:
+     1. Halftone-Dithering in zartem warmem Sand/Beige
+     2. Senkrechte Rippen (warmer Beige-Schimmer & sattes Dunkelbraun)
+     3. Waagerechte Rippen (Moiré-Kreuzung)
+     4. Volumetrische warme Beige-, Bernstein- und Karamell-Lichtblasen dahinter */
   background-image:
-    /* 1. Halftone-Dithering (Raster ganz oben) */
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.10) 0.9px, transparent 1.3px),
-    /* 2. Gewebe — senkrechte Rippen (dünne Hell/Dunkel-Linien, Rest offen) */
+    /* 1. Halftone-Dithering (warme Sand/Beige-Punkte) */
+    radial-gradient(circle at center, rgba(238, 222, 198, 0.12) 0.9px, transparent 1.3px),
+    /* 2. Gewebe — senkrechte Rippen */
     repeating-linear-gradient(90deg,
-      rgba(255, 255, 255, 0.18) 0px,
-      rgba(255, 255, 255, 0.18) 1px,
+      rgba(235, 218, 192, 0.18) 0px,
+      rgba(235, 218, 192, 0.18) 1px,
       transparent 1px,
       transparent 2.5px,
-      rgba(0, 0, 0, 0.32) 2.5px,
-      rgba(0, 0, 0, 0.32) 4px,
+      rgba(15, 9, 6, 0.45) 2.5px,
+      rgba(15, 9, 6, 0.45) 4px,
       transparent 4px,
       transparent 6px
     ),
-    /* 3. Gewebe — waagerechte Rippen (ergibt Moiré-Kreuzung) */
+    /* 3. Gewebe — waagerechte Rippen */
     repeating-linear-gradient(0deg,
-      rgba(255, 255, 255, 0.13) 0px,
-      rgba(255, 255, 255, 0.13) 1px,
+      rgba(228, 208, 180, 0.13) 0px,
+      rgba(228, 208, 180, 0.13) 1px,
       transparent 1px,
       transparent 2.5px,
-      rgba(0, 0, 0, 0.25) 2.5px,
-      rgba(0, 0, 0, 0.25) 4px,
+      rgba(12, 8, 5, 0.38) 2.5px,
+      rgba(12, 8, 5, 0.38) 4px,
       transparent 4px,
       transparent 6px
     ),
-    /* 4. Volumetrische Lichtblasen dahinter */
-    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.65), transparent 64%),
-    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.58), transparent 66%),
-    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.52), transparent 66%),
-    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.48), transparent 68%),
-    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.42), transparent 66%),
-    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.42), transparent 76%);
+    /* 4. Volumetrische warme Beige- und Karamell-Lichtblasen */
+    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(226, 202, 168, 0.65), transparent 64%),
+    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(212, 188, 154, 0.58), transparent 66%),
+    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(200, 174, 140, 0.52), transparent 66%),
+    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(192, 165, 132, 0.48), transparent 68%),
+    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(180, 152, 120, 0.42), transparent 66%),
+    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(14, 9, 6, 0.55), transparent 76%);
   background-size:
     5px 5px,
     6px 100%,
