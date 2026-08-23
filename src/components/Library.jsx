@@ -1176,15 +1176,15 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       )}
 
       {/* main content */}
-      <div className="lib-scroll" style={{ position: 'absolute', left: 106, top: 92, right: agentOpen ? 514 : 0, bottom: 26, overflow: 'auto', paddingRight: agentOpen ? 24 : 14, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+      <div className="lib-scroll" style={{ position: 'absolute', left: 96, top: 82, right: agentOpen ? 514 : 0, bottom: 20, overflowY: 'auto', overflowX: 'hidden', padding: `10px ${agentOpen ? 24 : 14}px 24px 10px`, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
         {/* Header: Library Title */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
           <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em', color: '#FFFFFF' }}>Bibliothek</h2>
-            <span style={{ font: '600 10.5px ui-monospace,monospace', letterSpacing: '.11em', color: '#FFFFFF', paddingBottom: 8 }}>{SUBJECTS.length} FÄCHER · {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN</span>
-          </div>
+          <span style={{ font: '600 10.5px ui-monospace,monospace', letterSpacing: '.11em', color: '#FFFFFF', paddingBottom: 8 }}>{SUBJECTS.length} FÄCHER · {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN</span>
+        </div>
 
         {/* Subjects horizontal selector row */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '0 0 28px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '0 0 28px', padding: '6px 4px 6px 0' }}>
           {SUBJECTS.map(s => (
             <SubjectTile 
               key={s.id} 
