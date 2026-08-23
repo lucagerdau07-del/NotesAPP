@@ -336,13 +336,13 @@ const RECENT = [
   }
 ];
 
-function TileWrap({ onOpen, w, h, bg, boxShadow, className = '', testId, children }) {
+function TileWrap({ onOpen, w, h, bg, className = '', testId, children }) {
   return (
     <div
       onClick={onOpen}
       className={`lib-tile ${className}`}
       data-testid={testId}
-      style={{ position: 'relative', flex: 'none', width: w, height: h, borderRadius: 24, overflow: 'hidden', background: bg, boxShadow, cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}
+      style={{ position: 'relative', flex: 'none', width: w, height: h, background: bg, cursor: 'pointer' }}
     >
       {children}
     </div>
@@ -350,17 +350,12 @@ function TileWrap({ onOpen, w, h, bg, boxShadow, className = '', testId, childre
 }
 
 function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
-  const accent = (SUBJECT_THEMES[s.id] || DEFAULT_THEME).accent;
-  const shadow = isSelected 
-    ? `0 24px 50px -16px ${(SUBJECT_THEMES[s.id] || DEFAULT_THEME).accentSoft}, 0 0 0 2.5px ${accent}` 
-    : '0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.12) inset';
-
   const tileClass = isSelected ? 'active' : isOtherSelected ? 'lib-tile-inactive' : '';
   const testId = `subject-tile-${s.id}`;
 
   if (s.id === 'mathe') {
     return (
-      <TileWrap onOpen={onToggle} w={220} h={148} bg="linear-gradient(155deg,oklch(0.26 0.05 258),#0B0A0F)" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={220} h={148} bg="linear-gradient(155deg,oklch(0.26 0.05 258),#0B0A0F)" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.1) 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
         <div style={{ position: 'absolute', left: 0, right: 0, top: 34, height: 58, background: 'linear-gradient(72deg,transparent 12%,oklch(0.72 0.075 250/.75) 12%,oklch(0.72 0.075 250/.75) 13.4%,transparent 13.4%)', transform: 'skewY(-16deg)' }} />
         <div style={{ position: 'absolute', right: 18, top: 14, font: 'italic 20px "Instrument Serif",serif', color: '#FFFFFF' }}>f(x)</div>
@@ -374,7 +369,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'chemie') {
     return (
-      <TileWrap onOpen={onToggle} w={150} h={164} bg="linear-gradient(155deg,oklch(0.26 0.045 160),#080E0A)" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={150} h={164} bg="linear-gradient(155deg,oklch(0.26 0.045 160),#080E0A)" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(rgba(255,255,255,.14) 1.3px,transparent 1.4px)', backgroundSize: '15px 15px' }} />
         <div style={{ position: 'absolute', right: -16, top: 22, width: 76, height: 76, borderRadius: '50%', border: '2px solid oklch(0.72 0.06 158/.7)' }} />
         <div style={{ position: 'absolute', right: 8, top: 74, width: 44, height: 44, borderRadius: '50%', border: '1.5px solid oklch(0.72 0.06 158/.45)' }} />
@@ -391,7 +386,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'kunst') {
     return (
-      <TileWrap onOpen={onToggle} w={140} h={148} bg="#0D0B10" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={140} h={148} bg="#0D0B10" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', left: -14, top: -10, width: 160, height: 30, background: 'oklch(0.6 0.09 42)', transform: 'rotate(-11deg)' }} />
         <div style={{ position: 'absolute', left: -14, top: 20, width: 160, height: 24, background: 'oklch(0.68 0.075 82)' }} />
         <div style={{ position: 'absolute', left: -14, top: 44, width: 160, height: 26, background: 'oklch(0.5 0.06 215)', transform: 'rotate(-11deg)' }} />
@@ -406,7 +401,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'pgw') {
     return (
-      <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg,oklch(0.24 0.05 320),#0D0A12)" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg,oklch(0.24 0.05 320),#0D0A12)" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', left: 16, bottom: 38, display: 'flex', alignItems: 'flex-end', gap: 6, height: 58 }}>
           <div style={{ width: 11, height: 22, background: 'oklch(0.6 0.07 320/.55)' }} />
           <div style={{ width: 11, height: 40, background: 'oklch(0.6 0.07 320/.7)' }} />
@@ -423,7 +418,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'philosophie') {
     return (
-      <TileWrap onOpen={onToggle} w={190} h={156} bg="linear-gradient(155deg,oklch(0.25 0.03 78),#0E0B08)" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={190} h={156} bg="linear-gradient(155deg,oklch(0.25 0.03 78),#0E0B08)" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', right: -8, top: -14, font: 'italic 110px/1 "Instrument Serif",serif', color: 'rgba(255,255,255,.1)' }}>Φ</div>
         <div style={{ position: 'absolute', left: 18, top: 18, right: 16, font: 'italic 31px/1.02 "Instrument Serif",serif', color: '#FFFFFF' }}>Philo­sophie</div>
         <div style={{ position: 'absolute', left: 18, top: 96, width: 40, height: 1, background: 'rgba(255,255,255,.4)' }} />
@@ -434,7 +429,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'englisch') {
     return (
-      <TileWrap onOpen={onToggle} w={136} h={144} bg="linear-gradient(155deg,oklch(0.24 0.05 26),#0E0A0C)" boxShadow={shadow} className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={136} h={144} bg="linear-gradient(155deg,oklch(0.24 0.05 26),#0E0A0C)" className={tileClass} testId={testId}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(to bottom,transparent calc(100% - 1px),rgba(255,255,255,.15) calc(100% - 1px))', backgroundSize: '100% 24px' }} />
         <div style={{ position: 'absolute', left: 22, top: 0, bottom: 0, width: 1, background: 'oklch(0.68 0.09 26/.5)' }} />
         <div style={{ position: 'absolute', right: 10, top: 4, font: '400 54px/1 "Instrument Serif",serif', color: 'rgba(255,255,255,.15)' }}>Aa</div>
@@ -446,7 +441,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   // spanisch
   return (
-    <TileWrap onOpen={onToggle} w={150} h={132} bg="oklch(0.24 0.05 56)" boxShadow={shadow} className={tileClass} testId={testId}>
+    <TileWrap onOpen={onToggle} w={150} h={132} bg="oklch(0.24 0.05 56)" className={tileClass} testId={testId}>
       <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(118deg,transparent 0 12px,oklch(0.58 0.08 52/.5) 12px 22px)' }} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 24, height: 34, background: '#FFFFFF', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 7 }}>
         <span style={{ font: '700 15px "Bricolage Grotesque",sans-serif', color: '#08080A' }}>Spanisch</span>
@@ -749,12 +744,8 @@ function ThematicSubjectHeader({ subject, onClearFilter, onNewNote }) {
 function RecentCard({ n, onOpen }) {
   return (
     <div onClick={onOpen} className="lib-card" style={{
-      borderRadius: 20, overflow: 'hidden', cursor: 'pointer',
-      background: n.agent ? 'linear-gradient(165deg,oklch(0.24 0.055 318),#0E0D13 58%)' : '#0E0D13',
-      border: '1px solid rgba(255,255,255,.1)',
-      boxShadow: n.agent
-        ? '0 22px 46px -24px rgba(0,0,0,.95),0 0 0 1px oklch(0.6 0.07 320/.3)'
-        : '0 22px 46px -24px rgba(0,0,0,.95)'
+      cursor: 'pointer',
+      background: n.agent ? 'linear-gradient(165deg, rgba(75, 30, 85, 0.65), rgba(14, 13, 19, 0.85) 60%)' : undefined,
     }}>
       {/* 1. Code Card */}
       {n.type === 'code' && (
@@ -791,7 +782,7 @@ function RecentCard({ n, onOpen }) {
 
       {/* 3. Quote Card */}
       {n.type === 'quote' && (
-        <div style={{ padding: '16px 18px 14px', background: '#121118' }}>
+        <div style={{ padding: '16px 18px 14px', background: 'rgba(18, 17, 24, 0.55)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <Quote size={12} color="#D4A937" />
             <span style={{ font: '700 11px ui-monospace,monospace', color: '#D4A937' }}>{n.platform}</span>
@@ -803,7 +794,7 @@ function RecentCard({ n, onOpen }) {
       {/* 4. Inspect Image Photo Card with Center Action Buttons */}
       {n.type === 'inspect' && (
         <div>
-          <div style={{ height: 136, background: 'repeating-linear-gradient(45deg,#1f1c24 0 10px,#17151c 10px 20px)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ height: 136, background: 'repeating-linear-gradient(45deg,rgba(31,28,36,0.7) 0 10px,rgba(23,21,28,0.7) 10px 20px)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ display: 'flex', gap: 10 }}>
               <div className="lib-inspect-action-btn" title="Download"><Download size={14} /></div>
               <div className="lib-inspect-action-btn" title="Zoom & Vorschau"><ZoomIn size={14} /></div>
@@ -819,7 +810,7 @@ function RecentCard({ n, onOpen }) {
 
       {/* 5. Editorial Typography Card */}
       {n.type === 'editorial' && (
-        <div style={{ padding: '16px 18px 15px', background: '#131218' }}>
+        <div style={{ padding: '16px 18px 15px', background: 'rgba(19, 18, 24, 0.55)' }}>
           <div style={{ font: '800 18px/1.15 "Bricolage Grotesque",sans-serif', letterSpacing: '-.02em', color: '#FFFFFF', marginBottom: 8 }}>{n.title}</div>
           <div style={{ font: '400 11.5px/1.55 Manrope,sans-serif', color: '#FFFFFF', marginBottom: 10 }}>{n.body}</div>
           <div style={{ font: '700 12px "Bricolage Grotesque",sans-serif', color: '#FFFFFF', marginBottom: 4 }}>{n.subtitle}</div>
@@ -831,7 +822,7 @@ function RecentCard({ n, onOpen }) {
       {/* 6. Gallery 4-Grid Photo Card */}
       {n.type === 'gallery' && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, height: 110, background: '#08080A', padding: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, height: 110, background: 'rgba(8,8,10,0.6)', padding: 2 }}>
             <div style={{ background: '#25232c' }} />
             <div style={{ background: '#1c1a22' }} />
             <div style={{ background: '#15141b' }} />
@@ -843,7 +834,7 @@ function RecentCard({ n, onOpen }) {
 
       {/* 7. Figma Card */}
       {n.type === 'figma' && (
-        <div style={{ padding: '16px 18px 14px', background: '#121017' }}>
+        <div style={{ padding: '16px 18px 14px', background: 'rgba(18, 16, 23, 0.55)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <span style={{ font: '800 20px/1 "Bricolage Grotesque",sans-serif', color: '#FFFFFF' }}>Figma</span>
             <div style={{ display: 'flex', gap: 4 }}>
