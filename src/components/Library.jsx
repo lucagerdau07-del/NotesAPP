@@ -926,7 +926,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMicActive, setIsMicActive] = useState(false);
   const [sortToast, setSortToast] = useState(null);
-  const [agentOpen, setAgentOpen] = useState(true);
+  const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
   const [agentDraft, setAgentDraft] = useState('');
   const toastTimeoutRef = useRef(null);
