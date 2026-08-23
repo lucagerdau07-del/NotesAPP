@@ -717,8 +717,8 @@ body::before,
   -webkit-backdrop-filter: none;
 }
 .editor-body .writing-zone {
-  margin: 78px 26px 20px 0;
-  border-radius: 22px;
+  margin: 78px 26px 0 0;
+  border-radius: 22px 22px 0 0;
 }
 
 .editor-sidebar {

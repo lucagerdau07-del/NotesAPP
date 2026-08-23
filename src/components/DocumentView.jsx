@@ -935,9 +935,9 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
           textAlign: isFullMode ? 'left' : 'center',
           touchAction: 'pan-x pan-y',
           // Vollmodus: der Scroll-Container IST das Papier.
-          // Startet sauber unterhalb der oberen Pill-Buttons (top: 78px).
-          margin: isFullMode ? '78px 26px 20px 104px' : '78px 12px 20px 104px',
-          borderRadius: '22px',
+          // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
+          margin: isFullMode ? '78px 26px 0 104px' : '78px 12px 0 104px',
+          borderRadius: '22px 22px 0 0',
           // Kein backdrop-filter: der Blur würde die Textur dahinter zu einem
           // glatten Verlauf verschmieren. Papier deshalb fast deckend.
           background: isFullMode
