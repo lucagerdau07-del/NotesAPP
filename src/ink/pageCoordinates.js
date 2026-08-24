@@ -6,7 +6,7 @@ function layoutMetrics(layout) {
   if (!layout || !Array.isArray(layout.pageIds)) return null;
   const { pageWidth, pageHeight, pageGap = 0, zoom, showPageBreaks } = layout;
   if (![pageWidth, pageHeight, pageGap, zoom].every(isFiniteNumber)
-    || pageWidth < 0 || pageHeight < 0 || pageGap < 0 || zoom <= 0) {
+    || pageWidth < 0 || pageHeight <= 0 || pageGap < 0 || zoom <= 0) {
     return null;
   }
 

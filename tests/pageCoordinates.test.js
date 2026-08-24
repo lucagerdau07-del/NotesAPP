@@ -40,6 +40,12 @@ describe('page-aware ink coordinates', () => {
     expect(pagePointToViewport(layout, 'missing', { x: 1, y: 1 })).toBeNull();
   });
 
+  it('rejects layouts with zero page height consistently', () => {
+    const invalidLayout = { ...layout, pageHeight: 0, pageGap: 0 };
+    expect(mapViewportPoint(invalidLayout, { x: 1, y: 0 })).toBeNull();
+    expect(pagePointToViewport(invalidLayout, 'p1', { x: 1, y: 0 })).toBeNull();
+  });
+
   it('maps a focus viewport into the selected page rectangle', () => {
     expect(mapFocusPoint(
       { pageId: 'p2', x: 100, y: 200, width: 300, height: 150 },
