@@ -31,7 +31,7 @@ export default function SplitLayout({ activeTab, onBack, documentId }) {
   };
 
   const inkController = useInkDocument({ documentId });
-  const focusBoxState = useFocusBox(inkController.document.pages[0]?.id);
+  const focusBoxState = useFocusBox(inkController.document.pages.map(page => page.id));
 
   if (activeTab === 'smartCanvas') {
     return (
