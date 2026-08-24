@@ -22,10 +22,24 @@ function selectedTool(tool) {
     : tool;
 }
 
+function draftOwner(document, pageId) {
+  if (typeof document?.documentId !== 'string' || document.documentId.length === 0
+    || !Array.isArray(document.pages)
+    || !document.pages.some(page => page?.id === pageId)) return null;
+  return { documentId: document.documentId, pageId };
+}
+
+function ownsLivePage(owner, document) {
+  return owner?.documentId === document?.documentId
+    && Array.isArray(document?.pages)
+    && document.pages.some(page => page?.id === owner.pageId);
+}
+
 export default function useInkPointer(options) {
   const optionsRef = useRef(options);
   const inputStateRef = useRef(createInputState());
   const draftRef = useRef(null);
+  const draftOwnerRef = useRef(null);
   const strokeEraserRef = useRef(false);
   const captureRef = useRef(null);
   const [draftStroke, setDraftStroke] = useState(null);
@@ -41,6 +55,7 @@ export default function useInkPointer(options) {
 
   const discardDraft = useCallback(() => {
     draftRef.current = null;
+    draftOwnerRef.current = null;
     strokeEraserRef.current = false;
     setDraftStroke(null);
     releaseCapture();
@@ -72,7 +87,8 @@ export default function useInkPointer(options) {
 
     const current = optionsRef.current;
     const point = mappedPoint(current.mapPoint?.(event));
-    if (!point) {
+    const owner = point ? draftOwner(current.document, point.pageId) : null;
+    if (!point || !owner) {
       abortDraft(event);
       return;
     }
@@ -89,6 +105,7 @@ export default function useInkPointer(options) {
       points: [{ x: point.x, y: point.y }],
     };
     draftRef.current = draft;
+    draftOwnerRef.current = owner;
     strokeEraserRef.current = current.tool === 'stroke-eraser'
       || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
     setDraftStroke({ ...draft, points: [...draft.points] });
@@ -108,8 +125,10 @@ export default function useInkPointer(options) {
     if (routed.intent !== 'continue-draw') return;
 
     const draft = draftRef.current;
-    const point = mappedPoint(optionsRef.current.mapPoint?.(event));
-    if (!draft || !point || point.pageId !== draft.pageId) {
+    const current = optionsRef.current;
+    const point = mappedPoint(current.mapPoint?.(event));
+    if (!draft || !ownsLivePage(draftOwnerRef.current, current.document)
+      || !point || point.pageId !== draft.pageId) {
       abortDraft(event);
       return;
     }
@@ -127,14 +146,16 @@ export default function useInkPointer(options) {
     if (routed.intent !== 'finish-draw') return;
 
     const draft = draftRef.current;
+    const owner = draftOwnerRef.current;
     const isStrokeEraser = strokeEraserRef.current;
     draftRef.current = null;
+    draftOwnerRef.current = null;
     strokeEraserRef.current = false;
     setDraftStroke(null);
     releaseCapture();
-    if (!draft || draft.points.length < 2) return;
-
     const current = optionsRef.current;
+    if (!draft || draft.points.length < 2 || !ownsLivePage(owner, current.document)) return;
+
     if (isStrokeEraser) {
       const strokeIds = findIntersectingStrokeIds(
         current.document,

@@ -14,13 +14,33 @@ function renderInkPointer(overrides = {}) {
     tool: 'pen',
     color: '#ffffff',
     width: 3,
-    document: { strokes: [] },
+    document: { documentId: 'doc-1', pages: [{ id: 'p1' }], strokes: [] },
     mapPoint: event => ({ pageId: 'p1', x: event.clientX, y: event.clientY }),
     commitStroke,
     removeStrokes,
     ...overrides
   };
   return { ...renderHook(() => useInkPointer(options)), commitStroke, removeStrokes };
+}
+
+function renderChangingInkPointer(initialProps = {}) {
+  const commitStroke = vi.fn();
+  const removeStrokes = vi.fn();
+  const baseOptions = {
+    inputMode: 'stylus',
+    tool: 'pen',
+    color: '#ffffff',
+    width: 3,
+    document: { documentId: 'doc-1', pages: [{ id: 'p1' }], strokes: [] },
+    mapPoint: event => ({ pageId: 'p1', x: event.clientX, y: event.clientY }),
+  };
+  const hook = renderHook(props => useInkPointer({
+    ...baseOptions,
+    ...props,
+    commitStroke,
+    removeStrokes,
+  }), { initialProps });
+  return { ...hook, commitStroke, removeStrokes };
 }
 
 describe('useInkPointer', () => {
@@ -122,6 +142,8 @@ describe('useInkPointer', () => {
 
   it('removes strokes intersected by a stroke eraser instead of committing an ink stroke', () => {
     const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
       strokes: [{
         id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
         points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
@@ -141,6 +163,8 @@ describe('useInkPointer', () => {
 
   it('treats the stroke-eraser integration tool as a hit-test command, never an ink stroke', () => {
     const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
       strokes: [{
         id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
         points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
@@ -214,6 +238,8 @@ describe('useInkPointer', () => {
     const commitStroke = vi.fn();
     const removeStrokes = vi.fn();
     const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
       strokes: [{
         id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
         points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
@@ -232,5 +258,95 @@ describe('useInkPointer', () => {
 
     expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({ tool: 'pixel-eraser' }));
     expect(removeStrokes).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['pen', undefined],
+    ['eraser', 'pixel'],
+    ['eraser', 'stroke'],
+  ])('discards an active %s/%s draft when its page is removed before release', (tool, eraserMode) => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }, { id: 'p2' }],
+      strokes: [{
+        id: 'line', pageId: 'p2', tool: 'pen', color: '#000000', width: 3, opacity: 1,
+        points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
+      }]
+    };
+    const { result, rerender, commitStroke, removeStrokes } = renderChangingInkPointer({
+      tool,
+      eraserMode,
+      width: 8,
+      document,
+      mapPoint: event => ({ pageId: 'p2', x: event.clientX, y: event.clientY }),
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13, target)));
+    rerender({
+      tool,
+      eraserMode,
+      width: 8,
+      document: { ...document, pages: [{ id: 'p1' }] },
+      mapPoint: event => ({ pageId: 'p2', x: event.clientX, y: event.clientY }),
+    });
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 52, 13, target)));
+
+    expect(commitStroke).not.toHaveBeenCalled();
+    expect(removeStrokes).not.toHaveBeenCalled();
+    expect(result.current.draftStroke).toBeNull();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it.each([
+    ['pen', undefined],
+    ['eraser', 'pixel'],
+    ['eraser', 'stroke'],
+  ])('discards an active %s/%s draft when the document changes before release', (tool, eraserMode) => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const firstDocument = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
+      strokes: [{
+        id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
+        points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
+      }]
+    };
+    const { result, rerender, commitStroke, removeStrokes } = renderChangingInkPointer({
+      tool, eraserMode, width: 8, document: firstDocument,
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13, target)));
+    rerender({
+      tool,
+      eraserMode,
+      width: 8,
+      document: { ...firstDocument, documentId: 'doc-2' },
+    });
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 52, 13, target)));
+
+    expect(commitStroke).not.toHaveBeenCalled();
+    expect(removeStrokes).not.toHaveBeenCalled();
+    expect(result.current.draftStroke).toBeNull();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it('commits a valid draft across immutable updates to the same document', () => {
+    const firstDocument = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
+      strokes: [],
+      updatedAt: 1,
+    };
+    const { result, rerender, commitStroke } = renderChangingInkPointer({ document: firstDocument });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 3, 4)));
+    rerender({ document: { ...firstDocument, updatedAt: 2 } });
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 3, 4)));
+
+    expect(commitStroke).toHaveBeenCalledOnce();
   });
 });
