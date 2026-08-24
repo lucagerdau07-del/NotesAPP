@@ -31,3 +31,11 @@ The test runner continues to print the pre-existing jsdom `HTMLCanvasElement.get
 - `src/components/WritingZone.jsx` (prop/metadata wiring only)
 - `tests/App.test.jsx`
 - `tests/SplitLayout.test.jsx`
+
+## Review Fix Round 1
+
+- Removed the obsolete `PAPER_RGB` constant and `mixOnPaper` helper/export from `SplitLayout`.
+- Removed the stale `mixOnPaper` import and change-detector test. Highlighter style behavior remains covered at its sole source, `getToolStyle`, in `tests/inkDocument.test.js`.
+- Strengthened the generated-note integration test to capture the first document ID, rerender the same `App` instance without opening another note, and assert the ID is unchanged.
+- Mutation evidence: temporarily moving fallback ID generation into render made the strengthened test fail with two different UUIDs; restoring ID generation to `openNote` returned it to green.
+- Review verification: focused suite passed 28/28 tests, full suite passed 106/106 tests, the production build succeeded, `git diff --check` was clean, and `rg` found no remaining `PAPER_RGB` or `mixOnPaper` references in `src` or `tests`.

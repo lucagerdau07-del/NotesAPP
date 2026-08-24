@@ -20,11 +20,15 @@ describe('App Component', () => {
   });
 
   it('passes a stable generated ID to a newly opened note', () => {
-    render(<App />);
+    const { rerender } = render(<App />);
     fireEvent.click(screen.getByTestId('new-note-btn'));
 
-    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id');
-    expect(screen.getByTestId('document-view').getAttribute('data-document-id')).not.toBe('undefined');
+    const documentId = screen.getByTestId('document-view').getAttribute('data-document-id');
+    expect(documentId).toBeTruthy();
+    expect(documentId).not.toBe('undefined');
+
+    rerender(<App />);
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', documentId);
   });
 
   it('normalizes an existing note ID to a string', () => {

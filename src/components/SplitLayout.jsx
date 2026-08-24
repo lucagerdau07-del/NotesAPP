@@ -4,18 +4,6 @@ import WritingZone from './WritingZone';
 import useInkDocument from '../hooks/useInkDocument';
 import useFocusBox from '../hooks/useFocusBox';
 
-const PAPER_RGB = [0x1d, 0x1b, 0x21];
-
-/** Blendet eine Hex-Farbe mit `amount` Deckkraft auf den Papierton — ergibt eine opake Farbe. */
-export function mixOnPaper(hex, amount) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return hex;
-  const v = parseInt(m[1], 16);
-  const ch = [(v >> 16) & 255, (v >> 8) & 255, v & 255]
-    .map((c, i) => Math.round(c * amount + PAPER_RGB[i] * (1 - amount)));
-  return `#${ch.map(c => c.toString(16).padStart(2, '0')).join('')}`;
-}
-
 export default function SplitLayout({ activeTab, onBack, documentId }) {
   const [color, setColor] = useState('#EFECE4');
   const [isEraser, setIsEraser] = useState(false);
