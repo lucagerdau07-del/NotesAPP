@@ -305,4 +305,36 @@ describe('full-document ink workspace', () => {
     });
     view.unmount();
   });
+
+  it('reconciles a removed focus page before focus ink can create an orphan stroke', async () => {
+    render(<SplitLayout activeTab="smartCanvas" documentId="orphan-note" />);
+    const page = screen.getByTestId('document-page');
+    page.parentElement.scrollTo = vi.fn();
+    fireEvent.click(screen.getByTestId('add-page-btn'));
+    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    fireEvent.click(screen.getByTestId('select-mode-btn'));
+
+    mockRect(page, { left: 0, top: 0, width: 800, height: 2300 });
+    fireEvent.pointerDown(page, {
+      pointerId: 13, pointerType: 'mouse', clientX: 100, clientY: 1170,
+    });
+    fireEvent.pointerMove(page, {
+      pointerId: 13, pointerType: 'mouse', clientX: 300, clientY: 1270,
+    });
+    fireEvent.pointerUp(page, {
+      pointerId: 13, pointerType: 'mouse', clientX: 300, clientY: 1270,
+    });
+
+    fireEvent.click(screen.getByTitle('Rückgängig'));
+    const focusCanvas = screen.getByTestId('focus-ink-canvas');
+    mockRect(focusCanvas, { left: 0, top: 0, width: 500, height: 200 });
+    drawPointerStroke(focusCanvas, { pointerId: 14, pointerType: 'pen' });
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('notes-app:ink:orphan-note'));
+      expect(saved.present.pages).toEqual([{ id: 'orphan-note-page-1' }]);
+      expect(saved.present.strokes).toHaveLength(1);
+      expect(saved.present.strokes[0].pageId).toBe('orphan-note-page-1');
+    });
+  });
 });
