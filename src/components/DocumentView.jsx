@@ -920,7 +920,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
 
     e.preventDefault();
     e.stopPropagation();
-    const step = e.shiftKey ? 50 : 10;
+    const step = (e.shiftKey ? 50 : 10) / zoom;
     focusBoxState?.setFocusBox(prev => prev
       ? moveFocusBoxWithinPage(prev, direction[0] * step, direction[1] * step)
       : prev);

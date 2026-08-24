@@ -126,6 +126,52 @@ test('exposes the focus rectangle as a named keyboard-movable region with page b
   expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ top: '981.2px' });
 });
 
+test.each([
+  { label: '50%', pointerX: 150, pageWidth: '400px', arrowDelta: 20, shiftDelta: 100 },
+  { label: '300%', pointerX: 400, pageWidth: '2400px', arrowDelta: 10 / 3, shiftDelta: 50 / 3 },
+])('moves the focus rectangle by consistent viewport pixels at $label zoom', ({
+  pointerX, pageWidth, arrowDelta, shiftDelta,
+}) => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const focusBox = { pageId: 'page-1', x: 100, y: 100, width: 200, height: 100 };
+  const setFocusBox = vi.fn();
+  render(<DocumentView
+    inkController={createControllerDouble()}
+    focusBoxState={{ focusBox, setFocusBox }}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const page = screen.getByTestId('document-page');
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 100,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 100,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: pointerX, clientY: 100,
+  });
+  expect(page.style.width).toBe(pageWidth);
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: pointerX, clientY: 100,
+  });
+
+  setFocusBox.mockClear();
+  fireEvent.keyDown(screen.getByRole('region', { name: 'Fokusbereich' }), { key: 'ArrowRight' });
+  const arrowUpdate = setFocusBox.mock.calls[0][0](focusBox);
+  expect(arrowUpdate.x).toBeCloseTo(focusBox.x + arrowDelta);
+
+  setFocusBox.mockClear();
+  fireEvent.keyDown(screen.getByRole('region', { name: 'Fokusbereich' }), {
+    key: 'ArrowDown', shiftKey: true,
+  });
+  const shiftUpdate = setFocusBox.mock.calls[0][0](focusBox);
+  expect(shiftUpdate.y).toBeCloseTo(focusBox.y + shiftDelta);
+});
+
 test('renders DocumentView without crashing when states are missing', () => {
   render(<DocumentView />);
   const documentView = screen.getByTestId('document-view');
