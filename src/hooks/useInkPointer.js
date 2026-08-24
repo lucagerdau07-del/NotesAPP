@@ -77,6 +77,31 @@ export default function useInkPointer(options) {
     discardDraft();
   }, [discardDraft, route]);
 
+  const finalizeDraft = useCallback(() => {
+    const draft = draftRef.current;
+    const owner = draftOwnerRef.current;
+    const isStrokeEraser = strokeEraserRef.current;
+    draftRef.current = null;
+    draftOwnerRef.current = null;
+    strokeEraserRef.current = false;
+    setDraftStroke(null);
+    releaseCapture();
+
+    const current = optionsRef.current;
+    if (!draft || draft.points.length < 2 || !ownsLivePage(owner, current.document)) return;
+    if (isStrokeEraser) {
+      const strokeIds = findIntersectingStrokeIds(
+        current.document,
+        draft.pageId,
+        draft.points,
+        draft.width / 2,
+      );
+      if (strokeIds.length > 0) current.removeStrokes?.(strokeIds);
+      return;
+    }
+    current.commitStroke?.(draft);
+  }, [releaseCapture]);
+
   const onPointerDown = useCallback(event => {
     const routed = route(event, 'down');
     if (routed.intent === 'cancel-draw') {
@@ -127,15 +152,19 @@ export default function useInkPointer(options) {
     const draft = draftRef.current;
     const current = optionsRef.current;
     const point = mappedPoint(current.mapPoint?.(event));
-    if (!draft || !ownsLivePage(draftOwnerRef.current, current.document)
-      || !point || point.pageId !== draft.pageId) {
+    if (!draft || !ownsLivePage(draftOwnerRef.current, current.document)) {
       abortDraft(event);
+      return;
+    }
+    if (!point || point.pageId !== draft.pageId) {
+      route(event, 'abort');
+      finalizeDraft();
       return;
     }
 
     draft.points.push({ x: point.x, y: point.y });
     setDraftStroke({ ...draft, points: [...draft.points] });
-  }, [abortDraft, discardDraft, route]);
+  }, [abortDraft, discardDraft, finalizeDraft, route]);
 
   const onPointerUp = useCallback(event => {
     const routed = route(event, 'up');
@@ -145,29 +174,8 @@ export default function useInkPointer(options) {
     }
     if (routed.intent !== 'finish-draw') return;
 
-    const draft = draftRef.current;
-    const owner = draftOwnerRef.current;
-    const isStrokeEraser = strokeEraserRef.current;
-    draftRef.current = null;
-    draftOwnerRef.current = null;
-    strokeEraserRef.current = false;
-    setDraftStroke(null);
-    releaseCapture();
-    const current = optionsRef.current;
-    if (!draft || draft.points.length < 2 || !ownsLivePage(owner, current.document)) return;
-
-    if (isStrokeEraser) {
-      const strokeIds = findIntersectingStrokeIds(
-        current.document,
-        draft.pageId,
-        draft.points,
-        draft.width / 2,
-      );
-      if (strokeIds.length > 0) current.removeStrokes?.(strokeIds);
-      return;
-    }
-    current.commitStroke?.(draft);
-  }, [discardDraft, releaseCapture, route]);
+    finalizeDraft();
+  }, [discardDraft, finalizeDraft, route]);
 
   const onPointerCancel = useCallback(event => {
     const routed = route(event, 'cancel');

@@ -77,34 +77,92 @@ describe('useInkPointer', () => {
     }));
   });
 
-  it('discards an incomplete draft when focus mapping returns no page point', () => {
-    const mapPoint = vi.fn(event => event.clientX === 3
+  it.each([
+    ['pen', undefined, 'pen'],
+    ['highlighter', undefined, 'highlighter'],
+    ['eraser', 'pixel', 'pixel-eraser'],
+  ])('finalizes a valid %s/%s draft at its last same-page sample before a gap', (tool, eraserMode, storedTool) => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const mapPoint = vi.fn(event => event.clientX >= 4
       ? null
       : { pageId: 'p1', x: event.clientX, y: event.clientY });
-    const { result, commitStroke } = renderInkPointer({ mapPoint });
+    const { result, commitStroke } = renderInkPointer({ tool, eraserMode, mapPoint });
 
-    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
-    act(() => result.current.onPointerMove(pointer(7, 'pen', 3, 4)));
-    act(() => result.current.onPointerUp(pointer(7, 'pen', 3, 4)));
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 3, 4, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 4, 5, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 5, 6, target)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 5, 6, target)));
 
+    expect(commitStroke).toHaveBeenCalledOnce();
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      pageId: 'p1',
+      tool: storedTool,
+      points: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+    }));
     expect(result.current.draftStroke).toBeNull();
-    expect(commitStroke).not.toHaveBeenCalled();
+    expect(target.releasePointerCapture).toHaveBeenCalledOnce();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+
+    act(() => result.current.onPointerDown(pointer(8, 'pen', 1, 7, target)));
+    act(() => result.current.onPointerMove(pointer(8, 'pen', 3, 8, target)));
+    act(() => result.current.onPointerUp(pointer(8, 'pen', 3, 8, target)));
+    expect(commitStroke).toHaveBeenCalledTimes(2);
   });
 
-  it('discards a draft that crosses onto a different page', () => {
+  it.each([
+    ['pen', undefined, 'pen'],
+    ['highlighter', undefined, 'highlighter'],
+    ['eraser', 'pixel', 'pixel-eraser'],
+  ])('finalizes a valid %s/%s draft without switching it onto another page', (tool, eraserMode, storedTool) => {
     const mapPoint = vi.fn(event => ({
-      pageId: event.clientX < 3 ? 'p1' : 'p2',
+      pageId: event.clientX >= 4 ? 'p2' : 'p1',
       x: event.clientX,
       y: event.clientY
     }));
-    const { result, commitStroke } = renderInkPointer({ mapPoint });
+    const { result, commitStroke } = renderInkPointer({ tool, eraserMode, mapPoint });
 
     act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
     act(() => result.current.onPointerMove(pointer(7, 'pen', 3, 4)));
-    act(() => result.current.onPointerUp(pointer(7, 'pen', 3, 4)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 4, 5)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 5, 6)));
 
+    expect(commitStroke).toHaveBeenCalledOnce();
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      pageId: 'p1',
+      tool: storedTool,
+      points: [{ x: 1, y: 2 }, { x: 3, y: 4 }],
+    }));
     expect(result.current.draftStroke).toBeNull();
+  });
+
+  it('finishes a stroke eraser hit-test at the last valid sample before a gap', () => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
+      strokes: [{
+        id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
+        points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
+      }]
+    };
+    const { result, commitStroke, removeStrokes } = renderInkPointer({
+      tool: 'eraser', eraserMode: 'stroke', width: 8, document,
+      mapPoint: event => event.clientX >= 53
+        ? null
+        : { pageId: 'p1', x: event.clientX, y: event.clientY },
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 53, 13, target)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 54, 13, target)));
+
+    expect(removeStrokes).toHaveBeenCalledOnce();
+    expect(removeStrokes).toHaveBeenCalledWith(['line']);
     expect(commitStroke).not.toHaveBeenCalled();
+    expect(result.current.draftStroke).toBeNull();
+    expect(target.releasePointerCapture).toHaveBeenCalledOnce();
   });
 
   it('discards a draft when input policy cancels its owning pointer', () => {
@@ -183,20 +241,25 @@ describe('useInkPointer', () => {
     expect(commitStroke).not.toHaveBeenCalled();
   });
 
-  it('keeps a mapped-away first finger as navigation when a second finger goes down', () => {
-    const mapPoint = event => event.pointerId === 1 && event.clientX === 3
+  it('keeps a boundary-finished first finger as navigation when a second finger goes down', () => {
+    const mapPoint = event => event.pointerId === 1 && event.clientX >= 3
       ? null
       : { pageId: 'p1', x: event.clientX, y: event.clientY };
     const { result, commitStroke } = renderInkPointer({ inputMode: 'finger', mapPoint });
 
     act(() => result.current.onPointerDown(pointer(1, 'touch', 1, 2)));
+    act(() => result.current.onPointerMove(pointer(1, 'touch', 2, 3)));
     act(() => result.current.onPointerMove(pointer(1, 'touch', 3, 4)));
     act(() => result.current.onPointerDown(pointer(2, 'touch', 5, 6)));
     act(() => result.current.onPointerMove(pointer(2, 'touch', 7, 8)));
     act(() => result.current.onPointerUp(pointer(2, 'touch', 7, 8)));
+    act(() => result.current.onPointerUp(pointer(1, 'touch', 3, 4)));
 
     expect(result.current.draftStroke).toBeNull();
-    expect(commitStroke).not.toHaveBeenCalled();
+    expect(commitStroke).toHaveBeenCalledOnce();
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      points: [{ x: 1, y: 2 }, { x: 2, y: 3 }],
+    }));
   });
 
   it('releases pointer capture when its owner finishes', () => {
