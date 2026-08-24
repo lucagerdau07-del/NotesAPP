@@ -200,30 +200,103 @@ test('pans the full document with one touch in stylus mode without creating ink'
   expect(controller.commitStroke).not.toHaveBeenCalled();
 });
 
-test('hands a second touch from panning to the existing pinch zoom gesture', () => {
-  const animationFrame = vi.spyOn(globalThis, 'requestAnimationFrame')
-    .mockImplementation(callback => {
-      callback();
-      return 1;
-    });
+test.each([
+  { liftedPointerId: 3, survivorPointerId: 4, survivorX: 300 },
+  { liftedPointerId: 4, survivorPointerId: 3, survivorX: 100 },
+])('resumes pan without a jump after pinch when touch $liftedPointerId lifts', ({
+  liftedPointerId, survivorPointerId, survivorX,
+}) => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
   const controller = createControllerDouble();
   render(<DocumentView inkController={controller} toolbarState={toolState()} />);
   const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
   mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+  scroller.scrollTop = 200;
 
   fireEvent.pointerDown(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 100,
-  });
-  fireEvent.pointerDown(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 100,
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
   });
   fireEvent.pointerMove(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 100,
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  expect(page.style.width).toBe('1600px');
+  const scrollAfterPinch = scroller.scrollTop;
+
+  fireEvent.pointerUp(page, {
+    pointerId: liftedPointerId,
+    pointerType: 'touch',
+    clientX: liftedPointerId === 3 ? 100 : 300,
+    clientY: 250,
+  });
+  expect(scroller.scrollTop).toBe(scrollAfterPinch);
+  fireEvent.pointerMove(page, {
+    pointerId: survivorPointerId,
+    pointerType: 'touch',
+    clientX: survivorX,
+    clientY: 230,
   });
 
-  expect(page.style.width).toBe('1600px');
+  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
   expect(controller.commitStroke).not.toHaveBeenCalled();
-  animationFrame.mockRestore();
+});
+
+test('keeps a surviving finger in navigation after pinch until a fresh touch starts drawing', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const controller = createControllerDouble({ inputMode: 'finger' });
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+  scroller.scrollTop = 200;
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  expect(page.style.width).toBe('1600px');
+  const scrollAfterPinch = scroller.scrollTop;
+
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
+  });
+  fireEvent.pointerUp(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
+  });
+
+  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+
+  drawPointerStroke(page, {
+    pointerId: 5,
+    pointerType: 'touch',
+    start: { x: 20, y: 20 },
+    end: { x: 30, y: 30 },
+  });
+  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
 });
 
 test('toggles finger and stroke-eraser modes with accessible pressed state', () => {

@@ -713,12 +713,26 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
 
   const handleGestureEnd = (e) => {
     if (e.pointerType !== 'touch') return;
+    const wasMultiTouch = activePointers.current.size > 1;
     activePointers.current.delete(e.pointerId);
     if (touchPanInitialData.current?.pointerId === e.pointerId) {
       touchPanInitialData.current = null;
     }
     if (activePointers.current.size < 2) {
       pinchInitialData.current = null;
+      if (wasMultiTouch && activePointers.current.size === 1 && isFullMode) {
+        const [[pointerId, point]] = activePointers.current.entries();
+        const scrollContainer = containerRef.current?.parentElement;
+        if (scrollContainer) {
+          touchPanInitialData.current = {
+            pointerId,
+            x: point.x,
+            y: point.y,
+            scrollTop: scrollContainer.scrollTop,
+            scrollLeft: scrollContainer.scrollLeft,
+          };
+        }
+      }
       if (pendingFocusBox.current) {
         focusBoxState.setFocusBox(pendingFocusBox.current);
         pendingFocusBox.current = null;
