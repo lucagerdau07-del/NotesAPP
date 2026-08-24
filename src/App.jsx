@@ -11,7 +11,8 @@ export default function App() {
   const activeTab = 'smartCanvas';
 
   const openNote = (note) => {
-    setActiveNote(note);
+    const id = String(note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`);
+    setActiveNote({ ...note, id });
     setScreen('editor');
   };
 
@@ -47,7 +48,7 @@ export default function App() {
         </button>
       </div>
       <div className="editor-body">
-        <SplitLayout activeTab={activeTab} onBack={() => setScreen('library')} />
+        <SplitLayout activeTab={activeTab} documentId={activeNote.id} onBack={() => setScreen('library')} />
       </div>
     </div>
   );

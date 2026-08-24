@@ -19,6 +19,21 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
+  it('passes a stable generated ID to a newly opened note', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-note-btn'));
+
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id');
+    expect(screen.getByTestId('document-view').getAttribute('data-document-id')).not.toBe('undefined');
+  });
+
+  it('normalizes an existing note ID to a string', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('Ableitungsregeln'));
+
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', '1');
+  });
+
   it('opens the settings screen from the library and navigates through palm settings and advanced view', () => {
     render(<App />);
 

@@ -18,6 +18,19 @@ describe('SplitLayout', () => {
     expect(screen.getByText('Delegation Mode (TBD)')).toBeInTheDocument();
   });
 
+  it('exposes stylus input and pixel eraser as controller defaults to both views', () => {
+    render(<SplitLayout activeTab="smartCanvas" documentId="note-1" />);
+
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', 'note-1');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'stylus');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'pixel');
+
+    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-document-id', 'note-1');
+    expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-input-mode', 'stylus');
+    expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-eraser-mode', 'pixel');
+  });
+
   it('mixOnPaper blends a hex colour onto the paper tone and stays opaque', () => {
     expect(mixOnPaper('#ffffff', 1)).toBe('#ffffff');   // volle Deckkraft = Originalfarbe
     expect(mixOnPaper('#ffffff', 0)).toBe('#1d1b21');   // keine Deckkraft = reiner Papierton

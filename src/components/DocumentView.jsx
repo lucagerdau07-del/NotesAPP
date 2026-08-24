@@ -281,7 +281,7 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onOpenPick
 const baseWidth = 800;
 const pageHeight = baseWidth * 1.414;
 
-export default function DocumentView({ masterCanvasState, focusBoxState, toolbarState, padActionsRef, onBack }) {
+export default function DocumentView({ inkController, masterCanvasState, focusBoxState, toolbarState, padActionsRef, onBack }) {
   const { 
     clearCanvas, undo, redo, canUndo, canRedo
   } = masterCanvasState || {};
@@ -756,7 +756,14 @@ export default function DocumentView({ masterCanvasState, focusBoxState, toolbar
   };
 
   return (
-    <div className={`document-view paper-style-${paperStyle}`} data-testid="document-view" style={{ display: 'flex', height: '100%' }}>
+    <div
+      className={`document-view paper-style-${paperStyle}`}
+      data-testid="document-view"
+      data-document-id={inkController?.document?.documentId}
+      data-input-mode={inkController?.inputMode}
+      data-eraser-mode={inkController?.eraserMode}
+      style={{ display: 'flex', height: '100%' }}
+    >
       <div className="editor-sidebar" style={{ flexShrink: 0, zIndex: 20 }}>
         {onBack && (
           <button className="rail-btn active" onClick={onBack} title="Zurück zur Bibliothek">

@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import DocumentView from './DocumentView';
 import WritingZone from './WritingZone';
-import useMasterCanvas from '../hooks/useMasterCanvas';
+import useInkDocument from '../hooks/useInkDocument';
 import useFocusBox from '../hooks/useFocusBox';
 
 const PAPER_RGB = [0x1d, 0x1b, 0x21];
@@ -16,7 +16,7 @@ export function mixOnPaper(hex, amount) {
   return `#${ch.map(c => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export default function SplitLayout({ activeTab, onBack }) {
+export default function SplitLayout({ activeTab, onBack, documentId }) {
   const [color, setColor] = useState('#EFECE4');
   const [isEraser, setIsEraser] = useState(false);
   const [lineWidth, setLineWidth] = useState(3);
@@ -27,20 +27,12 @@ export default function SplitLayout({ activeTab, onBack }) {
   const [layoutMode, setLayoutMode] = useState('full'); // 'full' | 'split'
   const [tool, setTool] = useState('pen'); // 'pen' | 'highlighter' | 'fountain' | 'pencil'
 
-  // Textmarker = breiter Strich in gedecktem Ton. Bewusst deckend statt mit
-  // Alpha: sonst stapeln sich die Liniensegmente eines Strichs sichtbar.
-  // ponytail: echtes Durchscheinen bräuchte Strich-als-ein-Pfad in der
-  // Canvas-Engine — nachrüsten, falls Marker über Text liegen soll.
-  const isHighlighter = tool === 'highlighter';
-  const effectiveColor = isHighlighter ? mixOnPaper(color, 0.4) : color;
-  const effectiveWidth = isHighlighter ? lineWidth * 5 : lineWidth;
-
-  const toolbarState = {
-    color: effectiveColor, setColor,
+  const toolState = {
+    color, setColor,
     rawColor: color,
     tool, setTool,
     isEraser, setIsEraser,
-    lineWidth: effectiveWidth, 
+    lineWidth,
     rawLineWidth: lineWidth,
     setLineWidth,
     eraserWidth, setEraserWidth,
@@ -50,16 +42,16 @@ export default function SplitLayout({ activeTab, onBack }) {
     layoutMode, setLayoutMode
   };
 
-  const masterCanvasState = useMasterCanvas();
+  const inkController = useInkDocument({ documentId });
   const focusBoxState = useFocusBox();
   const padActionsRef = useRef(null);
 
   if (activeTab === 'smartCanvas') {
     return (
       <div className={`split-layout ${layoutMode === 'split' ? '' : 'full-mode'}`}>
-        <DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} padActionsRef={padActionsRef} onBack={onBack} />
+        <DocumentView inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} padActionsRef={padActionsRef} onBack={onBack} />
         {layoutMode === 'split' && (
-          <WritingZone masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={toolbarState} padActionsRef={padActionsRef} />
+          <WritingZone inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} padActionsRef={padActionsRef} />
         )}
       </div>
     );

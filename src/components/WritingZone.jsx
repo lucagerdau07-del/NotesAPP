@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import useCanvas from '../hooks/useCanvas';
 
-export default function WritingZone({ masterCanvasState, focusBoxState, toolbarState, padActionsRef }) {
+export default function WritingZone({ inkController, masterCanvasState, focusBoxState, toolbarState, padActionsRef }) {
   const loadedStateRef = useRef({ fb: null, ids: [], liveAddedIds: [] });
 
 
@@ -190,7 +190,14 @@ export default function WritingZone({ masterCanvasState, focusBoxState, toolbarS
   const paperBgColor = paperStyle === 'grid' ? '#1a1820' : '#1D1B21';
 
   return (
-    <div className={`writing-zone`} data-testid="writing-zone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f0e11', backgroundImage: 'none' }}>
+    <div
+      className="writing-zone"
+      data-testid="writing-zone"
+      data-document-id={inkController?.document?.documentId}
+      data-input-mode={inkController?.inputMode}
+      data-eraser-mode={inkController?.eraserMode}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f0e11', backgroundImage: 'none' }}
+    >
       <div style={{ 
         position: 'relative',
         maxWidth: '100%', 
