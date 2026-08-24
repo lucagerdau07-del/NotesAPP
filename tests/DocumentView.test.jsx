@@ -298,6 +298,67 @@ test('keeps a pinch-resized focus rectangle inside its selected page', () => {
   });
 });
 
+test('cancels focus drag resources on document replacement and unmount', () => {
+  const frames = [];
+  let nextFrameId = 1;
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    frames.push(callback);
+    return nextFrameId++;
+  });
+  const cancelFrame = vi.spyOn(globalThis, 'cancelAnimationFrame');
+  const setFocusBox = vi.fn();
+  const focusBoxState = {
+    focusBox: { pageId: 'page-1', x: 50, y: 50, width: 250, height: 100 },
+    setFocusBox,
+  };
+  const firstController = createControllerDouble();
+  const view = render(<DocumentView
+    inkController={firstController}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const addListener = vi.spyOn(document, 'addEventListener');
+  const removeListener = vi.spyOn(document, 'removeEventListener');
+  const scroller = screen.getByTestId('document-page').parentElement;
+  mockRect(scroller, { left: 0, top: 0, width: 500, height: 500 });
+
+  fireEvent.pointerDown(screen.getByTestId('focus-box'), {
+    pointerId: 21, pointerType: 'mouse', clientX: 10, clientY: 10,
+  });
+  const replacedDocumentFrame = frames[0];
+  expect(addListener).toHaveBeenCalledWith('pointermove', expect.any(Function));
+  expect(addListener).toHaveBeenCalledWith('pointerup', expect.any(Function));
+  expect(addListener).toHaveBeenCalledWith('pointercancel', expect.any(Function));
+
+  view.rerender(<DocumentView
+    inkController={createControllerDouble({
+      document: { ...firstController.document, documentId: 'note-2' },
+    })}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+
+  expect(cancelFrame).toHaveBeenCalledWith(1);
+  expect(removeListener).toHaveBeenCalledWith('pointermove', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pointerup', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pointercancel', expect.any(Function));
+  setFocusBox.mockClear();
+  replacedDocumentFrame();
+  expect(setFocusBox).not.toHaveBeenCalled();
+
+  fireEvent.pointerDown(screen.getByTestId('focus-box'), {
+    pointerId: 22, pointerType: 'mouse', clientX: 10, clientY: 10,
+  });
+  const unmountedFrame = frames.at(-1);
+  const unmountedFrameId = nextFrameId - 1;
+  view.unmount();
+
+  expect(cancelFrame).toHaveBeenCalledWith(unmountedFrameId);
+  setFocusBox.mockClear();
+  unmountedFrame();
+  expect(setFocusBox).not.toHaveBeenCalled();
+});
+
 test('keeps a surviving finger in navigation after pinch until a fresh touch starts drawing', () => {
   vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
     callback();
