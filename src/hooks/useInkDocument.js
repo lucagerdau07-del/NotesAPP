@@ -9,7 +9,15 @@ import {
 import { createInkRepository } from '../ink/inkRepository.js';
 
 const browserInkRepository = createInkRepository(globalThis.localStorage);
-const defaultPreferences = { inputMode: 'stylus', eraserMode: 'pixel' };
+const supportedTools = new Set(['pen', 'fountain', 'pencil', 'highlighter']);
+const defaultPreferences = {
+  tool: 'pen',
+  color: '#EFECE4',
+  penWidth: 3,
+  eraserWidth: 15,
+  inputMode: 'stylus',
+  eraserMode: 'pixel'
+};
 
 function createHistoryForDocument(repository, documentId) {
   try {
@@ -19,11 +27,15 @@ function createHistoryForDocument(repository, documentId) {
   }
 }
 
-function loadPreferences(repository) {
+function loadPreferences(repository, documentId) {
   try {
-    return { ...defaultPreferences, ...repository.loadPreferences() };
+    return {
+      documentId,
+      ...defaultPreferences,
+      ...repository.loadPreferences(documentId)
+    };
   } catch {
-    return { ...defaultPreferences };
+    return { documentId, ...defaultPreferences };
   }
 }
 
@@ -43,12 +55,15 @@ export default function useInkDocument({ documentId, repository = browserInkRepo
   repositoryRef.current = repository;
 
   const [history, setHistory] = useState(() => createHistoryForDocument(repository, activeDocumentId));
-  const [preferences, setPreferences] = useState(() => loadPreferences(repository));
+  const [preferences, setPreferences] = useState(() => loadPreferences(repository, activeDocumentId));
 
   // A render-phase update makes the new note available in this same render,
   // rather than letting callbacks briefly target the previously displayed note.
   if (history.present.documentId !== activeDocumentId) {
     setHistory(createHistoryForDocument(repository, activeDocumentId));
+  }
+  if (preferences.documentId !== activeDocumentId) {
+    setPreferences(loadPreferences(repository, activeDocumentId));
   }
 
   const applyCommand = useCallback(command => {
@@ -84,14 +99,41 @@ export default function useInkDocument({ documentId, repository = browserInkRepo
       ? redoInkHistory(current)
       : current);
   }, []);
+  const updatePreference = useCallback((key, value) => {
+    setPreferences(current => {
+      const documentId = documentIdRef.current;
+      const activePreferences = current.documentId === documentId
+        ? current
+        : loadPreferences(repositoryRef.current, documentId);
+      return activePreferences[key] === value
+        ? activePreferences
+        : { ...activePreferences, [key]: value };
+    });
+  }, []);
+  const setTool = useCallback(tool => {
+    if (!supportedTools.has(tool)) return;
+    updatePreference('tool', tool);
+  }, [updatePreference]);
+  const setColor = useCallback(color => {
+    if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return;
+    updatePreference('color', color);
+  }, [updatePreference]);
+  const setPenWidth = useCallback(penWidth => {
+    if (!Number.isFinite(penWidth) || penWidth <= 0) return;
+    updatePreference('penWidth', penWidth);
+  }, [updatePreference]);
+  const setEraserWidth = useCallback(eraserWidth => {
+    if (!Number.isFinite(eraserWidth) || eraserWidth <= 0) return;
+    updatePreference('eraserWidth', eraserWidth);
+  }, [updatePreference]);
   const setInputMode = useCallback(inputMode => {
     if (inputMode !== 'stylus' && inputMode !== 'finger') return;
-    setPreferences(current => current.inputMode === inputMode ? current : { ...current, inputMode });
-  }, []);
+    updatePreference('inputMode', inputMode);
+  }, [updatePreference]);
   const setEraserMode = useCallback(eraserMode => {
     if (eraserMode !== 'pixel' && eraserMode !== 'stroke') return;
-    setPreferences(current => current.eraserMode === eraserMode ? current : { ...current, eraserMode });
-  }, []);
+    updatePreference('eraserMode', eraserMode);
+  }, [updatePreference]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -102,10 +144,11 @@ export default function useInkDocument({ documentId, repository = browserInkRepo
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      saveSafely(() => repository.savePreferences(preferences));
+      const { documentId, ...values } = preferences;
+      saveSafely(() => repository.savePreferences(documentId, values));
     }, saveDelay);
     return () => clearTimeout(timer);
-  }, [preferences, repository, saveDelay]);
+  }, [activeDocumentId, preferences, repository, saveDelay]);
 
   return {
     document: history.present,
@@ -117,6 +160,14 @@ export default function useInkDocument({ documentId, repository = browserInkRepo
     redo,
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
+    tool: preferences.tool,
+    setTool,
+    color: preferences.color,
+    setColor,
+    penWidth: preferences.penWidth,
+    setPenWidth,
+    eraserWidth: preferences.eraserWidth,
+    setEraserWidth,
     inputMode: preferences.inputMode,
     setInputMode,
     eraserMode: preferences.eraserMode,

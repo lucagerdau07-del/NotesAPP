@@ -28,6 +28,19 @@ function validStroke(id, pageId = 'note-page-1') {
   };
 }
 
+const defaultPreferences = {
+  tool: 'pen',
+  color: '#EFECE4',
+  penWidth: 3,
+  eraserWidth: 15,
+  inputMode: 'stylus',
+  eraserMode: 'pixel',
+};
+
+function preferences(overrides = {}) {
+  return { ...defaultPreferences, ...overrides };
+}
+
 function createSeededRepository(documentId) {
   const storage = createMemoryStorage();
   const repository = createInkRepository(storage);
@@ -36,7 +49,14 @@ function createSeededRepository(documentId) {
     { type: 'commit-stroke', stroke: validStroke('saved', `${documentId}-page-1`) }
   );
   repository.saveHistory(documentId, saved);
-  repository.savePreferences({ inputMode: 'finger', eraserMode: 'stroke' });
+  repository.savePreferences(documentId, preferences({
+    tool: 'highlighter',
+    color: '#3E7BD8',
+    penWidth: 24,
+    eraserWidth: 18,
+    inputMode: 'finger',
+    eraserMode: 'stroke',
+  }));
   return repository;
 }
 
@@ -63,8 +83,14 @@ describe('useInkDocument', () => {
     const { result } = renderHook(() => useInkDocument({ documentId: 'note', repository, saveDelay: 0 }));
 
     expect(result.current.document.strokes.map(stroke => stroke.id)).toEqual(['saved']);
-    expect(result.current.inputMode).toBe('finger');
-    expect(result.current.eraserMode).toBe('stroke');
+    expect(result.current).toMatchObject({
+      tool: 'highlighter',
+      color: '#3E7BD8',
+      penWidth: 24,
+      eraserWidth: 18,
+      inputMode: 'finger',
+      eraserMode: 'stroke',
+    });
   });
 
   it('switches documents before a stable command can modify stale note state', () => {
@@ -93,6 +119,10 @@ describe('useInkDocument', () => {
       addPage: result.current.addPage,
       undo: result.current.undo,
       redo: result.current.redo,
+      setTool: result.current.setTool,
+      setColor: result.current.setColor,
+      setPenWidth: result.current.setPenWidth,
+      setEraserWidth: result.current.setEraserWidth,
       setInputMode: result.current.setInputMode,
       setEraserMode: result.current.setEraserMode
     };
@@ -106,6 +136,10 @@ describe('useInkDocument', () => {
     expect(result.current.addPage).toBe(callbacks.addPage);
     expect(result.current.undo).toBe(callbacks.undo);
     expect(result.current.redo).toBe(callbacks.redo);
+    expect(result.current.setTool).toBe(callbacks.setTool);
+    expect(result.current.setColor).toBe(callbacks.setColor);
+    expect(result.current.setPenWidth).toBe(callbacks.setPenWidth);
+    expect(result.current.setEraserWidth).toBe(callbacks.setEraserWidth);
     expect(result.current.setInputMode).toBe(callbacks.setInputMode);
     expect(result.current.setEraserMode).toBe(callbacks.setEraserMode);
   });
@@ -117,16 +151,59 @@ describe('useInkDocument', () => {
 
     act(() => {
       result.current.commitStroke(validStroke('a'));
+      result.current.setTool('pencil');
+      result.current.setColor('#112233');
+      result.current.setPenWidth(5);
+      result.current.setEraserWidth(22);
       result.current.setInputMode('finger');
       result.current.setEraserMode('stroke');
     });
     act(() => vi.advanceTimersByTime(24));
     expect(repository.loadHistory('note')).toBeNull();
-    expect(repository.loadPreferences()).toEqual({ inputMode: 'stylus', eraserMode: 'pixel' });
+    expect(repository.loadPreferences('note')).toEqual(defaultPreferences);
 
     act(() => vi.advanceTimersByTime(1));
     expect(repository.loadHistory('note').present.strokes.map(stroke => stroke.id)).toEqual(['a']);
-    expect(repository.loadPreferences()).toEqual({ inputMode: 'finger', eraserMode: 'stroke' });
+    expect(repository.loadPreferences('note')).toEqual({
+      tool: 'pencil',
+      color: '#112233',
+      penWidth: 5,
+      eraserWidth: 22,
+      inputMode: 'finger',
+      eraserMode: 'stroke',
+    });
+  });
+
+  it('switches full preferences synchronously and keeps stable setters scoped to the current note', () => {
+    vi.useFakeTimers();
+    const repository = createInkRepository(createMemoryStorage());
+    repository.savePreferences('note-a', preferences({
+      tool: 'highlighter', color: '#3E7BD8', penWidth: 24, eraserWidth: 18,
+      inputMode: 'finger', eraserMode: 'stroke',
+    }));
+    repository.savePreferences('note-b', preferences({
+      tool: 'pencil', color: '#D8615B', penWidth: 5, eraserWidth: 30,
+    }));
+    const { result, rerender } = renderHook(
+      ({ documentId }) => useInkDocument({ documentId, repository, saveDelay: 25 }),
+      { initialProps: { documentId: 'note-a' } }
+    );
+    const setColor = result.current.setColor;
+
+    expect(result.current).toMatchObject({
+      tool: 'highlighter', color: '#3E7BD8', penWidth: 24, eraserWidth: 18,
+      inputMode: 'finger', eraserMode: 'stroke',
+    });
+    rerender({ documentId: 'note-b' });
+    expect(result.current).toMatchObject({
+      tool: 'pencil', color: '#D8615B', penWidth: 5, eraserWidth: 30,
+      inputMode: 'stylus', eraserMode: 'pixel',
+    });
+
+    act(() => setColor('#112233'));
+    act(() => vi.advanceTimersByTime(25));
+    expect(repository.loadPreferences('note-a').color).toBe('#3E7BD8');
+    expect(repository.loadPreferences('note-b').color).toBe('#112233');
   });
 
   it('cancels pending saves on cleanup', () => {

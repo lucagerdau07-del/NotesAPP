@@ -968,6 +968,10 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
       className={`document-view paper-style-${paperStyle}`}
       data-testid="document-view"
       data-document-id={inkController?.document?.documentId}
+      data-tool={tool}
+      data-color={penColor}
+      data-pen-width={rawLineWidth ?? lineWidth}
+      data-eraser-width={eraserWidth}
       data-input-mode={inkController?.inputMode}
       data-eraser-mode={inkController?.eraserMode}
       data-stroke-count={inkDocument.strokes.length}

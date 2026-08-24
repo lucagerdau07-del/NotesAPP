@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DocumentView from '../src/components/DocumentView.jsx';
 import SplitLayout from '../src/components/SplitLayout.jsx';
+import { createInkRepository } from '../src/ink/inkRepository.js';
 
 function controllerWithPages(pageIds) {
   return {
@@ -72,6 +73,18 @@ function drawPointerStroke(target, { pointerId, pointerType }) {
   fireEvent.pointerUp(target, {
     pointerId, pointerType, clientX: 80, clientY: 80,
   });
+}
+
+function fullPreferences(overrides = {}) {
+  return {
+    tool: 'pen',
+    color: '#EFECE4',
+    penWidth: 3,
+    eraserWidth: 15,
+    inputMode: 'stylus',
+    eraserMode: 'pixel',
+    ...overrides,
+  };
 }
 
 describe('full-document ink workspace', () => {
@@ -249,6 +262,72 @@ describe('full-document ink workspace', () => {
 
     render(<SplitLayout activeTab="smartCanvas" documentId="other-note" />);
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-stroke-count', '0');
+  });
+
+  it('restores all note-specific preferences across document rerenders and remounts', () => {
+    const repository = createInkRepository(localStorage);
+    repository.savePreferences('note-a', fullPreferences({
+      tool: 'highlighter', color: '#3E7BD8', penWidth: 24, eraserWidth: 18,
+      inputMode: 'finger', eraserMode: 'stroke',
+    }));
+    repository.savePreferences('note-b', fullPreferences({
+      tool: 'pencil', color: '#D8615B', penWidth: 5, eraserWidth: 30,
+    }));
+    const view = render(<SplitLayout activeTab="smartCanvas" documentId="note-a" />);
+
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-tool', 'highlighter');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-color', '#3E7BD8');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-pen-width', '24');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-width', '18');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'finger');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'stroke');
+
+    view.rerender(<SplitLayout activeTab="smartCanvas" documentId="note-b" />);
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-tool', 'pencil');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-color', '#D8615B');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-pen-width', '5');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-width', '30');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'stylus');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'pixel');
+
+    view.unmount();
+    render(<SplitLayout activeTab="smartCanvas" documentId="note-a" />);
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-tool', 'highlighter');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-color', '#3E7BD8');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-pen-width', '24');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-width', '18');
+  });
+
+  it('persists toolbar changes and restores them after an editor reload', async () => {
+    const view = render(<SplitLayout activeTab="smartCanvas" documentId="preference-note" />);
+
+    fireEvent.click(screen.getByTitle('Textmarker'));
+    fireEvent.click(screen.getByTitle('24px'));
+    fireEvent.click(screen.getByTestId('color-slot-1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Fingermodus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Radiermodus: Pixel' }));
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('notes-app:ink-preferences:preference-note'));
+      expect(saved).toMatchObject({
+        version: 1,
+        tool: 'highlighter',
+        color: '#3E7BD8',
+        penWidth: 24,
+        eraserWidth: 15,
+        inputMode: 'finger',
+        eraserMode: 'stroke',
+      });
+    });
+    view.unmount();
+
+    render(<SplitLayout activeTab="smartCanvas" documentId="preference-note" />);
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-tool', 'highlighter');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-color', '#3E7BD8');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-pen-width', '24');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-width', '15');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'finger');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'stroke');
   });
 
   it('commits focus ink into the same controller and one undo removes it everywhere', () => {
