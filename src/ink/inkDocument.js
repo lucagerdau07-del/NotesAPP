@@ -132,11 +132,15 @@ export function createInkHistory(document, limit = 100) {
   return { past: [], present: document, future: [], limit: Math.max(0, parsedLimit) };
 }
 
+function appendBoundedPast(past, present, limit) {
+  return limit === 0 ? [] : [...past, present].slice(-limit);
+}
+
 export function executeInkCommand(history, command) {
   const next = applyInkCommand(history.present, command);
   if (next === history.present) return history;
   return {
-    past: [...history.past, history.present].slice(-history.limit),
+    past: appendBoundedPast(history.past, history.present, history.limit),
     present: next,
     future: [],
     limit: history.limit
@@ -158,7 +162,7 @@ export function redoInkHistory(history) {
   if (history.future.length === 0) return history;
   const [present, ...future] = history.future;
   return {
-    past: [...history.past, history.present].slice(-history.limit),
+    past: appendBoundedPast(history.past, history.present, history.limit),
     present,
     future,
     limit: history.limit

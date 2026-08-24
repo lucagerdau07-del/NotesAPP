@@ -85,6 +85,16 @@ describe('ink command history', () => {
     expect(history.present.strokes.map(item => item.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('retains no past snapshots when history is disabled with a zero limit', () => {
+    let history = createInkHistory(createInkDocument('note'), 0);
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
+    expect(history.past).toEqual([]);
+    history = undoInkHistory(history);
+    expect(history.past).toEqual([]);
+    history = redoInkHistory(history);
+    expect(history.past).toEqual([]);
+  });
+
   it('removes selected strokes and clears all strokes without mutating prior snapshots', () => {
     let history = createInkHistory(createInkDocument('note'));
     history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
