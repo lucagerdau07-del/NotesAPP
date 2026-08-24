@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   Eraser, Trash2, Undo2, Redo2, Lasso, Highlighter, PenLine, 
   Layers, AlignJustify, File, Grid, Columns2, ArrowLeft, 
@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
+import useInkPointer from '../hooks/useInkPointer';
+import { mapViewportPoint } from '../ink/pageCoordinates';
+import { renderInkDocument, resizeInkCanvas } from '../ink/renderInk';
 
 function PenSettingsPopover({
   tool,
@@ -280,11 +283,23 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onOpenPick
 
 const baseWidth = 800;
 const pageHeight = baseWidth * 1.414;
+const PAGE_GAP = 28;
+const maxPages = 20;
+const emptyDocument = {
+  version: 1,
+  documentId: '',
+  pages: [{ id: 'empty-page-1' }],
+  strokes: [],
+  updatedAt: 0,
+};
 
-export default function DocumentView({ inkController, masterCanvasState, focusBoxState, toolbarState, padActionsRef, onBack }) {
-  const { 
-    clearCanvas, undo, redo, canUndo, canRedo
-  } = masterCanvasState || {};
+function relativePoint(element, event) {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+export default function DocumentView({ inkController, focusBoxState, toolbarState, onBack }) {
   const { 
     color, setColor, 
     isEraser, setIsEraser, 
@@ -293,8 +308,14 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
     isSelectMode, setIsSelectMode,
     paperStyle, setPaperStyle,
     layoutMode, setLayoutMode,
-    rawColor, tool, setTool
+    rawColor, tool, setTool,
+    showPageBreaks, setShowPageBreaks
   } = toolbarState || {};
+  const inkDocument = inkController?.document || emptyDocument;
+  const pageIds = inkDocument.pages.map(page => page.id);
+  const pagesCount = pageIds.length;
+  const canUndo = inkController?.canUndo;
+  const canRedo = inkController?.canRedo;
   const penColor = rawColor ?? color;
   const isFullMode = layoutMode !== 'split';
   const [customColors, setCustomColors] = useState(['#EFECE4', '#3E7BD8', '#D8615B', '#4FA66B', '#D4A937']);
@@ -305,7 +326,6 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   const toastTimeoutRef = useRef(null);
 
   const [zoom, setZoom] = useState(1);
-  const [pagesCount, setPagesCount] = useState(1);
   const pagesCountRef = useRef(1);
   useEffect(() => { pagesCountRef.current = pagesCount; }, [pagesCount]);
 
@@ -318,16 +338,13 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   };
 
   const handleUndo = () => {
-    undo?.();
-    padActionsRef?.current?.undo?.();
+    inkController?.undo?.();
   };
   const handleRedo = () => {
-    redo?.();
-    padActionsRef?.current?.redo?.();
+    inkController?.redo?.();
   };
   const handleClearCanvas = () => {
-    clearCanvas?.();
-    padActionsRef?.current?.clearCanvas?.();
+    inkController?.clearDocument?.();
   };
 
   const cyclePaperStyle = () => {
@@ -364,7 +381,62 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   const [draftFocusBox, setDraftFocusBox] = useState(null);
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
-  const drawStateRef = useRef({ active: false, x: 0, y: 0 });
+  const inkCanvasRef = useRef(null);
+  const documentHeight = pageHeight * pagesCount;
+  const totalDocumentHeight = showPageBreaks
+    ? pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP
+    : documentHeight * zoom;
+  const pageLayout = {
+    pageIds,
+    pageWidth: baseWidth,
+    pageHeight,
+    pageGap: PAGE_GAP,
+    zoom,
+    showPageBreaks: Boolean(showPageBreaks),
+  };
+  const inkTool = isEraser
+    ? (inkController?.eraserMode === 'stroke' ? 'stroke-eraser' : 'pixel-eraser')
+    : (tool || 'pen');
+  const inkPointer = useInkPointer({
+    inputMode: inkController?.inputMode || 'stylus',
+    tool: inkTool,
+    eraserMode: inkController?.eraserMode || 'pixel',
+    color: penColor || '#EFECE4',
+    width: isEraser ? (eraserWidth || 15) : (rawLineWidth ?? lineWidth ?? 3),
+    mapPoint: event => mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
+    document: inkDocument,
+    commitStroke: inkController?.commitStroke,
+    removeStrokes: inkController?.removeStrokes,
+  });
+
+  useLayoutEffect(() => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return undefined;
+
+    const redraw = () => {
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      const cssWidth = baseWidth * zoom;
+      const cssHeight = totalDocumentHeight;
+      const dpr = globalThis.devicePixelRatio || 1;
+      resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
+      const previewDocument = inkPointer.draftStroke && inkTool !== 'stroke-eraser'
+        ? { ...inkDocument, strokes: [...inkDocument.strokes, inkPointer.draftStroke] }
+        : inkDocument;
+      renderInkDocument(context, previewDocument, {
+        ...pageLayout,
+        cssWidth,
+        cssHeight,
+        dpr,
+      });
+    };
+
+    redraw();
+    const observer = new ResizeObserver(redraw);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [inkDocument, inkPointer.draftStroke, inkTool, pagesCount, showPageBreaks, totalDocumentHeight, zoom]);
+
   // Im Vollmodus füllt das Papier immer die Breite; gescrollt wird vertikal.
   useEffect(() => {
     if (!isFullMode) return;
@@ -379,32 +451,8 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
     return () => ro.disconnect();
   }, [isFullMode]);
 
-  const handleDrawStart = (e) => {
-    if (!isFullMode || isSelectMode || !masterCanvasState) return;
-    e.target.setPointerCapture?.(e.pointerId);
-    const rect = containerRef.current.getBoundingClientRect();
-    drawStateRef.current = { active: true, x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
-  };
-
-  const handleDrawMove = (e) => {
-    if (!drawStateRef.current.active || !masterCanvasState) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
-    const width = isEraser ? eraserWidth : lineWidth;
-    masterCanvasState.drawLine(drawStateRef.current.x, drawStateRef.current.y, x, y, color, width, isEraser);
-    drawStateRef.current = { active: true, x, y };
-  };
-
-  const handleDrawEnd = () => {
-    if (drawStateRef.current.active) {
-      masterCanvasState?.endStroke?.();
-    }
-    drawStateRef.current = { active: false, x: 0, y: 0 };
-  };
-
   const handlePointerDown = (e) => {
-    if (!isSelectMode) { handleDrawStart(e); return; }
+    if (!isSelectMode) { inkPointer.onPointerDown(e); return; }
     const rect = containerRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
@@ -412,7 +460,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   };
 
   const handlePointerMove = (e) => {
-    if (!isSelectMode) { handleDrawMove(e); return; }
+    if (!isSelectMode) { inkPointer.onPointerMove(e); return; }
     if (!draftFocusBox) return;
     const rect = containerRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(baseWidth, (e.clientX - rect.left) / zoom));
@@ -428,7 +476,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   };
 
   const handlePointerUp = (e) => {
-    if (!isSelectMode) { handleDrawEnd(e); return; }
+    if (!isSelectMode) { inkPointer.onPointerUp(e); return; }
     if (!draftFocusBox) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
@@ -442,6 +490,11 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
     setIsSelectMode?.(false);
   };
 
+  const handlePointerCancel = (e) => {
+    if (!isSelectMode) inkPointer.onPointerCancel(e);
+    else setDraftFocusBox(null);
+  };
+
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
   const focusBoxRef = useRef(null);
@@ -449,6 +502,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   const wheelTimeout = useRef(null);
 
   const handleGestureStart = (e) => {
+    if (e.pointerType !== 'touch') return;
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     
     if (activePointers.current.size === 2) {
@@ -470,6 +524,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   };
 
   const handleGestureMove = (e) => {
+    if (e.pointerType !== 'touch') return;
     if (activePointers.current.has(e.pointerId)) {
       activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
@@ -590,6 +645,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
   }, [focusBoxState]);
 
   const handleGestureEnd = (e) => {
+    if (e.pointerType !== 'touch') return;
     activePointers.current.delete(e.pointerId);
     if (activePointers.current.size < 2) {
       pinchInitialData.current = null;
@@ -674,14 +730,10 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
         // Auto-expand in continuous mode if near the document bottom
         if (!showPageBreaks) {
           const currentBoxBottom = newY + focusBoxState.focusBox.height;
-          setPagesCount(prevCount => {
-            if (prevCount >= maxPages) return prevCount;
-            const currentDocHeight = pageHeight * prevCount;
-            if (currentBoxBottom > currentDocHeight - 400) {
-              return prevCount + 1;
-            }
-            return prevCount;
-          });
+          const currentDocHeight = pageHeight * pagesCountRef.current;
+          if (pagesCountRef.current < maxPages && currentBoxBottom > currentDocHeight - 400) {
+            inkController?.addPage?.();
+          }
         }
       }
       animationFrameId = requestAnimationFrame(doScroll);
@@ -710,13 +762,6 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointercancel', onPointerUp);
   };
-
-
-  const { showPageBreaks, setShowPageBreaks } = toolbarState || {};
-  const maxPages = 20;
-  const PAGE_GAP = 28;
-  const documentHeight = pageHeight * pagesCount;
-  const totalDocumentHeight = showPageBreaks ? (pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP) : (documentHeight * zoom);
 
   const getStaticBackgroundStyles = () => {
     const redMarginLine = `linear-gradient(to right, transparent, transparent 88px, oklch(0.62 0.09 26/.38) 88px, oklch(0.62 0.09 26/.38) 89.5px, transparent 89.5px)`;
@@ -762,6 +807,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
       data-document-id={inkController?.document?.documentId}
       data-input-mode={inkController?.inputMode}
       data-eraser-mode={inkController?.eraserMode}
+      data-stroke-count={inkDocument.strokes.length}
       style={{ display: 'flex', height: '100%' }}
     >
       <div className="editor-sidebar" style={{ flexShrink: 0, zIndex: 20 }}>
@@ -831,6 +877,28 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
           title="Radiergummi"
         >
           <Eraser size={18} />
+        </button>
+        <button
+          className={`rail-btn ${inkController?.inputMode === 'finger' ? 'active' : ''}`}
+          onClick={() => inkController?.setInputMode?.(
+            inkController.inputMode === 'finger' ? 'stylus' : 'finger'
+          )}
+          aria-label="Fingermodus"
+          aria-pressed={inkController?.inputMode === 'finger'}
+          title="Fingermodus"
+        >
+          <Pencil size={18} />
+        </button>
+        <button
+          className={`rail-btn ${inkController?.eraserMode === 'stroke' ? 'active' : ''}`}
+          onClick={() => inkController?.setEraserMode?.(
+            inkController.eraserMode === 'stroke' ? 'pixel' : 'stroke'
+          )}
+          aria-label={`Radiermodus: ${inkController?.eraserMode === 'stroke' ? 'Strich' : 'Pixel'}`}
+          aria-pressed={inkController?.eraserMode === 'stroke'}
+          title={`Radiermodus: ${inkController?.eraserMode === 'stroke' ? 'Strich' : 'Pixel'}`}
+        >
+          <Eraser size={16} />
         </button>
         {!isFullMode && (
           <button
@@ -970,8 +1038,8 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
           // Notes-App: am unteren Ende wächst das Papier NUR im unendlichen Modus nach.
           if (!showPageBreaks) {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
-            if (scrollHeight - scrollTop - clientHeight < 200) {
-              setPagesCount(prev => Math.min(maxPages, prev + 1));
+            if (scrollHeight - scrollTop - clientHeight < 200 && pagesCount < maxPages) {
+              inkController?.addPage?.();
             }
           }
         }}
@@ -993,7 +1061,7 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
         >
           {/* Paper Background: 1 continuous paper for infinite mode, or discrete page cards with real gaps */}
           {!showPageBreaks ? (
@@ -1080,22 +1148,20 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
               );
             })
           )}
-          {masterCanvasState && (
-            <canvas 
-              ref={masterCanvasState.masterCanvasRef} 
-              className="master-canvas"
-              data-testid="master-canvas"
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                touchAction: 'none',
-                pointerEvents: 'none'
-              }}
-            />
-          )}
+          <canvas
+            ref={inkCanvasRef}
+            className="master-canvas"
+            data-testid="ink-canvas"
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              touchAction: 'none',
+              pointerEvents: 'none'
+            }}
+          />
           {!isFullMode && focusBoxState && focusBoxState.focusBox && (
             <div
               ref={focusBoxRef}
@@ -1147,15 +1213,12 @@ export default function DocumentView({ inkController, masterCanvasState, focusBo
             <button
               className="add-page-btn"
               onClick={() => {
-                setPagesCount(p => {
-                  const next = Math.min(maxPages, p + 1);
-                  setTimeout(() => {
-                    if (scrollRef.current) {
-                      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-                    }
-                  }, 50);
-                  return next;
-                });
+                inkController?.addPage?.();
+                setTimeout(() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                  }
+                }, 50);
               }}
               style={{
                 display: 'inline-flex',
