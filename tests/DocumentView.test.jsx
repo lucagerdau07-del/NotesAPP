@@ -98,6 +98,34 @@ test('renders DocumentView with ink canvas and focus box', () => {
   expect(focusBox.style.height).toBe('100px');
 });
 
+test('exposes the focus rectangle as a named keyboard-movable region with page bounds', () => {
+  function KeyboardFocusHarness() {
+    const [focusBox, setFocusBox] = useState({
+      pageId: 'page-1', x: 590, y: 1025, width: 200, height: 100,
+    });
+    return <DocumentView
+      inkController={createControllerDouble()}
+      focusBoxState={{ focusBox, setFocusBox }}
+      toolbarState={toolState({ layoutMode: 'split' })}
+    />;
+  }
+
+  render(<KeyboardFocusHarness />);
+  const focusBox = screen.getByRole('region', { name: 'Fokusbereich' });
+  expect(focusBox).toHaveAttribute('tabindex', '0');
+  focusBox.focus();
+  expect(focusBox).toHaveFocus();
+
+  fireEvent.keyDown(focusBox, { key: 'ArrowRight', shiftKey: true });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ left: '600px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowDown' });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ top: '1031.2px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowLeft' });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ left: '590px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowUp', shiftKey: true });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ top: '981.2px' });
+});
+
 test('renders DocumentView without crashing when states are missing', () => {
   render(<DocumentView />);
   const documentView = screen.getByTestId('document-view');
