@@ -70,4 +70,16 @@ describe('pointer admission and ownership policy', () => {
     result = reducePointerInput(result.state, event('cancel', 2, 'touch'), 'stylus');
     expect(result.state.touchPointerIds).toEqual([]);
   });
+
+  it('aborts a finger draft without losing its still-active touch navigation state', () => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch'), 'finger');
+    result = reducePointerInput(result.state, event('abort', 1, 'touch'), 'finger');
+    expect(result.intent).toBe('cancel-draw');
+    expect(result.state.drawingPointerId).toBeNull();
+    expect(result.state.touchPointerIds).toEqual([1]);
+
+    result = reducePointerInput(result.state, event('down', 2, 'touch'), 'finger');
+    expect(result.intent).toBe('navigate');
+    expect(result.state.drawingPointerId).toBeNull();
+  });
 });

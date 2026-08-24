@@ -46,6 +46,9 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
     }
 
     if (canStart) {
+      if (event.pointerType === 'touch' && state.touchPointerIds.some(pointerId => pointerId !== event.pointerId)) {
+        return { state: nextState, intent: 'navigate' };
+      }
       return {
         state: {
           ...nextState,
@@ -61,6 +64,12 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
 
   if (isOwner) {
     if (event.phase === 'move') return { state: nextState, intent: 'continue-draw' };
+    if (event.phase === 'abort') {
+      return {
+        state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
+        intent: 'cancel-draw',
+      };
+    }
     if (event.phase === 'up') {
       return {
         state: { ...nextState, drawingPointerId: null, drawingPointerType: null },

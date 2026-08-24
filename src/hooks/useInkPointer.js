@@ -17,7 +17,9 @@ function mappedPoint(value) {
 }
 
 function selectedTool(tool) {
-  return tool === 'eraser' || tool === 'pixel-eraser' ? 'pixel-eraser' : tool;
+  return tool === 'eraser' || tool === 'pixel-eraser' || tool === 'stroke-eraser'
+    ? 'pixel-eraser'
+    : tool;
 }
 
 export default function useInkPointer(options) {
@@ -37,14 +39,7 @@ export default function useInkPointer(options) {
     }
   }, []);
 
-  const discardDraft = useCallback(({ clearOwner = false } = {}) => {
-    if (clearOwner) {
-      inputStateRef.current = {
-        ...inputStateRef.current,
-        drawingPointerId: null,
-        drawingPointerType: null,
-      };
-    }
+  const discardDraft = useCallback(() => {
     draftRef.current = null;
     strokeEraserRef.current = false;
     setDraftStroke(null);
@@ -62,6 +57,11 @@ export default function useInkPointer(options) {
     return routed;
   }, []);
 
+  const abortDraft = useCallback(event => {
+    route(event, 'abort');
+    discardDraft();
+  }, [discardDraft, route]);
+
   const onPointerDown = useCallback(event => {
     const routed = route(event, 'down');
     if (routed.intent === 'cancel-draw') {
@@ -73,7 +73,7 @@ export default function useInkPointer(options) {
     const current = optionsRef.current;
     const point = mappedPoint(current.mapPoint?.(event));
     if (!point) {
-      discardDraft({ clearOwner: true });
+      abortDraft(event);
       return;
     }
 
@@ -89,14 +89,15 @@ export default function useInkPointer(options) {
       points: [{ x: point.x, y: point.y }],
     };
     draftRef.current = draft;
-    strokeEraserRef.current = tool === 'pixel-eraser' && current.eraserMode === 'stroke';
+    strokeEraserRef.current = current.tool === 'stroke-eraser'
+      || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
     setDraftStroke({ ...draft, points: [...draft.points] });
 
     if (event.currentTarget && typeof event.currentTarget.setPointerCapture === 'function') {
       event.currentTarget.setPointerCapture(event.pointerId);
       captureRef.current = { target: event.currentTarget, pointerId: event.pointerId };
     }
-  }, [discardDraft, route]);
+  }, [abortDraft, discardDraft, route]);
 
   const onPointerMove = useCallback(event => {
     const routed = route(event, 'move');
@@ -109,13 +110,13 @@ export default function useInkPointer(options) {
     const draft = draftRef.current;
     const point = mappedPoint(optionsRef.current.mapPoint?.(event));
     if (!draft || !point || point.pageId !== draft.pageId) {
-      discardDraft({ clearOwner: true });
+      abortDraft(event);
       return;
     }
 
     draft.points.push({ x: point.x, y: point.y });
     setDraftStroke({ ...draft, points: [...draft.points] });
-  }, [discardDraft, route]);
+  }, [abortDraft, discardDraft, route]);
 
   const onPointerUp = useCallback(event => {
     const routed = route(event, 'up');

@@ -139,6 +139,77 @@ describe('useInkPointer', () => {
     expect(commitStroke).not.toHaveBeenCalled();
   });
 
+  it('treats the stroke-eraser integration tool as a hit-test command, never an ink stroke', () => {
+    const document = {
+      strokes: [{
+        id: 'line', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1,
+        points: [{ x: 0, y: 10 }, { x: 100, y: 10 }]
+      }]
+    };
+    const { result, commitStroke, removeStrokes } = renderInkPointer({
+      tool: 'stroke-eraser', width: 8, document
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 52, 13)));
+
+    expect(removeStrokes).toHaveBeenCalledOnce();
+    expect(removeStrokes).toHaveBeenCalledWith(['line']);
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
+  it('keeps a mapped-away first finger as navigation when a second finger goes down', () => {
+    const mapPoint = event => event.pointerId === 1 && event.clientX === 3
+      ? null
+      : { pageId: 'p1', x: event.clientX, y: event.clientY };
+    const { result, commitStroke } = renderInkPointer({ inputMode: 'finger', mapPoint });
+
+    act(() => result.current.onPointerDown(pointer(1, 'touch', 1, 2)));
+    act(() => result.current.onPointerMove(pointer(1, 'touch', 3, 4)));
+    act(() => result.current.onPointerDown(pointer(2, 'touch', 5, 6)));
+    act(() => result.current.onPointerMove(pointer(2, 'touch', 7, 8)));
+    act(() => result.current.onPointerUp(pointer(2, 'touch', 7, 8)));
+
+    expect(result.current.draftStroke).toBeNull();
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
+  it('releases pointer capture when its owner finishes', () => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const { result } = renderInkPointer();
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2, target)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 3, 4, target)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 3, 4, target)));
+
+    expect(target.releasePointerCapture).toHaveBeenCalledOnce();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it('releases pointer capture when input policy cancels its owner', () => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const { result } = renderInkPointer();
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2, target)));
+    act(() => result.current.onPointerCancel(pointer(7, 'pen', 3, 4, target)));
+
+    expect(target.releasePointerCapture).toHaveBeenCalledOnce();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
+  });
+
+  it('cancels and releases a finger draft when a second finger starts', () => {
+    const target = { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() };
+    const { result, commitStroke } = renderInkPointer({ inputMode: 'finger' });
+
+    act(() => result.current.onPointerDown(pointer(1, 'touch', 1, 2, target)));
+    act(() => result.current.onPointerDown(pointer(2, 'touch', 3, 4)));
+
+    expect(result.current.draftStroke).toBeNull();
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
   it('keeps a pixel eraser draft pixel-based when the active mode changes before release', () => {
     const commitStroke = vi.fn();
     const removeStrokes = vi.fn();
