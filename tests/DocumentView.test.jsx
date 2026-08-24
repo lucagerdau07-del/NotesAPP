@@ -206,9 +206,8 @@ test('select mode draws draft focus box and updates focus box state', () => {
 
 test('routes undo, redo, and clear only to the shared controller', () => {
   const controller = createControllerDouble();
-  const padActionsRef = { current: { undo: vi.fn(), clearCanvas: vi.fn() } };
 
-  render(<DocumentView inkController={controller} padActionsRef={padActionsRef} toolbarState={toolState()} />);
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
 
   const undoBtn = screen.getByTitle('Rückgängig');
   const redoBtn = screen.getByTitle('Wiederholen');
@@ -218,11 +217,9 @@ test('routes undo, redo, and clear only to the shared controller', () => {
   fireEvent.click(redoBtn);
   expect(controller.undo).toHaveBeenCalledOnce();
   expect(controller.redo).toHaveBeenCalledOnce();
-  expect(padActionsRef.current.undo).not.toHaveBeenCalled();
 
   fireEvent.click(clearBtn);
   expect(controller.clearDocument).toHaveBeenCalledOnce();
-  expect(padActionsRef.current.clearCanvas).not.toHaveBeenCalled();
 });
 
 test('does not commit touch ink in stylus mode but commits page-local pen ink', () => {
