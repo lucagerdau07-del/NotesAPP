@@ -54,6 +54,26 @@ function fireStroke(target, y1, y2) {
   });
 }
 
+function mockRect(target, rect) {
+  target.getBoundingClientRect = () => ({
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    ...rect,
+  });
+}
+
+function drawPointerStroke(target, { pointerId, pointerType }) {
+  fireEvent.pointerDown(target, {
+    pointerId, pointerType, clientX: 40, clientY: 40,
+  });
+  fireEvent.pointerMove(target, {
+    pointerId, pointerType, clientX: 80, clientY: 80,
+  });
+  fireEvent.pointerUp(target, {
+    pointerId, pointerType, clientX: 80, clientY: 80,
+  });
+}
+
 describe('full-document ink workspace', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => {
@@ -229,5 +249,60 @@ describe('full-document ink workspace', () => {
 
     render(<SplitLayout activeTab="smartCanvas" documentId="other-note" />);
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-stroke-count', '0');
+  });
+
+  it('commits focus ink into the same controller and one undo removes it everywhere', () => {
+    render(<SplitLayout activeTab="smartCanvas" documentId="shared-note" />);
+    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    const focusCanvas = screen.getByTestId('focus-ink-canvas');
+    mockRect(focusCanvas, { left: 0, top: 0, width: 500, height: 200 });
+
+    drawPointerStroke(focusCanvas, { pointerId: 4, pointerType: 'pen' });
+
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-stroke-count', '1');
+    fireEvent.click(screen.getByTitle('Rückgängig'));
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-stroke-count', '0');
+  });
+
+  it('creates and displays a second-page focus rectangle in page-local coordinates', () => {
+    const controller = controllerWithPages(['page-1', 'page-2']);
+    const focusBoxState = {
+      focusBox: { pageId: 'page-2', x: 100, y: 50, width: 250, height: 100 },
+      setFocusBox: vi.fn(),
+    };
+    const selectToolbarState = {
+      ...toolbarState,
+      layoutMode: 'split',
+      isSelectMode: true,
+      setIsSelectMode: vi.fn(),
+    };
+    const view = render(<DocumentView
+      inkController={controller}
+      focusBoxState={focusBoxState}
+      toolbarState={selectToolbarState}
+    />);
+
+    expect(screen.getByTestId('focus-box')).toHaveStyle({ top: '1209.2px' });
+
+    const page = screen.getByTestId('document-page');
+    mockRect(page, { left: 0, top: 0, width: 800, height: 2300 });
+    fireEvent.pointerDown(page, {
+      pointerId: 12, pointerType: 'mouse', clientX: 100, clientY: 1170,
+    });
+    fireEvent.pointerMove(page, {
+      pointerId: 12, pointerType: 'mouse', clientX: 300, clientY: 1270,
+    });
+    fireEvent.pointerUp(page, {
+      pointerId: 12, pointerType: 'mouse', clientX: 300, clientY: 1270,
+    });
+
+    expect(focusBoxState.setFocusBox).toHaveBeenCalledWith({
+      pageId: 'page-2',
+      x: 100,
+      y: expect.closeTo(10.8),
+      width: 200,
+      height: 100,
+    });
+    view.unmount();
   });
 });
