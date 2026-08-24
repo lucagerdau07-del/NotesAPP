@@ -141,6 +141,29 @@ describe('useInkDocument', () => {
     expect(repository.loadHistory('note')).toBeNull();
   });
 
+  it('cancels note A debounce before rerendering note B and never saves A state under B key', () => {
+    vi.useFakeTimers();
+    const repository = createInkRepository(createMemoryStorage());
+    const { result, rerender } = renderHook(
+      ({ documentId }) => useInkDocument({ documentId, repository, saveDelay: 25 }),
+      { initialProps: { documentId: 'note-a' } }
+    );
+
+    act(() => result.current.commitStroke(validStroke('a', 'note-a-page-1')));
+    act(() => vi.advanceTimersByTime(24));
+    rerender({ documentId: 'note-b' });
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(repository.loadHistory('note-a')).toBeNull();
+    expect(repository.loadHistory('note-b')).toBeNull();
+
+    act(() => vi.advanceTimersByTime(24));
+    expect(repository.loadHistory('note-b').present).toMatchObject({
+      documentId: 'note-b',
+      strokes: [],
+    });
+  });
+
   it('keeps command state usable when storage rejects persistence', () => {
     vi.useFakeTimers();
     const storage = { getItem: () => null, setItem: () => { throw new Error('quota'); } };

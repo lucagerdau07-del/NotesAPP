@@ -408,34 +408,72 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     commitStroke: inkController?.commitStroke,
     removeStrokes: inkController?.removeStrokes,
   });
+  const redrawInkCanvasRef = useRef(null);
+  redrawInkCanvasRef.current = () => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const cssWidth = baseWidth * zoom;
+    const cssHeight = totalDocumentHeight;
+    const dpr = globalThis.devicePixelRatio || 1;
+    resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
+    const previewDocument = inkPointer.draftStroke && inkTool !== 'stroke-eraser'
+      ? { ...inkDocument, strokes: [...inkDocument.strokes, inkPointer.draftStroke] }
+      : inkDocument;
+    renderInkDocument(context, previewDocument, {
+      ...pageLayout,
+      cssWidth,
+      cssHeight,
+      dpr,
+    });
+  };
 
   useLayoutEffect(() => {
     const canvas = inkCanvasRef.current;
     if (!canvas) return undefined;
 
-    const redraw = () => {
-      const context = canvas.getContext('2d');
-      if (!context) return;
-      const cssWidth = baseWidth * zoom;
-      const cssHeight = totalDocumentHeight;
-      const dpr = globalThis.devicePixelRatio || 1;
-      resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
-      const previewDocument = inkPointer.draftStroke && inkTool !== 'stroke-eraser'
-        ? { ...inkDocument, strokes: [...inkDocument.strokes, inkPointer.draftStroke] }
-        : inkDocument;
-      renderInkDocument(context, previewDocument, {
-        ...pageLayout,
-        cssWidth,
-        cssHeight,
-        dpr,
-      });
-    };
-
-    redraw();
-    const observer = new ResizeObserver(redraw);
+    redrawInkCanvasRef.current();
+    const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
     observer.observe(canvas);
     return () => observer.disconnect();
   }, [inkDocument, inkPointer.draftStroke, inkTool, pagesCount, showPageBreaks, totalDocumentHeight, zoom]);
+
+  useEffect(() => {
+    if (typeof globalThis.matchMedia !== 'function') return undefined;
+    let mediaQuery = null;
+    let disposed = false;
+
+    const removeListener = () => {
+      if (!mediaQuery) return;
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', handleDprChange);
+      } else {
+        mediaQuery.removeListener?.(handleDprChange);
+      }
+    };
+    const observeCurrentDpr = () => {
+      removeListener();
+      if (disposed) return;
+      const dpr = globalThis.devicePixelRatio || 1;
+      mediaQuery = globalThis.matchMedia(`(resolution: ${dpr}dppx)`);
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleDprChange);
+      } else {
+        mediaQuery.addListener?.(handleDprChange);
+      }
+    };
+    function handleDprChange() {
+      redrawInkCanvasRef.current?.();
+      observeCurrentDpr();
+    }
+
+    observeCurrentDpr();
+    return () => {
+      disposed = true;
+      removeListener();
+    };
+  }, []);
 
   // Im Vollmodus füllt das Papier immer die Breite; gescrollt wird vertikal.
   useEffect(() => {
@@ -497,6 +535,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
 
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
+  const touchPanInitialData = useRef(null);
   const focusBoxRef = useRef(null);
   const pendingFocusBox = useRef(null);
   const wheelTimeout = useRef(null);
@@ -504,8 +543,24 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
   const handleGestureStart = (e) => {
     if (e.pointerType !== 'touch') return;
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 1
+      && isFullMode
+      && inkController?.inputMode !== 'finger') {
+      const scrollContainer = containerRef.current?.parentElement;
+      if (scrollContainer) {
+        touchPanInitialData.current = {
+          pointerId: e.pointerId,
+          x: e.clientX,
+          y: e.clientY,
+          scrollTop: scrollContainer.scrollTop,
+          scrollLeft: scrollContainer.scrollLeft,
+        };
+      }
+    }
     
     if (activePointers.current.size === 2) {
+      touchPanInitialData.current = null;
       const pointers = Array.from(activePointers.current.values());
       const distance = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
       const scrollContainer = containerRef.current?.parentElement;
@@ -527,6 +582,18 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     if (e.pointerType !== 'touch') return;
     if (activePointers.current.has(e.pointerId)) {
       activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.current.size === 1
+      && touchPanInitialData.current?.pointerId === e.pointerId) {
+      const scrollContainer = containerRef.current?.parentElement;
+      if (scrollContainer) {
+        scrollContainer.scrollLeft = touchPanInitialData.current.scrollLeft
+          - (e.clientX - touchPanInitialData.current.x);
+        scrollContainer.scrollTop = touchPanInitialData.current.scrollTop
+          - (e.clientY - touchPanInitialData.current.y);
+      }
+      return;
     }
 
     if (activePointers.current.size === 2 && pinchInitialData.current) {
@@ -647,6 +714,9 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
   const handleGestureEnd = (e) => {
     if (e.pointerType !== 'touch') return;
     activePointers.current.delete(e.pointerId);
+    if (touchPanInitialData.current?.pointerId === e.pointerId) {
+      touchPanInitialData.current = null;
+    }
     if (activePointers.current.size < 2) {
       pinchInitialData.current = null;
       if (pendingFocusBox.current) {

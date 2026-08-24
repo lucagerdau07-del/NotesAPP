@@ -123,6 +123,59 @@ describe('full-document ink workspace', () => {
     expect(context.moveTo).toHaveBeenCalledWith(10, 20);
   });
 
+  it('redraws for a DPR-only media-query change and removes the active listener on cleanup', () => {
+    const mediaQueries = [];
+    const matchMedia = vi.fn(query => {
+      const listeners = new Set();
+      const mediaQuery = {
+        media: query,
+        matches: true,
+        addEventListener: vi.fn((type, listener) => {
+          if (type === 'change') listeners.add(listener);
+        }),
+        removeEventListener: vi.fn((type, listener) => {
+          if (type === 'change') listeners.delete(listener);
+        }),
+        dispatchChange() {
+          listeners.forEach(listener => listener({ matches: false, media: query }));
+        },
+      };
+      mediaQueries.push(mediaQuery);
+      return mediaQuery;
+    });
+    vi.stubGlobal('matchMedia', matchMedia);
+    vi.stubGlobal('devicePixelRatio', 1);
+    const controller = controllerWithPages(['page-1']);
+    controller.document.strokes = [{
+      id: 'line-1',
+      pageId: 'page-1',
+      tool: 'pen',
+      color: '#ffffff',
+      width: 3,
+      opacity: 1,
+      points: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
+    }];
+
+    const view = render(<DocumentView inkController={controller} toolbarState={toolbarState} />);
+    const canvas = screen.getByTestId('ink-canvas');
+    const context = canvas.getContext('2d');
+    expect(matchMedia).toHaveBeenCalledWith('(resolution: 1dppx)');
+    context.clearRect.mockClear();
+    context.moveTo.mockClear();
+
+    vi.stubGlobal('devicePixelRatio', 2);
+    act(() => mediaQueries[0].dispatchChange());
+
+    expect(canvas.width).toBe(1600);
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 800, 1131.2);
+    expect(context.moveTo).toHaveBeenCalledWith(10, 20);
+    expect(matchMedia).toHaveBeenLastCalledWith('(resolution: 2dppx)');
+
+    const activeMediaQuery = mediaQueries.at(-1);
+    view.unmount();
+    expect(activeMediaQuery.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+  });
+
   it('never paints a stroke-eraser draft into the persistent canvas projection', () => {
     const controller = controllerWithPages(['page-1']);
     controller.eraserMode = 'stroke';
