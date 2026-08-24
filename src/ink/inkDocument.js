@@ -73,3 +73,123 @@ export function isInkDocument(value) {
     && Array.isArray(value.strokes) && value.strokes.every(isStroke)
     && Number.isFinite(value.updatedAt);
 }
+
+let lastUpdatedAt = 0;
+
+function nextUpdatedAt(document) {
+  const current = Number.isFinite(document.updatedAt) ? document.updatedAt : 0;
+  const next = Math.max(Date.now(), current + 1, lastUpdatedAt + 1);
+  lastUpdatedAt = next;
+  return next;
+}
+
+function withUpdatedAt(document, changes) {
+  return { ...document, ...changes, updatedAt: nextUpdatedAt(document) };
+}
+
+function createNextPage(document, page) {
+  const existingIds = new Set(document.pages.map(item => item.id));
+  const requestedId = page && typeof page.id === 'string' ? page.id : '';
+  if (requestedId) {
+    return existingIds.has(requestedId) ? null : { id: requestedId };
+  }
+  let index = document.pages.length + 1;
+  let id = `${document.documentId}-page-${index}`;
+  while (existingIds.has(id)) {
+    index += 1;
+    id = `${document.documentId}-page-${index}`;
+  }
+  return { id };
+}
+
+function applyInkCommand(document, command) {
+  if (!command || typeof command !== 'object') return document;
+
+  switch (command.type) {
+    case 'commit-stroke': {
+      if (!isStroke(command.stroke)) return document;
+      return withUpdatedAt(document, { strokes: [...document.strokes, command.stroke] });
+    }
+    case 'remove-strokes': {
+      const ids = Array.isArray(command.strokeIds) ? new Set(command.strokeIds) : new Set();
+      if (ids.size === 0) return document;
+      const strokes = document.strokes.filter(stroke => !ids.has(stroke.id));
+      return strokes.length === document.strokes.length ? document : withUpdatedAt(document, { strokes });
+    }
+    case 'clear-document':
+      return document.strokes.length === 0 ? document : withUpdatedAt(document, { strokes: [] });
+    case 'add-page': {
+      const page = createNextPage(document, command.page);
+      return page === null ? document : withUpdatedAt(document, { pages: [...document.pages, page] });
+    }
+    default:
+      return document;
+  }
+}
+
+export function createInkHistory(document, limit = 100) {
+  const parsedLimit = Number.isFinite(limit) ? Math.floor(limit) : 100;
+  return { past: [], present: document, future: [], limit: Math.max(0, parsedLimit) };
+}
+
+export function executeInkCommand(history, command) {
+  const next = applyInkCommand(history.present, command);
+  if (next === history.present) return history;
+  return {
+    past: [...history.past, history.present].slice(-history.limit),
+    present: next,
+    future: [],
+    limit: history.limit
+  };
+}
+
+export function undoInkHistory(history) {
+  if (history.past.length === 0) return history;
+  const present = history.past[history.past.length - 1];
+  return {
+    past: history.past.slice(0, -1),
+    present,
+    future: [history.present, ...history.future],
+    limit: history.limit
+  };
+}
+
+export function redoInkHistory(history) {
+  if (history.future.length === 0) return history;
+  const [present, ...future] = history.future;
+  return {
+    past: [...history.past, history.present].slice(-history.limit),
+    present,
+    future,
+    limit: history.limit
+  };
+}
+
+function pointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  const position = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  return Math.hypot(point.x - (start.x + position * dx), point.y - (start.y + position * dy));
+}
+
+function strokeIntersectsPoints(stroke, points, radius) {
+  if (stroke.points.length === 0) return false;
+  if (stroke.points.length === 1) {
+    return points.some(point => pointToSegmentDistance(point, stroke.points[0], stroke.points[0]) <= radius);
+  }
+  return points.some(point => stroke.points.some((start, index) => index > 0
+    && pointToSegmentDistance(point, stroke.points[index - 1], start) <= radius));
+}
+
+export function findIntersectingStrokeIds(document, pageId, points, radius) {
+  if (!document || !Array.isArray(document.strokes) || !Array.isArray(points) || !Number.isFinite(radius) || radius < 0) {
+    return [];
+  }
+  const samples = points.filter(isPoint);
+  if (samples.length === 0) return [];
+  return document.strokes
+    .filter(stroke => stroke.pageId === pageId && strokeIntersectsPoints(stroke, samples, radius))
+    .map(stroke => stroke.id);
+}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   INK_SCHEMA_VERSION, createInkDocument, createInkStroke,
-  getToolStyle, isInkDocument
+  getToolStyle, isInkDocument, createInkHistory, executeInkCommand,
+  undoInkHistory, redoInkHistory, findIntersectingStrokeIds
 } from '../src/ink/inkDocument';
 
 describe('ink document schema', () => {
@@ -52,5 +53,65 @@ describe('ink document schema', () => {
     expect(() => isInkDocument(null)).not.toThrow();
     expect(() => isInkDocument({})).not.toThrow();
     expect(isInkDocument(null)).toBe(false);
+  });
+});
+
+describe('ink command history', () => {
+  const stroke = (id, pageId = 'note-page-1', points = [{ x: 1, y: 1 }, { x: 2, y: 2 }]) => createInkStroke({
+    id, pageId, tool: 'pen', color: '#fff', width: 3, opacity: 1, points
+  });
+
+  it('keeps one bounded undo/redo timeline and replaces the redo branch', () => {
+    const empty = createInkDocument('note');
+    const a = stroke('a');
+    const b = stroke('b', 'note-page-1', [{ x: 3, y: 3 }, { x: 4, y: 4 }]);
+    let history = createInkHistory(empty, 10);
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: a });
+    history = undoInkHistory(history);
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: b });
+    expect(history.present.strokes.map(item => item.id)).toEqual(['b']);
+    expect(history.future).toEqual([]);
+  });
+
+  it('bounds past snapshots and moves snapshots through undo and redo', () => {
+    let history = createInkHistory(createInkDocument('note'), 2);
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('b') });
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('c') });
+    expect(history.past).toHaveLength(2);
+    history = undoInkHistory(history);
+    expect(history.present.strokes.map(item => item.id)).toEqual(['a', 'b']);
+    history = redoInkHistory(history);
+    expect(history.present.strokes.map(item => item.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('removes selected strokes and clears all strokes without mutating prior snapshots', () => {
+    let history = createInkHistory(createInkDocument('note'));
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('b') });
+    const beforeRemove = history.present;
+    history = executeInkCommand(history, { type: 'remove-strokes', strokeIds: ['a'] });
+    expect(history.present.strokes.map(item => item.id)).toEqual(['b']);
+    expect(beforeRemove.strokes.map(item => item.id)).toEqual(['a', 'b']);
+    history = executeInkCommand(history, { type: 'clear-document' });
+    expect(history.present.strokes).toEqual([]);
+  });
+
+  it('adds pages immutably and advances updatedAt for same-millisecond commands', () => {
+    let history = createInkHistory(createInkDocument('note'));
+    history = executeInkCommand(history, { type: 'add-page' });
+    const firstUpdate = history.present.updatedAt;
+    expect(history.present.pages).toEqual([{ id: 'note-page-1' }, { id: 'note-page-2' }]);
+    history = executeInkCommand(history, { type: 'add-page', page: { id: 'appendix' } });
+    expect(history.present.pages.map(page => page.id)).toEqual(['note-page-1', 'note-page-2', 'appendix']);
+    expect(history.present.updatedAt).toBeGreaterThan(firstUpdate);
+  });
+
+  it('finds a stroke intersected between sampled endpoints', () => {
+    const document = {
+      ...createInkDocument('note'),
+      strokes: [stroke('line', 'note-page-1', [{ x: 0, y: 10 }, { x: 100, y: 10 }])]
+    };
+    expect(findIntersectingStrokeIds(document, 'note-page-1', [{ x: 50, y: 13 }], 4)).toEqual(['line']);
   });
 });
