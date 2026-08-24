@@ -1,16 +1,46 @@
 import { isInkDocument } from './inkDocument.js';
 
 const historyKey = documentId => `notes-app:ink:${documentId}`;
-const preferencesKey = 'notes-app:ink-preferences';
+const legacyPreferencesKey = 'notes-app:ink-preferences';
+const preferencesKey = documentId => `notes-app:ink-preferences:${documentId}`;
 const supportedTools = new Set(['pen', 'fountain', 'pencil', 'highlighter', 'pixel-eraser']);
-const defaultPreferences = { inputMode: 'stylus', eraserMode: 'pixel' };
+const supportedPreferenceTools = new Set(['pen', 'fountain', 'pencil', 'highlighter']);
+const defaultPreferences = {
+  tool: 'pen',
+  color: '#EFECE4',
+  penWidth: 3,
+  eraserWidth: 15,
+  inputMode: 'stylus',
+  eraserMode: 'pixel'
+};
+
+function positiveNumber(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 function normalizePreferences(value) {
   const preferences = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
+    tool: supportedPreferenceTools.has(preferences.tool) ? preferences.tool : defaultPreferences.tool,
+    color: typeof preferences.color === 'string' && /^#[0-9a-f]{6}$/i.test(preferences.color)
+      ? preferences.color
+      : defaultPreferences.color,
+    penWidth: positiveNumber(preferences.penWidth, defaultPreferences.penWidth),
+    eraserWidth: positiveNumber(preferences.eraserWidth, defaultPreferences.eraserWidth),
     inputMode: preferences.inputMode === 'finger' ? 'finger' : 'stylus',
     eraserMode: preferences.eraserMode === 'stroke' ? 'stroke' : 'pixel'
   };
+}
+
+function parsePreferences(serialized) {
+  try {
+    const value = JSON.parse(serialized);
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    if (value.version !== undefined && value.version !== 1) return null;
+    return normalizePreferences(value);
+  } catch {
+    return null;
+  }
 }
 
 function hasDurableStrokes(document) {
@@ -60,17 +90,24 @@ export function createInkRepository(storage) {
       }
     },
 
-    loadPreferences() {
+    loadPreferences(documentId) {
+      const id = String(documentId);
       try {
-        return normalizePreferences(JSON.parse(storage.getItem(preferencesKey)));
+        const saved = parsePreferences(storage.getItem(preferencesKey(id)));
+        if (saved) return saved;
+        return parsePreferences(storage.getItem(legacyPreferencesKey)) || { ...defaultPreferences };
       } catch {
         return { ...defaultPreferences };
       }
     },
 
-    savePreferences(preferences) {
+    savePreferences(documentId, preferences) {
+      const id = String(documentId);
       try {
-        storage.setItem(preferencesKey, JSON.stringify(normalizePreferences(preferences)));
+        storage.setItem(preferencesKey(id), JSON.stringify({
+          version: 1,
+          ...normalizePreferences(preferences),
+        }));
         return true;
       } catch {
         return false;

@@ -23,6 +23,15 @@ function validHistory() {
   };
 }
 
+const defaultPreferences = {
+  tool: 'pen',
+  color: '#EFECE4',
+  penWidth: 3,
+  eraserWidth: 15,
+  inputMode: 'stylus',
+  eraserMode: 'pixel',
+};
+
 describe('ink repository', () => {
   it('round-trips a valid bounded history', () => {
     const storage = createMemoryStorage();
@@ -93,19 +102,72 @@ describe('ink repository', () => {
     expect(createInkRepository(storage).loadHistory('note-1')).toBeNull();
   });
 
-  it('normalizes malformed preferences to exact supported modes', () => {
-    const storage = createMemoryStorage({
-      'notes-app:ink-preferences': JSON.stringify({ inputMode: 'mouse', eraserMode: 'vector' })
-    });
+  it('round-trips full preferences independently for each note', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    const noteA = {
+      tool: 'highlighter', color: '#3E7BD8', penWidth: 24, eraserWidth: 18,
+      inputMode: 'finger', eraserMode: 'stroke',
+    };
+    const noteB = {
+      tool: 'pencil', color: '#D8615B', penWidth: 5, eraserWidth: 30,
+      inputMode: 'stylus', eraserMode: 'pixel',
+    };
 
-    expect(createInkRepository(storage).loadPreferences()).toEqual({ inputMode: 'stylus', eraserMode: 'pixel' });
+    expect(repository.savePreferences('note-a', noteA)).toBe(true);
+    expect(repository.savePreferences('note-b', noteB)).toBe(true);
+    expect(repository.loadPreferences('note-a')).toEqual(noteA);
+    expect(repository.loadPreferences('note-b')).toEqual(noteB);
   });
 
-  it('round-trips only supported preference modes', () => {
-    const storage = createMemoryStorage();
-    const repository = createInkRepository(storage);
+  it('loads the legacy global modes into backward-safe full defaults', () => {
+    const storage = createMemoryStorage({
+      'notes-app:ink-preferences': JSON.stringify({ inputMode: 'finger', eraserMode: 'stroke' })
+    });
 
-    expect(repository.savePreferences({ inputMode: 'finger', eraserMode: 'stroke' })).toBe(true);
-    expect(repository.loadPreferences()).toEqual({ inputMode: 'finger', eraserMode: 'stroke' });
+    expect(createInkRepository(storage).loadPreferences('legacy-note')).toEqual({
+      ...defaultPreferences,
+      inputMode: 'finger',
+      eraserMode: 'stroke',
+    });
+  });
+
+  it.each([
+    ['malformed JSON', '{bad'],
+    ['an unsupported version', JSON.stringify({ version: 99, tool: 'highlighter' })],
+    ['invalid fields', JSON.stringify({
+      version: 1,
+      tool: 'marker',
+      color: 'blue',
+      penWidth: 0,
+      eraserWidth: 'wide',
+      inputMode: 'mouse',
+      eraserMode: 'vector',
+    })],
+  ])('normalizes %s to safe per-note defaults', (_label, payload) => {
+    const storage = createMemoryStorage({
+      'notes-app:ink-preferences:note-a': payload,
+    });
+
+    expect(createInkRepository(storage).loadPreferences('note-a')).toEqual(defaultPreferences);
+  });
+
+  it('normalizes invalid fields independently when saving', () => {
+    const repository = createInkRepository(createMemoryStorage());
+
+    expect(repository.savePreferences('note-a', {
+      tool: 'fountain',
+      color: '#112233',
+      penWidth: Number.NaN,
+      eraserWidth: -1,
+      inputMode: 'finger',
+      eraserMode: 'stroke',
+    })).toBe(true);
+    expect(repository.loadPreferences('note-a')).toEqual({
+      ...defaultPreferences,
+      tool: 'fountain',
+      color: '#112233',
+      inputMode: 'finger',
+      eraserMode: 'stroke',
+    });
   });
 });
