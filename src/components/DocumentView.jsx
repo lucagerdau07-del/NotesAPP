@@ -7,7 +7,7 @@ import {
 import { HexColorPicker } from 'react-colorful';
 import useLongPress from '../hooks/useLongPress';
 import useInkPointer from '../hooks/useInkPointer';
-import { mapViewportPoint } from '../ink/pageCoordinates';
+import { mapViewportPoint, pagePointToViewport } from '../ink/pageCoordinates';
 import { renderInkDocument, resizeInkCanvas } from '../ink/renderInk';
 
 function PenSettingsPopover({
@@ -293,10 +293,34 @@ const emptyDocument = {
   updatedAt: 0,
 };
 
+function clampFocusBoxToPage(focusBox) {
+  const width = Math.min(baseWidth, Math.max(0, focusBox.width));
+  const height = Math.min(pageHeight, Math.max(0, focusBox.height));
+  return {
+    ...focusBox,
+    x: Math.min(baseWidth - width, Math.max(0, focusBox.x)),
+    y: Math.min(pageHeight - height, Math.max(0, focusBox.y)),
+    width,
+    height,
+  };
+}
+
 function relativePoint(element, event) {
   if (!element) return null;
   const rect = element.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+function focusRectToViewport(layout, focusBox) {
+  if (!focusBox) return null;
+  const origin = pagePointToViewport(layout, focusBox.pageId, focusBox);
+  if (!origin) return null;
+  return {
+    x: origin.x,
+    y: origin.y,
+    width: focusBox.width * layout.zoom,
+    height: focusBox.height * layout.zoom,
+  };
 }
 
 export default function DocumentView({ inkController, focusBoxState, toolbarState, onBack }) {
@@ -394,6 +418,8 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     zoom,
     showPageBreaks: Boolean(showPageBreaks),
   };
+  const focusBoxViewport = focusRectToViewport(pageLayout, focusBoxState?.focusBox);
+  const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
   const inkTool = isEraser
     ? (inkController?.eraserMode === 'stroke' ? 'stroke-eraser' : 'pixel-eraser')
     : (tool || 'pen');
@@ -491,18 +517,26 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
 
   const handlePointerDown = (e) => {
     if (!isSelectMode) { inkPointer.onPointerDown(e); return; }
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / zoom;
-    const y = (e.clientY - rect.top) / zoom;
-    setDraftFocusBox({ x, y, width: 0, height: 0, startX: x, startY: y });
+    const point = mapViewportPoint(pageLayout, relativePoint(containerRef.current, e));
+    if (!point) return;
+    setDraftFocusBox({
+      pageId: point.pageId,
+      x: point.x,
+      y: point.y,
+      width: 0,
+      height: 0,
+      startX: point.x,
+      startY: point.y,
+    });
   };
 
   const handlePointerMove = (e) => {
     if (!isSelectMode) { inkPointer.onPointerMove(e); return; }
     if (!draftFocusBox) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const currentX = Math.max(0, Math.min(baseWidth, (e.clientX - rect.left) / zoom));
-    const currentY = (e.clientY - rect.top) / zoom;
+    const point = mapViewportPoint(pageLayout, relativePoint(containerRef.current, e));
+    if (!point || point.pageId !== draftFocusBox.pageId) return;
+    const currentX = point.x;
+    const currentY = point.y;
     
     setDraftFocusBox(prev => {
       const x = Math.min(prev.startX, currentX);
@@ -518,6 +552,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     if (!draftFocusBox) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
+        pageId: draftFocusBox.pageId,
         x: draftFocusBox.x,
         y: draftFocusBox.y,
         width: draftFocusBox.width,
@@ -620,24 +655,26 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
         if (startFb) {
           const ratio = startZoom / newZoom;
           let newY = startFb.y + startFb.height / 2 - (startFb.height * ratio) / 2;
-          const currentDocHeight = pageHeight * pagesCountRef.current;
           const newHeight = startFb.height * ratio;
           if (newY < 0) newY = 0;
-          if (newY + newHeight > currentDocHeight) newY = Math.max(0, currentDocHeight - newHeight);
+          if (newY + newHeight > pageHeight) newY = Math.max(0, pageHeight - newHeight);
           
-          const newFb = {
+          const newFb = clampFocusBoxToPage({
             ...startFb,
             x: startFb.x + startFb.width / 2 - (startFb.width * ratio) / 2,
             y: newY,
             width: startFb.width * ratio,
             height: newHeight
-          };
+          });
           pendingFocusBox.current = newFb;
           if (focusBoxRef.current) {
-            focusBoxRef.current.style.left = `${newFb.x * newZoom}px`;
-            focusBoxRef.current.style.top = `${newFb.y * newZoom}px`;
-            focusBoxRef.current.style.width = `${newFb.width * newZoom}px`;
-            focusBoxRef.current.style.height = `${newFb.height * newZoom}px`;
+            const viewportRect = focusRectToViewport({ ...pageLayout, zoom: newZoom }, newFb);
+            if (viewportRect) {
+              focusBoxRef.current.style.left = `${viewportRect.x}px`;
+              focusBoxRef.current.style.top = `${viewportRect.y}px`;
+              focusBoxRef.current.style.width = `${viewportRect.width}px`;
+              focusBoxRef.current.style.height = `${viewportRect.height}px`;
+            }
           }
         }
         
@@ -672,24 +709,26 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
               if (focusBoxState?.focusBox && newZoom !== prev) {
                 const ratio = prev / newZoom;
                 let newY = focusBoxState.focusBox.y + focusBoxState.focusBox.height / 2 - (focusBoxState.focusBox.height * ratio) / 2;
-                const currentDocHeight = pageHeight * pagesCountRef.current;
                 const newHeight = focusBoxState.focusBox.height * ratio;
                 if (newY < 0) newY = 0;
-                if (newY + newHeight > currentDocHeight) newY = Math.max(0, currentDocHeight - newHeight);
+                if (newY + newHeight > pageHeight) newY = Math.max(0, pageHeight - newHeight);
 
-                const newFb = {
+                const newFb = clampFocusBoxToPage({
                   ...focusBoxState.focusBox,
                   x: focusBoxState.focusBox.x + focusBoxState.focusBox.width / 2 - (focusBoxState.focusBox.width * ratio) / 2,
                   y: newY,
                   width: focusBoxState.focusBox.width * ratio,
                   height: newHeight
-                };
+                });
                 pendingFocusBox.current = newFb;
                 if (focusBoxRef.current) {
-                  focusBoxRef.current.style.left = `${newFb.x * newZoom}px`;
-                  focusBoxRef.current.style.top = `${newFb.y * newZoom}px`;
-                  focusBoxRef.current.style.width = `${newFb.width * newZoom}px`;
-                  focusBoxRef.current.style.height = `${newFb.height * newZoom}px`;
+                  const viewportRect = focusRectToViewport({ ...pageLayout, zoom: newZoom }, newFb);
+                  if (viewportRect) {
+                    focusBoxRef.current.style.left = `${viewportRect.x}px`;
+                    focusBoxRef.current.style.top = `${viewportRect.y}px`;
+                    focusBoxRef.current.style.width = `${viewportRect.width}px`;
+                    focusBoxRef.current.style.height = `${viewportRect.height}px`;
+                  }
                 }
                 
                 clearTimeout(wheelTimeout.current);
@@ -767,10 +806,9 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
       let newY = startBoxY + dy;
       if (newY < 0) newY = 0;
       
-      const currentDocHeight = pageHeight * pagesCountRef.current;
       const boxHeight = focusBoxState.focusBox.height;
-      if (newY + boxHeight > currentDocHeight) {
-        newY = currentDocHeight - boxHeight;
+      if (newY + boxHeight > pageHeight) {
+        newY = pageHeight - boxHeight;
       }
       
       focusBoxState.setFocusBox(prev => ({
@@ -814,8 +852,10 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
         // Auto-expand in continuous mode if near the document bottom
         if (!showPageBreaks) {
           const currentBoxBottom = newY + focusBoxState.focusBox.height;
-          const currentDocHeight = pageHeight * pagesCountRef.current;
-          if (pagesCountRef.current < maxPages && currentBoxBottom > currentDocHeight - 400) {
+          const focusPageIndex = pageIds.indexOf(focusBoxState.focusBox.pageId);
+          if (focusPageIndex === pagesCountRef.current - 1
+            && pagesCountRef.current < maxPages
+            && currentBoxBottom > pageHeight - 400) {
             inkController?.addPage?.();
           }
         }
@@ -1246,16 +1286,16 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
               pointerEvents: 'none'
             }}
           />
-          {!isFullMode && focusBoxState && focusBoxState.focusBox && (
+          {!isFullMode && focusBoxState?.focusBox && focusBoxViewport && (
             <div
               ref={focusBoxRef}
               className="focus-box"
               data-testid="focus-box"
               style={{
-                left: focusBoxState.focusBox.x * zoom,
-                top: focusBoxState.focusBox.y * zoom,
-                width: focusBoxState.focusBox.width * zoom,
-                height: focusBoxState.focusBox.height * zoom,
+                left: focusBoxViewport.x,
+                top: focusBoxViewport.y,
+                width: focusBoxViewport.width,
+                height: focusBoxViewport.height,
                 position: 'absolute',
                 border: '2px solid #1976D2',
                 backgroundColor: 'rgba(25, 118, 210, 0.1)',
@@ -1266,7 +1306,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
               onPointerDown={handleFocusBoxDragStart}
             />
           )}
-          {draftFocusBox && (
+          {draftFocusBox && draftFocusBoxViewport && (
             <div 
               data-testid="draft-focus-box"
               style={{
@@ -1274,10 +1314,10 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
                 border: '2px dashed #1976D2',
                 backgroundColor: 'rgba(25, 118, 210, 0.1)',
                 pointerEvents: 'none',
-                left: draftFocusBox.x * zoom,
-                top: draftFocusBox.y * zoom,
-                width: draftFocusBox.width * zoom,
-                height: draftFocusBox.height * zoom,
+                left: draftFocusBoxViewport.x,
+                top: draftFocusBoxViewport.y,
+                width: draftFocusBoxViewport.width,
+                height: draftFocusBoxViewport.height,
                 zIndex: 1000
               }}
             />

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import DocumentView from './DocumentView';
 import WritingZone from './WritingZone';
 import useInkDocument from '../hooks/useInkDocument';
@@ -31,15 +31,14 @@ export default function SplitLayout({ activeTab, onBack, documentId }) {
   };
 
   const inkController = useInkDocument({ documentId });
-  const focusBoxState = useFocusBox();
-  const padActionsRef = useRef(null);
+  const focusBoxState = useFocusBox(inkController.document.pages[0]?.id);
 
   if (activeTab === 'smartCanvas') {
     return (
       <div className={`split-layout ${layoutMode === 'split' ? '' : 'full-mode'}`}>
-        <DocumentView inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} padActionsRef={padActionsRef} onBack={onBack} />
+        <DocumentView inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} onBack={onBack} />
         {layoutMode === 'split' && (
-          <WritingZone inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} padActionsRef={padActionsRef} />
+          <WritingZone inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} />
         )}
       </div>
     );

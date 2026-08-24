@@ -78,7 +78,7 @@ function drawPointerStroke(element, {
 test('renders DocumentView with ink canvas and focus box', () => {
   const handleDrag = vi.fn();
   const focusBoxState = {
-    focusBox: { x: 50, y: 60, width: 200, height: 100 },
+    focusBox: { pageId: 'page-1', x: 50, y: 60, width: 200, height: 100 },
     handleDrag
   };
 
@@ -248,6 +248,54 @@ test.each([
 
   expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
   expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test('keeps a pinch-resized focus rectangle inside its selected page', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-1',
+      pages: [{ id: 'page-1' }, { id: 'page-2' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  const setFocusBox = vi.fn();
+  const focusBoxState = {
+    focusBox: { pageId: 'page-2', x: 10, y: 10, width: 250, height: 100 },
+    setFocusBox,
+  };
+  render(<DocumentView
+    inkController={controller}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const page = screen.getByTestId('document-page');
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 100,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 100,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 150, clientY: 100,
+  });
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 150, clientY: 100,
+  });
+
+  expect(setFocusBox).toHaveBeenCalledWith({
+    pageId: 'page-2',
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 200,
+  });
 });
 
 test('keeps a surviving finger in navigation after pinch until a fresh touch starts drawing', () => {
