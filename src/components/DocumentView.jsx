@@ -572,8 +572,21 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
   const pinchInitialData = useRef(null);
   const touchPanInitialData = useRef(null);
   const focusBoxRef = useRef(null);
+  const focusDragRef = useRef(null);
   const pendingFocusBox = useRef(null);
   const wheelTimeout = useRef(null);
+
+  const cancelFocusBoxDrag = () => {
+    const drag = focusDragRef.current;
+    if (!drag) return;
+    focusDragRef.current = null;
+    if (drag.animationFrameId !== null) cancelAnimationFrame(drag.animationFrameId);
+    document.removeEventListener('pointermove', drag.onPointerMove);
+    document.removeEventListener('pointerup', drag.onPointerUp);
+    document.removeEventListener('pointercancel', drag.onPointerUp);
+  };
+
+  useEffect(() => () => cancelFocusBoxDrag(), [inkDocument.documentId]);
 
   const handleGestureStart = (e) => {
     if (e.pointerType !== 'touch') return;
@@ -782,6 +795,8 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
   const handleFocusBoxDragStart = (e) => {
     e.stopPropagation();
     if (isSelectMode) return;
+    cancelFocusBoxDrag();
+    if (!focusBoxState?.focusBox) return;
     const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -791,14 +806,20 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     
     let currentX = startX;
     let currentY = startY;
-    let animationFrameId = null;
-    
     const scrollContainer = containerRef.current?.parentElement;
     if (!scrollContainer) return;
     const startScrollTop = scrollContainer.scrollTop;
     const startScrollLeft = scrollContainer.scrollLeft;
+    const drag = {
+      pointerId,
+      animationFrameId: null,
+      onPointerMove: null,
+      onPointerUp: null,
+    };
+    const isActiveDrag = () => focusDragRef.current === drag;
 
     const updateBoxDOM = (dx, dy) => {
+      if (!isActiveDrag()) return startBoxY;
       let newX = startBoxX + dx;
       if (newX < 0) newX = 0;
       if (newX + boxWidth > baseWidth) newX = baseWidth - boxWidth;
@@ -821,7 +842,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     };
 
     const doScroll = () => {
-      if (!scrollContainer) return;
+      if (!isActiveDrag()) return;
       const rect = scrollContainer.getBoundingClientRect();
       const scrollZone = 60;
       const speed = 15;
@@ -860,13 +881,11 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
           }
         }
       }
-      animationFrameId = requestAnimationFrame(doScroll);
+      drag.animationFrameId = requestAnimationFrame(doScroll);
     };
-    
-    animationFrameId = requestAnimationFrame(doScroll);
 
     const onPointerMove = (moveEvent) => {
-      if (moveEvent.pointerId !== pointerId) return;
+      if (!isActiveDrag() || moveEvent.pointerId !== pointerId) return;
       currentX = moveEvent.clientX;
       currentY = moveEvent.clientY;
       const dx = (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) / zoom;
@@ -875,13 +894,14 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     };
 
     const onPointerUp = (upEvent) => {
-      if (upEvent.pointerId !== pointerId) return;
-      cancelAnimationFrame(animationFrameId);
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-      document.removeEventListener('pointercancel', onPointerUp);
+      if (!isActiveDrag() || upEvent.pointerId !== pointerId) return;
+      cancelFocusBoxDrag();
     };
 
+    drag.onPointerMove = onPointerMove;
+    drag.onPointerUp = onPointerUp;
+    focusDragRef.current = drag;
+    drag.animationFrameId = requestAnimationFrame(doScroll);
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointercancel', onPointerUp);
