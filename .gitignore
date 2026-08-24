@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .superpowers/
+.worktrees/
 
 # Android
 android/.gradle/
