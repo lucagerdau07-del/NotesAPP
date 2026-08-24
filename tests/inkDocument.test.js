@@ -36,4 +36,21 @@ describe('ink document schema', () => {
     expect(stroke.points).not.toBe(points);
     expect(stroke.points[0]).not.toBe(points[0]);
   });
+
+  it('normalizes malformed stroke metadata to serializable defaults', () => {
+    expect(createInkStroke({ id: 's2', pageId: 'p1', tool: 'unknown', color: { bad: true }, width: Infinity, opacity: NaN }))
+      .toMatchObject({ id: 's2', pageId: 'p1', tool: 'pen', color: '#000000', width: 3, opacity: 1 });
+  });
+
+  it('rejects non-finite points while remaining safe for null input', () => {
+    expect(createInkStroke({ points: [{ x: 1, y: 2 }, { x: Infinity, y: 3 }, { x: 4, y: NaN }] }).points)
+      .toEqual([{ x: 1, y: 2 }]);
+    expect(() => createInkStroke(null)).not.toThrow();
+  });
+
+  it('validates malformed values without throwing', () => {
+    expect(() => isInkDocument(null)).not.toThrow();
+    expect(() => isInkDocument({})).not.toThrow();
+    expect(isInkDocument(null)).toBe(false);
+  });
 });

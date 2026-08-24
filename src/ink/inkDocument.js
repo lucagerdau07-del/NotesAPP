@@ -13,18 +13,25 @@ export function createInkDocument(documentId, pageCount = 1) {
 }
 
 export function createInkStroke(input = {}) {
-  const points = Array.isArray(input.points)
-    ? input.points
+  const source = input !== null && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const tools = new Set(['pen', 'fountain', 'pencil', 'highlighter', 'pixel-eraser']);
+  const points = Array.isArray(source.points)
+    ? source.points
       .filter(point => point && Number.isFinite(point.x) && Number.isFinite(point.y))
       .map(point => ({ x: point.x, y: point.y }))
     : [];
+  const tool = tools.has(source.tool) ? source.tool : 'pen';
+  const color = typeof source.color === 'string' ? source.color : '#000000';
+  const width = Number.isFinite(source.width) && source.width > 0 ? source.width : 3;
+  const opacity = Number.isFinite(source.opacity) && source.opacity >= 0 && source.opacity <= 1
+    ? source.opacity : 1;
   return {
-    id: String(input.id ?? ''),
-    pageId: String(input.pageId ?? ''),
-    tool: input.tool ?? 'pen',
-    color: input.color,
-    width: input.width,
-    opacity: input.opacity,
+    id: String(source.id ?? ''),
+    pageId: String(source.pageId ?? ''),
+    tool,
+    color,
+    width,
+    opacity,
     points
   };
 }
