@@ -305,6 +305,14 @@ function clampFocusBoxToPage(focusBox) {
   };
 }
 
+function moveFocusBoxWithinPage(focusBox, dx, dy) {
+  return clampFocusBoxToPage({
+    ...focusBox,
+    x: focusBox.x + dx,
+    y: focusBox.y + dy,
+  });
+}
+
 function relativePoint(element, event) {
   if (!element) return null;
   const rect = element.getBoundingClientRect();
@@ -820,25 +828,19 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
 
     const updateBoxDOM = (dx, dy) => {
       if (!isActiveDrag()) return startBoxY;
-      let newX = startBoxX + dx;
-      if (newX < 0) newX = 0;
-      if (newX + boxWidth > baseWidth) newX = baseWidth - boxWidth;
-      
-      let newY = startBoxY + dy;
-      if (newY < 0) newY = 0;
-      
-      const boxHeight = focusBoxState.focusBox.height;
-      if (newY + boxHeight > pageHeight) {
-        newY = pageHeight - boxHeight;
-      }
-      
-      focusBoxState.setFocusBox(prev => ({
+      const movedFocusBox = moveFocusBoxWithinPage({
+        ...focusBoxState.focusBox,
+        x: startBoxX,
+        y: startBoxY,
+        width: boxWidth,
+      }, dx, dy);
+      focusBoxState.setFocusBox(prev => prev ? ({
         ...prev,
-        x: newX,
-        y: newY
-      }));
-      
-      return newY;
+        x: movedFocusBox.x,
+        y: movedFocusBox.y,
+      }) : prev);
+
+      return movedFocusBox.y;
     };
 
     const doScroll = () => {
@@ -905,6 +907,23 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointercancel', onPointerUp);
+  };
+
+  const handleFocusBoxKeyDown = (e) => {
+    const direction = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }[e.key];
+    if (!direction) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const step = e.shiftKey ? 50 : 10;
+    focusBoxState?.setFocusBox(prev => prev
+      ? moveFocusBoxWithinPage(prev, direction[0] * step, direction[1] * step)
+      : prev);
   };
 
   const getStaticBackgroundStyles = () => {
@@ -1311,6 +1330,9 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
               ref={focusBoxRef}
               className="focus-box"
               data-testid="focus-box"
+              role="region"
+              aria-label="Fokusbereich"
+              tabIndex={0}
               style={{
                 left: focusBoxViewport.x,
                 top: focusBoxViewport.y,
@@ -1324,6 +1346,7 @@ export default function DocumentView({ inkController, focusBoxState, toolbarStat
                 touchAction: 'none'
               }}
               onPointerDown={handleFocusBoxDragStart}
+              onKeyDown={handleFocusBoxKeyDown}
             />
           )}
           {draftFocusBox && draftFocusBoxViewport && (
