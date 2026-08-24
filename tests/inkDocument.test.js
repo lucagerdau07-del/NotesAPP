@@ -95,6 +95,16 @@ describe('ink command history', () => {
     expect(history.past).toEqual([]);
   });
 
+  it('does not retain a snapshot when redo runs with a zero limit', () => {
+    let history = createInkHistory(createInkDocument('note'), 1);
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
+    history = undoInkHistory(history);
+    expect(history.future).toHaveLength(1);
+    history = { ...history, limit: 0 };
+    history = redoInkHistory(history);
+    expect(history.past).toEqual([]);
+  });
+
   it('removes selected strokes and clears all strokes without mutating prior snapshots', () => {
     let history = createInkHistory(createInkDocument('note'));
     history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a') });
