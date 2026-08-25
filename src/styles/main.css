@@ -431,6 +431,7 @@ body::before,
     100% 6px,
     auto, auto, auto, auto, auto, auto;
   background-attachment: fixed;
+  opacity: 0.45;
   pointer-events: none;
 }
 
