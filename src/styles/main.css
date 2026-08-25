@@ -387,46 +387,51 @@ body {
    Liquid Glass & Fluted Reeded Glass Dark Background Theme (Image 1 Style)
    ========================================================================== */
 
-/* Dark reeded-glass background: broad refractions, not a fabric grid. */
+/* Fluted Reeded Glass Textured Dark Background */
 body::before,
 .liquid-fluted-bg {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-color: #08080B;
+  background-color: #050506;
   background-image:
-    /* broad reflected highlight across the glass */
-    linear-gradient(112deg, rgba(255, 255, 255, 0.11) 0%, transparent 22%, transparent 68%, rgba(255, 255, 255, 0.06) 100%),
-    /* fine vertical fluting */
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.10) 0.9px, transparent 1.3px),
+    /* 2. Gewebe — senkrechte Rippen */
     repeating-linear-gradient(90deg,
-      rgba(255, 255, 255, 0.10) 0px,
-      rgba(255, 255, 255, 0.10) 0.8px,
-      transparent 0.8px,
-      transparent 5px,
-      rgba(0, 0, 0, 0.17) 5px,
-      rgba(0, 0, 0, 0.17) 6.5px,
-      transparent 6.5px,
-      transparent 9px
-    ),
-    /* deliberately faint horizontal refraction */
-    repeating-linear-gradient(0deg,
-      rgba(255, 255, 255, 0.045) 0px,
-      rgba(255, 255, 255, 0.045) 1px,
+      rgba(255, 255, 255, 0.18) 0px,
+      rgba(255, 255, 255, 0.18) 1px,
       transparent 1px,
-      transparent 25px
+      transparent 2.5px,
+      rgba(0, 0, 0, 0.32) 2.5px,
+      rgba(0, 0, 0, 0.32) 4px,
+      transparent 4px,
+      transparent 6px
     ),
-    radial-gradient(ellipse 680px 780px at 0% 42%, rgba(210, 214, 228, 0.30), transparent 62%),
-    radial-gradient(ellipse 720px 520px at 91% 8%, rgba(190, 196, 214, 0.24), transparent 64%),
-    radial-gradient(ellipse 600px 540px at 94% 80%, rgba(154, 162, 184, 0.20), transparent 67%),
-    radial-gradient(ellipse 760px 580px at 47% 52%, rgba(0, 0, 0, 0.54), transparent 76%);
+    /* 3. Gewebe — waagerechte Rippen */
+    repeating-linear-gradient(0deg,
+      rgba(255, 255, 255, 0.13) 0px,
+      rgba(255, 255, 255, 0.13) 1px,
+      transparent 1px,
+      transparent 2.5px,
+      rgba(0, 0, 0, 0.25) 2.5px,
+      rgba(0, 0, 0, 0.25) 4px,
+      transparent 4px,
+      transparent 6px
+    ),
+    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.65), transparent 64%),
+    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.58), transparent 66%),
+    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.52), transparent 66%),
+    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.48), transparent 68%),
+    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.42), transparent 66%),
+    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.42), transparent 76%);
   background-size:
-    auto,
-    9px 100%,
-    100% 26px,
-    auto, auto, auto, auto;
+    5px 5px,
+    6px 100%,
+    100% 6px,
+    auto, auto, auto, auto, auto, auto;
   background-attachment: fixed;
-  opacity: 0.82;
+  opacity: 0.45;
   pointer-events: none;
 }
 
