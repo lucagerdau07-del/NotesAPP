@@ -13,6 +13,7 @@ import pgwCard from '../assets/subjects/pgw-card.jpg';
 import philosophieCard from '../assets/subjects/philosophie-card.jpg';
 import englischCard from '../assets/subjects/englisch-card.jpg';
 import spanischCard from '../assets/subjects/spanisch-card.jpg';
+import useLiquidGlass from '../hooks/useLiquidGlass';
 
 const SUBJECT_CARD_IMAGES = {
   mathe: matheCard,
@@ -969,6 +970,9 @@ export default function Library({ onOpenNote, onOpenSettings }) {
   const [agentTasks, setAgentTasks] = useState([]);
   const [agentDraft, setAgentDraft] = useState('');
   const toastTimeoutRef = useRef(null);
+  const liquidGlassRootRef = useRef(null);
+
+  useLiquidGlass(liquidGlassRootRef, selectedSubject?.id || 'all');
 
   const showToast = (msg) => {
     setSortToast(msg);
@@ -1051,6 +1055,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
   return (
     <div
+      ref={liquidGlassRootRef}
       style={{
         position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden',
         background: 'transparent', fontFamily: 'Manrope,sans-serif', color: '#FFFFFF',
@@ -1058,13 +1063,15 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         '--subj-accent-soft': theme.accentSoft,
       }}
       data-subject={selectedSubject?.id || 'all'}
+      data-testid="liquid-glass-root"
     >
+      <div className="liquid-glass-scene" aria-hidden="true" />
 
       {/* 2. Dynamic Thematic Ambient Lighting overlay */}
       <div style={{ position: 'absolute', inset: 0, background: bgGradient, opacity: 0.55, mixBlendMode: 'soft-light', transition: 'background 0.4s ease', pointerEvents: 'none' }} />
 
       {/* sidebar rail */}
-      <div className="lib-glass" style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
+      <div className="lib-glass liquid-control liquid-control-navigation" data-liquid-glass-control="navigation" data-config={JSON.stringify({ cornerRadius: 30, zRadius: 24 })} style={{ position: 'absolute', left: 20, top: 20, bottom: 20, width: 72, borderRadius: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 6, zIndex: 20 }}>
         <div style={{ width: 34, height: 34, borderRadius: 12, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#08080A', font: '800 15px "Bricolage Grotesque",sans-serif', marginBottom: 10 }}>N</div>
         <div style={{ width: 44, height: 44, borderRadius: 15, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.4)' }}><LayoutGrid size={19} /></div>
         <div style={{ width: 44, height: 44, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer' }}><Clock size={19} /></div>
@@ -1082,18 +1089,23 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* Liquid Glass Search & AI Capsule + Standalone Circle Button (Exact Image 1 Style) */}
-      <div style={{ position: 'absolute', left: 106, top: 20, display: 'flex', alignItems: 'center', gap: 10, zIndex: 30 }}>
-        {/* Main Liquid Glass Pill */}
-        <div 
-          className="liquid-glass-pill" 
-          style={{ 
-            height: 52, 
-            width: 440, 
-            padding: '0 20px 0 16px', 
-            gap: 12, 
-            cursor: 'text' 
-          }}
-        >
+      {/* Main Liquid Glass Pill */}
+      <div
+        className="liquid-glass-pill liquid-control liquid-control-search"
+        data-liquid-glass-control="search"
+        data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })}
+        style={{
+          position: 'absolute',
+          left: 106,
+          top: 20,
+          zIndex: 30,
+          height: 52,
+          width: 440,
+          padding: '0 20px 0 16px',
+          gap: 12,
+          cursor: 'text'
+        }}
+      >
           <button 
             onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })}
             style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -1143,25 +1155,26 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           >
             <Mic size={18} strokeWidth={2} />
           </button>
-        </div>
-
-        {/* Standalone Liquid Glass Circle Button (Image 1 Close / Reset Pod) */}
-        <button 
-          className="liquid-glass-circle"
-          onClick={() => { 
-            setSearchQuery(''); 
-            if (selectedSubject) setSelectedSubject(null);
-            showToast('Filter & Suche zurückgesetzt');
-          }}
-          title="Schließen / Filter leeren"
-        >
-          <X size={19} strokeWidth={2.4} />
-        </button>
       </div>
 
+      {/* Standalone Liquid Glass Circle Button (Image 1 Close / Reset Pod) */}
+      <button
+        className="liquid-glass-circle liquid-control liquid-control-reset"
+        data-liquid-glass-control="reset"
+        data-config={JSON.stringify({ cornerRadius: 26, zRadius: 26, button: true })}
+        onClick={() => {
+          setSearchQuery('');
+          if (selectedSubject) setSelectedSubject(null);
+          showToast('Filter & Suche zurückgesetzt');
+        }}
+        title="Schließen / Filter leeren"
+        style={{ position: 'absolute', left: 556, top: 20, zIndex: 30 }}
+      >
+        <X size={19} strokeWidth={2.4} />
+      </button>
+
       {/* view toggle + new note (right aligned) */}
-      <div style={{ position: 'absolute', right: agentOpen ? 530 : 110, top: 20, display: 'flex', alignItems: 'center', gap: 12, zIndex: 15, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-        <div className="liquid-glass-pill" style={{ height: 52, padding: '0 6px', gap: 2 }}>
+      <div className="liquid-glass-pill liquid-control liquid-control-view-sort" data-liquid-glass-control="view-sort" data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })} style={{ position: 'absolute', right: agentOpen ? 690 : 270, top: 20, zIndex: 15, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)', height: 52, padding: '0 6px', gap: 2 }}>
           <button 
             className={`lib-view-btn ${viewMode === 'masonry' ? 'active' : ''}`} 
             style={{ width: 40, height: 40, borderRadius: 20, background: viewMode === 'masonry' ? 'rgba(255,255,255,.24)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
@@ -1189,19 +1202,18 @@ export default function Library({ onOpenNote, onOpenSettings }) {
           >
             <ArrowUpDown size={17} />
           </button>
-        </div>
+      </div>
 
-        <div 
-          onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })} 
-          className="liquid-glass-pill lib-newnote" 
-          style={{ height: 52, padding: '0 22px 0 18px', gap: 10, background: selectedSubject ? theme.accent : '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: selectedSubject ? `0 18px 44px -12px ${theme.accentSoft}, 0 0 0 1px ${theme.accentSoft}` : '0 20px 48px -12px rgba(0,0,0,0.95)', transition: 'background 0.35s ease, box-shadow 0.35s ease' }}
-          data-testid="new-note-btn"
-        >
-          <PenLine size={17} />
-          <span style={{ font: '700 13px "Bricolage Grotesque",sans-serif', whiteSpace: 'nowrap' }}>
-            {selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz'}
-          </span>
-        </div>
+      <div
+        onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })}
+        className="liquid-glass-pill lib-newnote"
+        style={{ position: 'absolute', right: agentOpen ? 530 : 110, top: 20, zIndex: 15, height: 52, padding: '0 22px 0 18px', gap: 10, background: selectedSubject ? theme.accent : '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: selectedSubject ? `0 18px 44px -12px ${theme.accentSoft}, 0 0 0 1px ${theme.accentSoft}` : '0 20px 48px -12px rgba(0,0,0,0.95)', transition: 'background 0.35s ease, box-shadow 0.35s ease' }}
+        data-testid="new-note-btn"
+      >
+        <PenLine size={17} />
+        <span style={{ font: '700 13px "Bricolage Grotesque",sans-serif', whiteSpace: 'nowrap' }}>
+          {selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz'}
+        </span>
       </div>
 
       {/* Sort Toast */}
@@ -1257,17 +1269,19 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       {/* agent panel */}
-      {!agentOpen && (
-        <button
-          className="liquid-glass-circle"
-          onClick={() => setAgentOpen(true)}
-          title="Agent öffnen"
-          style={{ position: 'absolute', right: 20, top: 20, zIndex: 20 }}
-          data-testid="agent-open-btn"
-        >
-          <Sparkles size={18} strokeWidth={2.2} />
-        </button>
-      )}
+      <button
+        className="liquid-glass-circle liquid-control liquid-control-agent"
+        data-liquid-glass-control="agent"
+        data-config={JSON.stringify({ cornerRadius: 26, zRadius: 26, button: true })}
+        onClick={() => setAgentOpen(true)}
+        title="Agent öffnen"
+        aria-hidden={agentOpen}
+        tabIndex={agentOpen ? -1 : undefined}
+        style={{ position: 'absolute', right: 20, top: 20, zIndex: 20, visibility: agentOpen ? 'hidden' : 'visible', pointerEvents: agentOpen ? 'none' : 'auto' }}
+        data-testid="agent-open-btn"
+      >
+        <Sparkles size={18} strokeWidth={2.2} />
+      </button>
 
       <div className="lib-glass agent-panel" data-open={agentOpen} data-testid="agent-panel">
         <div className="agent-panel-head">
