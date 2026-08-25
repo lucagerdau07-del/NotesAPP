@@ -67,6 +67,64 @@ globalThis.structuredClone = function structuredCloneWithBlobs(value, options) {
   }
 };
 
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  class DOMMatrix {
+    constructor(init) {
+      if (typeof init === 'string') {
+        this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+      } else if (Array.isArray(init)) {
+        this.a = init[0] ?? 1; this.b = init[1] ?? 0;
+        this.c = init[2] ?? 0; this.d = init[3] ?? 1;
+        this.e = init[4] ?? 0; this.f = init[5] ?? 0;
+      } else if (init && typeof init === 'object') {
+        this.a = init.a ?? 1; this.b = init.b ?? 0;
+        this.c = init.c ?? 0; this.d = init.d ?? 1;
+        this.e = init.e ?? 0; this.f = init.f ?? 0;
+      } else {
+        this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+      }
+      this.m11 = this.a; this.m12 = this.b; this.m13 = 0; this.m14 = 0;
+      this.m21 = this.c; this.m22 = this.d; this.m23 = 0; this.m24 = 0;
+      this.m31 = 0; this.m32 = 0; this.m33 = 1; this.m34 = 0;
+      this.m41 = this.e; this.m42 = this.f; this.m43 = 0; this.m44 = 1;
+      this.is2D = true;
+      this.isIdentity = (this.a === 1 && this.b === 0 && this.c === 0 && this.d === 1 && this.e === 0 && this.f === 0);
+    }
+    translate(tx = 0, ty = 0) {
+      const res = new DOMMatrix(this);
+      res.e += tx * this.a + ty * this.c;
+      res.f += tx * this.b + ty * this.d;
+      return res;
+    }
+    scale(sx = 1, sy = sx) {
+      const res = new DOMMatrix(this);
+      res.a *= sx; res.b *= sx;
+      res.c *= sy; res.d *= sy;
+      return res;
+    }
+    multiply(other) {
+      return new DOMMatrix(other);
+    }
+    transformPoint(point) {
+      return {
+        x: (point?.x || 0) * this.a + (point?.y || 0) * this.c + this.e,
+        y: (point?.x || 0) * this.b + (point?.y || 0) * this.d + this.f,
+      };
+    }
+  }
+  globalThis.DOMMatrix = DOMMatrix;
+  if (typeof window !== 'undefined') window.DOMMatrix = DOMMatrix;
+}
+if (typeof globalThis.DOMPoint === 'undefined') {
+  class DOMPoint {
+    constructor(x = 0, y = 0, z = 0, w = 1) {
+      this.x = x; this.y = y; this.z = z; this.w = w;
+    }
+  }
+  globalThis.DOMPoint = DOMPoint;
+  if (typeof window !== 'undefined') window.DOMPoint = DOMPoint;
+}
+
 function createCanvasContext() {
   const context = {
     globalAlpha: 1,
