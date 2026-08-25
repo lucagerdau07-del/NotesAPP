@@ -1,23 +1,90 @@
+import '@testing-library/jest-dom';
+import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import DocumentView from '../src/components/DocumentView';
 
-test('renders DocumentView with master canvas and focus box', () => {
-  const masterCanvasRef = { current: document.createElement('canvas') };
-  const masterCanvasState = {
-    masterCanvasRef
-  };
+afterEach(() => vi.restoreAllMocks());
 
+function createControllerDouble(overrides = {}) {
+  return {
+    document: {
+      version: 1,
+      documentId: 'note-1',
+      pages: [{ id: 'page-1' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+    commitStroke: vi.fn(),
+    removeStrokes: vi.fn(),
+    clearDocument: vi.fn(),
+    addPage: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    canUndo: true,
+    canRedo: true,
+    inputMode: 'stylus',
+    setInputMode: vi.fn(),
+    eraserMode: 'pixel',
+    setEraserMode: vi.fn(),
+    ...overrides,
+  };
+}
+
+function toolState(overrides = {}) {
+  return {
+    color: '#EFECE4',
+    rawColor: '#EFECE4',
+    tool: 'pen',
+    rawLineWidth: 3,
+    lineWidth: 3,
+    eraserWidth: 15,
+    isEraser: false,
+    isSelectMode: false,
+    paperStyle: 'lined',
+    showPageBreaks: true,
+    layoutMode: 'full',
+    ...overrides,
+  };
+}
+
+function mockRect(element, rect) {
+  element.getBoundingClientRect = () => ({
+    x: rect.left,
+    y: rect.top,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    ...rect,
+  });
+}
+
+function drawPointerStroke(element, {
+  pointerId = 1,
+  pointerType = 'pen',
+  start = { x: 20, y: 20 },
+  end = { x: 30, y: 30 },
+} = {}) {
+  fireEvent.pointerDown(element, {
+    pointerId, pointerType, clientX: start.x, clientY: start.y,
+  });
+  fireEvent.pointerMove(element, {
+    pointerId, pointerType, clientX: end.x, clientY: end.y,
+  });
+  fireEvent.pointerUp(element, {
+    pointerId, pointerType, clientX: end.x, clientY: end.y,
+  });
+}
+
+test('renders DocumentView with ink canvas and focus box', () => {
   const handleDrag = vi.fn();
   const focusBoxState = {
-    focusBox: { x: 50, y: 60, width: 200, height: 100 },
+    focusBox: { pageId: 'page-1', x: 50, y: 60, width: 200, height: 100 },
     handleDrag
   };
 
-  render(<DocumentView masterCanvasState={masterCanvasState} focusBoxState={focusBoxState} toolbarState={{ layoutMode: 'split' }} />);
+  render(<DocumentView inkController={createControllerDouble()} focusBoxState={focusBoxState} toolbarState={{ layoutMode: 'split' }} />);
 
-  // Check master canvas
-  const canvas = screen.getByTestId('master-canvas');
+  const canvas = screen.getByTestId('ink-canvas');
   expect(canvas).toBeTruthy();
   expect(canvas.classList.contains('master-canvas')).toBe(true);
 
@@ -29,6 +96,80 @@ test('renders DocumentView with master canvas and focus box', () => {
   expect(focusBox.style.top).toBe('60px');
   expect(focusBox.style.width).toBe('200px');
   expect(focusBox.style.height).toBe('100px');
+});
+
+test('exposes the focus rectangle as a named keyboard-movable region with page bounds', () => {
+  function KeyboardFocusHarness() {
+    const [focusBox, setFocusBox] = useState({
+      pageId: 'page-1', x: 590, y: 1025, width: 200, height: 100,
+    });
+    return <DocumentView
+      inkController={createControllerDouble()}
+      focusBoxState={{ focusBox, setFocusBox }}
+      toolbarState={toolState({ layoutMode: 'split' })}
+    />;
+  }
+
+  render(<KeyboardFocusHarness />);
+  const focusBox = screen.getByRole('region', { name: 'Fokusbereich' });
+  expect(focusBox).toHaveAttribute('tabindex', '0');
+  focusBox.focus();
+  expect(focusBox).toHaveFocus();
+
+  fireEvent.keyDown(focusBox, { key: 'ArrowRight', shiftKey: true });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ left: '600px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowDown' });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ top: '1031.2px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowLeft' });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ left: '590px' });
+  fireEvent.keyDown(focusBox, { key: 'ArrowUp', shiftKey: true });
+  expect(screen.getByRole('region', { name: 'Fokusbereich' })).toHaveStyle({ top: '981.2px' });
+});
+
+test.each([
+  { label: '50%', pointerX: 150, pageWidth: '400px', arrowDelta: 20, shiftDelta: 100 },
+  { label: '300%', pointerX: 400, pageWidth: '2400px', arrowDelta: 10 / 3, shiftDelta: 50 / 3 },
+])('moves the focus rectangle by consistent viewport pixels at $label zoom', ({
+  pointerX, pageWidth, arrowDelta, shiftDelta,
+}) => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const focusBox = { pageId: 'page-1', x: 100, y: 100, width: 200, height: 100 };
+  const setFocusBox = vi.fn();
+  render(<DocumentView
+    inkController={createControllerDouble()}
+    focusBoxState={{ focusBox, setFocusBox }}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const page = screen.getByTestId('document-page');
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 100,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 100,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: pointerX, clientY: 100,
+  });
+  expect(page.style.width).toBe(pageWidth);
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: pointerX, clientY: 100,
+  });
+
+  setFocusBox.mockClear();
+  fireEvent.keyDown(screen.getByRole('region', { name: 'Fokusbereich' }), { key: 'ArrowRight' });
+  const arrowUpdate = setFocusBox.mock.calls[0][0](focusBox);
+  expect(arrowUpdate.x).toBeCloseTo(focusBox.x + arrowDelta);
+
+  setFocusBox.mockClear();
+  fireEvent.keyDown(screen.getByRole('region', { name: 'Fokusbereich' }), {
+    key: 'ArrowDown', shiftKey: true,
+  });
+  const shiftUpdate = setFocusBox.mock.calls[0][0](focusBox);
+  expect(shiftUpdate.y).toBeCloseTo(focusBox.y + shiftDelta);
 });
 
 test('renders DocumentView without crashing when states are missing', () => {
@@ -63,24 +204,302 @@ test('select mode draws draft focus box and updates focus box state', () => {
   expect(setIsSelectMode).toHaveBeenCalledWith(false);
 });
 
-test('synced undo and clear canvas', () => {
-  const clearCanvas = vi.fn();
-  const undo = vi.fn();
-  const masterCanvasState = { clearCanvas, undo, canUndo: true };
-  const padActionsRef = { current: { undo: vi.fn(), clearCanvas: vi.fn() } };
+test('routes undo, redo, and clear only to the shared controller', () => {
+  const controller = createControllerDouble();
 
-  render(<DocumentView masterCanvasState={masterCanvasState} padActionsRef={padActionsRef} />);
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
 
   const undoBtn = screen.getByTitle('Rückgängig');
+  const redoBtn = screen.getByTitle('Wiederholen');
   const clearBtn = screen.getByTitle('Leeren');
 
   fireEvent.click(undoBtn);
-  expect(undo).toHaveBeenCalled();
-  expect(padActionsRef.current.undo).toHaveBeenCalled();
+  fireEvent.click(redoBtn);
+  expect(controller.undo).toHaveBeenCalledOnce();
+  expect(controller.redo).toHaveBeenCalledOnce();
 
   fireEvent.click(clearBtn);
-  expect(clearCanvas).toHaveBeenCalled();
-  expect(padActionsRef.current.clearCanvas).toHaveBeenCalled();
+  expect(controller.clearDocument).toHaveBeenCalledOnce();
+});
+
+test('does not commit touch ink in stylus mode but commits page-local pen ink', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+
+  drawPointerStroke(page, { pointerId: 1, pointerType: 'touch' });
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+
+  drawPointerStroke(page, { pointerId: 2, pointerType: 'pen' });
+  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
+  expect(controller.commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+    pageId: 'page-1',
+    points: [{ x: 20, y: 20 }, { x: 30, y: 30 }],
+  }));
+});
+
+test('pans the full document with one touch in stylus mode without creating ink', () => {
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-1',
+      pages: [{ id: 'page-1' }, { id: 'page-2' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  mockRect(page, { left: 0, top: 0, width: 800, height: 2300 });
+  scroller.scrollTop = 200;
+  scroller.scrollLeft = 10;
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 80, clientY: 240,
+  });
+  fireEvent.pointerUp(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 80, clientY: 240,
+  });
+
+  expect(scroller.scrollTop).toBe(260);
+  expect(scroller.scrollLeft).toBe(30);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test.each([
+  { liftedPointerId: 3, survivorPointerId: 4, survivorX: 300 },
+  { liftedPointerId: 4, survivorPointerId: 3, survivorX: 100 },
+])('resumes pan without a jump after pinch when touch $liftedPointerId lifts', ({
+  liftedPointerId, survivorPointerId, survivorX,
+}) => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+  scroller.scrollTop = 200;
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  expect(page.style.width).toBe('1600px');
+  const scrollAfterPinch = scroller.scrollTop;
+
+  fireEvent.pointerUp(page, {
+    pointerId: liftedPointerId,
+    pointerType: 'touch',
+    clientX: liftedPointerId === 3 ? 100 : 300,
+    clientY: 250,
+  });
+  expect(scroller.scrollTop).toBe(scrollAfterPinch);
+  fireEvent.pointerMove(page, {
+    pointerId: survivorPointerId,
+    pointerType: 'touch',
+    clientX: survivorX,
+    clientY: 230,
+  });
+
+  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test('keeps a pinch-resized focus rectangle inside its selected page', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-1',
+      pages: [{ id: 'page-1' }, { id: 'page-2' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  const setFocusBox = vi.fn();
+  const focusBoxState = {
+    focusBox: { pageId: 'page-2', x: 10, y: 10, width: 250, height: 100 },
+    setFocusBox,
+  };
+  render(<DocumentView
+    inkController={controller}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const page = screen.getByTestId('document-page');
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 100,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 100,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 150, clientY: 100,
+  });
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 150, clientY: 100,
+  });
+
+  expect(setFocusBox).toHaveBeenCalledWith({
+    pageId: 'page-2',
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 200,
+  });
+});
+
+test('cancels focus drag resources on document replacement and unmount', () => {
+  const frames = [];
+  let nextFrameId = 1;
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    frames.push(callback);
+    return nextFrameId++;
+  });
+  const cancelFrame = vi.spyOn(globalThis, 'cancelAnimationFrame');
+  const setFocusBox = vi.fn();
+  const focusBoxState = {
+    focusBox: { pageId: 'page-1', x: 50, y: 50, width: 250, height: 100 },
+    setFocusBox,
+  };
+  const firstController = createControllerDouble();
+  const view = render(<DocumentView
+    inkController={firstController}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+  const addListener = vi.spyOn(document, 'addEventListener');
+  const removeListener = vi.spyOn(document, 'removeEventListener');
+  const scroller = screen.getByTestId('document-page').parentElement;
+  mockRect(scroller, { left: 0, top: 0, width: 500, height: 500 });
+
+  fireEvent.pointerDown(screen.getByTestId('focus-box'), {
+    pointerId: 21, pointerType: 'mouse', clientX: 10, clientY: 10,
+  });
+  const replacedDocumentFrame = frames[0];
+  expect(addListener).toHaveBeenCalledWith('pointermove', expect.any(Function));
+  expect(addListener).toHaveBeenCalledWith('pointerup', expect.any(Function));
+  expect(addListener).toHaveBeenCalledWith('pointercancel', expect.any(Function));
+
+  view.rerender(<DocumentView
+    inkController={createControllerDouble({
+      document: { ...firstController.document, documentId: 'note-2' },
+    })}
+    focusBoxState={focusBoxState}
+    toolbarState={toolState({ layoutMode: 'split' })}
+  />);
+
+  expect(cancelFrame).toHaveBeenCalledWith(1);
+  expect(removeListener).toHaveBeenCalledWith('pointermove', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pointerup', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pointercancel', expect.any(Function));
+  setFocusBox.mockClear();
+  replacedDocumentFrame();
+  expect(setFocusBox).not.toHaveBeenCalled();
+
+  fireEvent.pointerDown(screen.getByTestId('focus-box'), {
+    pointerId: 22, pointerType: 'mouse', clientX: 10, clientY: 10,
+  });
+  const unmountedFrame = frames.at(-1);
+  const unmountedFrameId = nextFrameId - 1;
+  view.unmount();
+
+  expect(cancelFrame).toHaveBeenCalledWith(unmountedFrameId);
+  setFocusBox.mockClear();
+  unmountedFrame();
+  expect(setFocusBox).not.toHaveBeenCalled();
+});
+
+test('keeps a surviving finger in navigation after pinch until a fresh touch starts drawing', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+    callback();
+    return 1;
+  });
+  const controller = createControllerDouble({ inputMode: 'finger' });
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+  scroller.scrollTop = 200;
+
+  fireEvent.pointerDown(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
+  });
+  fireEvent.pointerDown(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  expect(page.style.width).toBe('1600px');
+  const scrollAfterPinch = scroller.scrollTop;
+
+  fireEvent.pointerUp(page, {
+    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
+  });
+  fireEvent.pointerMove(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
+  });
+  fireEvent.pointerUp(page, {
+    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
+  });
+
+  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+
+  drawPointerStroke(page, {
+    pointerId: 5,
+    pointerType: 'touch',
+    start: { x: 20, y: 20 },
+    end: { x: 30, y: 30 },
+  });
+  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
+});
+
+test('toggles finger and stroke-eraser modes with accessible pressed state', () => {
+  function StatefulDocumentView() {
+    const [inputMode, setInputMode] = useState('stylus');
+    const [eraserMode, setEraserMode] = useState('pixel');
+    const controller = createControllerDouble({
+      inputMode,
+      setInputMode,
+      eraserMode,
+      setEraserMode,
+    });
+    return <DocumentView inkController={controller} toolbarState={toolState()} />;
+  }
+
+  render(<StatefulDocumentView />);
+  const fingerButton = screen.getByRole('button', { name: 'Fingermodus' });
+  expect(fingerButton).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(fingerButton);
+  expect(screen.getByRole('button', { name: 'Fingermodus' })).toHaveAttribute('aria-pressed', 'true');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Radiermodus: Pixel' }));
+  expect(screen.getByRole('button', { name: 'Radiermodus: Strich' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('opens and interacts with pen settings popover', () => {
