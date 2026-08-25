@@ -1,4 +1,5 @@
 export const CANONICAL_PAGE_WIDTH = 800;
+export const PAGE_GAP = 28;
 export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 40_000_000;
 export const MAX_PAGE_CANVAS_PIXELS = 16_000_000;
