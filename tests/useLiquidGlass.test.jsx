@@ -52,6 +52,7 @@ describe('LiquidGlass control adapter', () => {
     await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
     expect(init.mock.calls[0][0].glassElements).toHaveLength(5)
     expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'enhanced')
+    expect(markChanged).toHaveBeenCalledTimes(1)
     view.unmount()
     expect(destroy).toHaveBeenCalledTimes(1)
   })

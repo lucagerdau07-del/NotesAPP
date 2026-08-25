@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 
 vi.mock('@ybouane/liquidglass', () => ({
-  LiquidGlass: { init: vi.fn(() => Promise.resolve({ destroy: vi.fn() })) },
+  LiquidGlass: { init: vi.fn(() => Promise.resolve({ destroy: vi.fn(), markChanged: vi.fn() })) },
 }))
 
 import App from '../src/App';

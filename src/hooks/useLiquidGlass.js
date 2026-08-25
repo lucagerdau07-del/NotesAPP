@@ -26,11 +26,12 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         }
         instance = created
         instanceRef.current = created
+        instanceRef.current.markChanged()
         root.dataset.liquidGlassState = 'enhanced'
       } catch (error) {
         if (!cancelled) {
           root.dataset.liquidGlassState = 'fallback'
-          if (import.meta.env.DEV) console.warn('[liquid-glass] Falling back to CSS glass.', error)
+          console.warn('[liquid-glass] Falling back to CSS glass.', error)
         }
       }
     }
