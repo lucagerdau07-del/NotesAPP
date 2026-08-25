@@ -1,4 +1,71 @@
+import 'fake-indexeddb/auto';
 import { vi } from 'vitest';
+
+const blobConstructors = [
+  typeof Blob !== 'undefined' ? Blob : null,
+  typeof window !== 'undefined' ? window.Blob : null,
+  typeof globalThis !== 'undefined' ? globalThis.Blob : null,
+  typeof global !== 'undefined' ? global.Blob : null,
+].filter(Boolean);
+
+const blobPrototypes = new Set(blobConstructors.map(c => c.prototype).filter(Boolean));
+if (typeof Blob !== 'undefined') {
+  try {
+    const instance = new Blob();
+    let proto = Object.getPrototypeOf(instance);
+    while (proto && proto !== Object.prototype) {
+      blobPrototypes.add(proto);
+      proto = Object.getPrototypeOf(proto);
+    }
+  } catch {}
+}
+
+for (const proto of blobPrototypes) {
+  if (!proto.text) {
+    proto.text = function text() {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(this);
+      });
+    };
+  }
+  if (!proto.arrayBuffer) {
+    proto.arrayBuffer = function arrayBuffer() {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(this);
+      });
+    };
+  }
+}
+
+const originalStructuredClone = globalThis.structuredClone;
+globalThis.structuredClone = function structuredCloneWithBlobs(value, options) {
+  function cloneWithBlobs(val) {
+    if (val === null || typeof val !== 'object') return val;
+    if (val instanceof Blob) {
+      const cloned = val.slice(0, val.size, val.type);
+      if (!cloned.text) cloned.text = val.text?.bind(cloned) || Blob.prototype.text.bind(cloned);
+      if (!cloned.arrayBuffer) cloned.arrayBuffer = val.arrayBuffer?.bind(cloned) || Blob.prototype.arrayBuffer.bind(cloned);
+      return cloned;
+    }
+    if (Array.isArray(val)) return val.map(cloneWithBlobs);
+    const copy = {};
+    for (const key of Object.keys(val)) {
+      copy[key] = cloneWithBlobs(val[key]);
+    }
+    return copy;
+  }
+  try {
+    return cloneWithBlobs(value);
+  } catch {
+    return originalStructuredClone ? originalStructuredClone(value, options) : value;
+  }
+};
 
 function createCanvasContext() {
   const context = {
