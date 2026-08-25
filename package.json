@@ -17,6 +17,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
+    "@ybouane/liquidglass": "1.0.3",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-colorful": "^5.8.0",

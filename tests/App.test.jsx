@@ -1,9 +1,33 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
+
+vi.mock('@ybouane/liquidglass', () => ({
+  LiquidGlass: { init: vi.fn(() => Promise.resolve({ destroy: vi.fn(), markChanged: vi.fn() })) },
+}))
+
 import App from '../src/App';
 
 describe('App Component', () => {
+  it('marks exactly five direct Library controls for WebGL glass', () => {
+    render(<App />)
+    const root = screen.getByTestId('liquid-glass-root')
+    const controls = root.querySelectorAll(':scope > [data-liquid-glass-control]')
+    expect([...controls].map(node => node.dataset.liquidGlassControl)).toEqual([
+      'navigation', 'search', 'reset', 'view-sort', 'agent',
+    ])
+    expect(screen.getByTestId('new-note-btn')).not.toHaveAttribute('data-liquid-glass-control')
+  })
+
+  it('keeps the agent trigger mounted while the agent panel is open', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByTestId('agent-open-btn'))
+
+    expect(screen.getByTestId('agent-panel')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('agent-open-btn')).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('renders the library without crashing', () => {
     render(<App />);
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
