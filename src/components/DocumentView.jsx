@@ -1,16 +1,35 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { 
-  Eraser, Trash2, Undo2, Redo2, Lasso, Highlighter, PenLine, 
-  Layers, AlignJustify, File, Grid, Columns2, ArrowLeft, 
-  X, Palette, Sliders, PenTool, Pencil, Sparkles, Infinity, Files, Plus 
-} from 'lucide-react';
-import { HexColorPicker } from 'react-colorful';
-import useLongPress from '../hooks/useLongPress';
-import useInkPointer from '../hooks/useInkPointer';
-import { mapViewportPoint, pagePointToViewport } from '../ink/pageCoordinates';
-import { renderInkDocument, resizeInkCanvas } from '../ink/renderInk';
-import { calculateDocumentMetrics } from '../documents/documentLayout';
-import DocumentPage from './document/DocumentPage';
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import {
+  Eraser,
+  Trash2,
+  Undo2,
+  Redo2,
+  Lasso,
+  Highlighter,
+  PenLine,
+  Layers,
+  AlignJustify,
+  File,
+  Grid,
+  Columns2,
+  ArrowLeft,
+  X,
+  Palette,
+  Sliders,
+  PenTool,
+  Pencil,
+  Sparkles,
+  Infinity,
+  Files,
+  Plus,
+} from "lucide-react";
+import { HexColorPicker } from "react-colorful";
+import useLongPress from "../hooks/useLongPress";
+import useInkPointer from "../hooks/useInkPointer";
+import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
+import { renderInkDocument, resizeInkCanvas } from "../ink/renderInk";
+import { calculateDocumentMetrics } from "../documents/documentLayout";
+import DocumentPage from "./document/DocumentPage";
 
 function PenSettingsPopover({
   tool,
@@ -20,28 +39,34 @@ function PenSettingsPopover({
   penColor,
   onClose,
   setIsEraser,
-  setIsSelectMode
+  setIsSelectMode,
 }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
     const handleDown = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.('.pen-rail-btn')) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".pen-rail-btn")
+      ) {
         onClose();
       }
     };
-    document.addEventListener('pointerdown', handleDown);
-    return () => document.removeEventListener('pointerdown', handleDown);
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
   }, [onClose]);
 
-  const isHighlighter = tool === 'highlighter';
-  const thicknessPresets = isHighlighter ? [10, 16, 24, 32, 44] : [1.5, 3, 5, 8, 14];
+  const isHighlighter = tool === "highlighter";
+  const thicknessPresets = isHighlighter
+    ? [10, 16, 24, 32, 44]
+    : [1.5, 3, 5, 8, 14];
 
   const tools = [
-    { id: 'pen', name: 'Stift', icon: <PenLine size={15} /> },
-    { id: 'fountain', name: 'Füller', icon: <PenTool size={15} /> },
-    { id: 'highlighter', name: 'Marker', icon: <Highlighter size={15} /> },
-    { id: 'pencil', name: 'Bleistift', icon: <Pencil size={15} /> },
+    { id: "pen", name: "Stift", icon: <PenLine size={15} /> },
+    { id: "fountain", name: "Füller", icon: <PenTool size={15} /> },
+    { id: "highlighter", name: "Marker", icon: <Highlighter size={15} /> },
+    { id: "pencil", name: "Bleistift", icon: <Pencil size={15} /> },
   ];
 
   return (
@@ -55,17 +80,21 @@ function PenSettingsPopover({
         <span className="editor-popover-title">
           <Sliders size={14} /> Stift-Einstellungen
         </span>
-        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
           <X size={14} />
         </button>
       </div>
 
       {/* Tool selector */}
       <div className="tool-types-grid">
-        {tools.map(t => (
+        {tools.map((t) => (
           <button
             key={t.id}
-            className={`tool-type-btn ${tool === t.id ? 'active' : ''}`}
+            className={`tool-type-btn ${tool === t.id ? "active" : ""}`}
             onClick={() => {
               setTool?.(t.id);
               setIsEraser?.(false);
@@ -79,23 +108,36 @@ function PenSettingsPopover({
       </div>
 
       {/* Thickness Presets */}
-      <div style={{ font: '600 10px ui-monospace, monospace', letterSpacing: '.06em', color: 'rgba(233,230,223,0.5)', marginBottom: 6 }}>
+      <div
+        style={{
+          font: "600 10px ui-monospace, monospace",
+          letterSpacing: ".06em",
+          color: "rgba(233,230,223,0.5)",
+          marginBottom: 6,
+        }}
+      >
         STRICHSTÄRKE ({rawLineWidth || 3}px)
       </div>
       <div className="thickness-presets">
         {thicknessPresets.map((val) => (
           <button
             key={val}
-            className={`thickness-preset-btn ${Math.abs((rawLineWidth || 3) - val) < 0.5 ? 'active' : ''}`}
+            className={`thickness-preset-btn ${Math.abs((rawLineWidth || 3) - val) < 0.5 ? "active" : ""}`}
             onClick={() => setLineWidth?.(val)}
             title={`${val}px`}
           >
             <span
               className="thickness-dot"
               style={{
-                width: Math.max(3, Math.min(20, val * (isHighlighter ? 0.38 : 1.3))),
-                height: Math.max(3, Math.min(20, val * (isHighlighter ? 0.38 : 1.3))),
-                background: penColor
+                width: Math.max(
+                  3,
+                  Math.min(20, val * (isHighlighter ? 0.38 : 1.3)),
+                ),
+                height: Math.max(
+                  3,
+                  Math.min(20, val * (isHighlighter ? 0.38 : 1.3)),
+                ),
+                background: penColor,
               }}
             />
           </button>
@@ -118,13 +160,20 @@ function PenSettingsPopover({
 
       {/* Stroke Preview */}
       <div className="stroke-preview-box">
-        <svg width="220" height="36" viewBox="0 0 220 36" style={{ overflow: 'visible' }}>
+        <svg
+          width="220"
+          height="36"
+          viewBox="0 0 220 36"
+          style={{ overflow: "visible" }}
+        >
           <path
             d="M 15 18 Q 65 4, 110 18 T 205 18"
             fill="none"
             stroke={penColor}
-            strokeWidth={isHighlighter ? (rawLineWidth || 3) * 1.5 : (rawLineWidth || 3)}
-            strokeOpacity={isHighlighter ? 0.45 : tool === 'pencil' ? 0.75 : 1}
+            strokeWidth={
+              isHighlighter ? (rawLineWidth || 3) * 1.5 : rawLineWidth || 3
+            }
+            strokeOpacity={isHighlighter ? 0.45 : tool === "pencil" ? 0.75 : 1}
             strokeLinecap="round"
           />
         </svg>
@@ -138,10 +187,10 @@ function ColorWheelPopover({
   activePickerIndex,
   setActivePickerIndex,
   onColorChange,
-  onClose
+  onClose,
 }) {
   const popoverRef = useRef(null);
-  const curColor = customColors[activePickerIndex] || '#EFECE4';
+  const curColor = customColors[activePickerIndex] || "#EFECE4";
   const [hexInputValue, setHexInputValue] = useState(curColor);
 
   useEffect(() => {
@@ -150,17 +199,31 @@ function ColorWheelPopover({
 
   useEffect(() => {
     const handleDown = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.('.rail-color-wrapper')) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".rail-color-wrapper")
+      ) {
         onClose();
       }
     };
-    document.addEventListener('pointerdown', handleDown);
-    return () => document.removeEventListener('pointerdown', handleDown);
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
   }, [onClose]);
 
   const presetPalette = [
-    '#EFECE4', '#A09D95', '#484441', '#3E7BD8', '#2AA9DF', '#4FA66B',
-    '#84CC16', '#D4A937', '#E87A38', '#D8615B', '#E05285', '#9353D3'
+    "#EFECE4",
+    "#A09D95",
+    "#484441",
+    "#3E7BD8",
+    "#2AA9DF",
+    "#4FA66B",
+    "#84CC16",
+    "#D4A937",
+    "#E87A38",
+    "#D8615B",
+    "#E05285",
+    "#9353D3",
   ];
 
   const handleHexSubmit = (val) => {
@@ -181,7 +244,11 @@ function ColorWheelPopover({
         <span className="editor-popover-title">
           <Palette size={14} /> Farbrad & Palette
         </span>
-        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
           <X size={14} />
         </button>
       </div>
@@ -191,7 +258,7 @@ function ColorWheelPopover({
         {customColors.map((col, idx) => (
           <div
             key={idx}
-            className={`slot-circle ${activePickerIndex === idx ? 'active' : ''}`}
+            className={`slot-circle ${activePickerIndex === idx ? "active" : ""}`}
             style={{ backgroundColor: col }}
             onClick={() => setActivePickerIndex(idx)}
             title={`Slot ${idx + 1} anpassen`}
@@ -213,7 +280,7 @@ function ColorWheelPopover({
         {presetPalette.map((pCol) => (
           <button
             key={pCol}
-            className={`color-preset-btn ${curColor.toLowerCase() === pCol.toLowerCase() ? 'active' : ''}`}
+            className={`color-preset-btn ${curColor.toLowerCase() === pCol.toLowerCase() ? "active" : ""}`}
             style={{ backgroundColor: pCol }}
             onClick={() => {
               onColorChange(activePickerIndex, pCol);
@@ -226,7 +293,10 @@ function ColorWheelPopover({
 
       {/* Hex Code Input */}
       <div className="hex-input-row">
-        <span className="hex-preview-dot" style={{ backgroundColor: curColor }} />
+        <span
+          className="hex-preview-dot"
+          style={{ backgroundColor: curColor }}
+        />
         <input
           type="text"
           className="hex-text-input"
@@ -240,7 +310,14 @@ function ColorWheelPopover({
   );
 }
 
-function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onOpenPicker }) {
+function ColorSlot({
+  colorValue,
+  index,
+  isActive,
+  isEraser,
+  onSelect,
+  onOpenPicker,
+}) {
   const isLongPressRef = useRef(false);
   const timerRef = useRef(null);
 
@@ -269,16 +346,19 @@ function ColorSlot({ colorValue, index, isActive, isEraser, onSelect, onOpenPick
 
   return (
     <div
-      className={`rail-color-wrapper ${isActive && !isEraser ? 'active' : ''}`}
+      className={`rail-color-wrapper ${isActive && !isEraser ? "active" : ""}`}
       title="Klicken zum Auswählen, gedrückt halten für Farbrad"
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: "none" }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       onClick={handleClick}
       data-testid={`color-slot-${index}`}
     >
-      <div className={`rail-color ${index === 0 ? 'rail-color-light' : ''}`} style={{ backgroundColor: colorValue, pointerEvents: 'none' }} />
+      <div
+        className={`rail-color ${index === 0 ? "rail-color-light" : ""}`}
+        style={{ backgroundColor: colorValue, pointerEvents: "none" }}
+      />
     </div>
   );
 }
@@ -289,8 +369,8 @@ const PAGE_GAP = 28;
 const maxPages = 20;
 const emptyDocument = {
   version: 1,
-  documentId: '',
-  pages: [{ id: 'empty-page-1' }],
+  documentId: "",
+  pages: [{ id: "empty-page-1" }],
   strokes: [],
   updatedAt: 0,
 };
@@ -333,26 +413,54 @@ function focusRectToViewport(layout, focusBox) {
   };
 }
 
-export default function DocumentView({ note, sourceHandle, sourceLoading, sourceError, inkController, focusBoxState, toolbarState, onBack }) {
-  const { 
-    color, setColor, 
-    isEraser, setIsEraser, 
-    lineWidth, rawLineWidth, setLineWidth,
-    eraserWidth, setEraserWidth,
-    isSelectMode, setIsSelectMode,
-    paperStyle, setPaperStyle,
-    layoutMode, setLayoutMode,
-    rawColor, tool, setTool,
-    showPageBreaks, setShowPageBreaks
+export default function DocumentView({
+  note,
+  sourceHandle,
+  sourceLoading,
+  sourceError,
+  retrySource,
+  inkController,
+  focusBoxState,
+  toolbarState,
+  onBack,
+}) {
+  const {
+    color,
+    setColor,
+    isEraser,
+    setIsEraser,
+    lineWidth,
+    rawLineWidth,
+    setLineWidth,
+    eraserWidth,
+    setEraserWidth,
+    isSelectMode,
+    setIsSelectMode,
+    paperStyle,
+    setPaperStyle,
+    layoutMode,
+    setLayoutMode,
+    rawColor,
+    tool,
+    setTool,
+    showPageBreaks: rawShowPageBreaks,
+    setShowPageBreaks,
   } = toolbarState || {};
+  const showPageBreaks = note?.kind === 'imported' ? true : rawShowPageBreaks;
   const inkDocument = inkController?.document || emptyDocument;
-  const pageIds = inkDocument.pages.map(page => page.id);
+  const pageIds = inkDocument.pages.map((page) => page.id);
   const pagesCount = pageIds.length;
   const canUndo = inkController?.canUndo;
   const canRedo = inkController?.canRedo;
   const penColor = rawColor ?? color;
-  const isFullMode = layoutMode !== 'split';
-  const [customColors, setCustomColors] = useState(['#EFECE4', '#3E7BD8', '#D8615B', '#4FA66B', '#D4A937']);
+  const isFullMode = layoutMode !== "split";
+  const [customColors, setCustomColors] = useState([
+    "#EFECE4",
+    "#3E7BD8",
+    "#D8615B",
+    "#4FA66B",
+    "#D4A937",
+  ]);
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -361,7 +469,9 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
 
   const [zoom, setZoom] = useState(1);
   const pagesCountRef = useRef(1);
-  useEffect(() => { pagesCountRef.current = pagesCount; }, [pagesCount]);
+  useEffect(() => {
+    pagesCountRef.current = pagesCount;
+  }, [pagesCount]);
 
   const handleColorChange = (index, newColor) => {
     const newColors = [...customColors];
@@ -382,20 +492,20 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   };
 
   const cyclePaperStyle = () => {
-    let nextStyle = 'lined';
-    let label = 'Liniert';
-    if (paperStyle === 'lined') {
-      nextStyle = 'grid';
-      label = 'Kariert';
-    } else if (paperStyle === 'grid') {
-      nextStyle = 'dotted';
-      label = 'Punktiert';
-    } else if (paperStyle === 'dotted') {
-      nextStyle = 'blank';
-      label = 'Blanko';
+    let nextStyle = "lined";
+    let label = "Liniert";
+    if (paperStyle === "lined") {
+      nextStyle = "grid";
+      label = "Kariert";
+    } else if (paperStyle === "grid") {
+      nextStyle = "dotted";
+      label = "Punktiert";
+    } else if (paperStyle === "dotted") {
+      nextStyle = "blank";
+      label = "Blanko";
     } else {
-      nextStyle = 'lined';
-      label = 'Liniert';
+      nextStyle = "lined";
+      label = "Liniert";
     }
     setPaperStyle?.(nextStyle);
     setPaperToast(label);
@@ -406,9 +516,9 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   };
 
   const getPaperStyleIcon = () => {
-    if (paperStyle === 'lined') return <AlignJustify size={18} />;
-    if (paperStyle === 'grid') return <Grid size={18} />;
-    if (paperStyle === 'dotted') return <Sparkles size={18} />;
+    if (paperStyle === "lined") return <AlignJustify size={18} />;
+    if (paperStyle === "grid") return <Grid size={18} />;
+    if (paperStyle === "dotted") return <Sparkles size={18} />;
     return <File size={18} />;
   };
 
@@ -417,13 +527,25 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   const scrollRef = useRef(null);
   const inkCanvasRef = useRef(null);
   const documentHeight = pageHeight * pagesCount;
-  const pageDescriptors = note?.kind === 'imported' && Array.isArray(note.pages) && note.pages.length > 0
-    ? note.pages
-    : pageIds.map((id, index) => ({ id, index, width: baseWidth, height: pageHeight }));
+  const pageDescriptors =
+    note?.kind === "imported" &&
+    Array.isArray(note.pages) &&
+    note.pages.length > 0
+      ? note.pages
+      : pageIds.map((id, index) => ({
+          id,
+          index,
+          width: baseWidth,
+          height: pageHeight,
+        }));
   const documentMetrics = calculateDocumentMetrics(pageDescriptors);
   const totalDocumentHeight = showPageBreaks
-    ? (note?.kind === 'imported' ? documentMetrics.totalHeight * zoom : pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP)
-    : (note?.kind === 'imported' ? documentMetrics.totalHeight * zoom : documentHeight * zoom);
+    ? note?.kind === "imported"
+      ? documentMetrics.totalHeight * zoom
+      : pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP
+    : note?.kind === "imported"
+      ? documentMetrics.totalHeight * zoom
+      : documentHeight * zoom;
   const pageLayout = {
     pageIds,
     pageWidth: baseWidth,
@@ -433,18 +555,24 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     zoom,
     showPageBreaks: Boolean(showPageBreaks),
   };
-  const focusBoxViewport = focusRectToViewport(pageLayout, focusBoxState?.focusBox);
+  const focusBoxViewport = focusRectToViewport(
+    pageLayout,
+    focusBoxState?.focusBox,
+  );
   const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
   const inkTool = isEraser
-    ? (inkController?.eraserMode === 'stroke' ? 'stroke-eraser' : 'pixel-eraser')
-    : (tool || 'pen');
+    ? inkController?.eraserMode === "stroke"
+      ? "stroke-eraser"
+      : "pixel-eraser"
+    : tool || "pen";
   const inkPointer = useInkPointer({
-    inputMode: inkController?.inputMode || 'stylus',
+    inputMode: inkController?.inputMode || "stylus",
     tool: inkTool,
-    eraserMode: inkController?.eraserMode || 'pixel',
-    color: penColor || '#EFECE4',
-    width: isEraser ? (eraserWidth || 15) : (rawLineWidth ?? lineWidth ?? 3),
-    mapPoint: event => mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
+    eraserMode: inkController?.eraserMode || "pixel",
+    color: penColor || "#EFECE4",
+    width: isEraser ? eraserWidth || 15 : (rawLineWidth ?? lineWidth ?? 3),
+    mapPoint: (event) =>
+      mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
     document: inkDocument,
     commitStroke: inkController?.commitStroke,
     removeStrokes: inkController?.removeStrokes,
@@ -453,15 +581,19 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   redrawInkCanvasRef.current = () => {
     const canvas = inkCanvasRef.current;
     if (!canvas) return;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext("2d");
     if (!context) return;
     const cssWidth = baseWidth * zoom;
     const cssHeight = totalDocumentHeight;
     const dpr = globalThis.devicePixelRatio || 1;
     resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
-    const previewDocument = inkPointer.draftStroke && inkTool !== 'stroke-eraser'
-      ? { ...inkDocument, strokes: [...inkDocument.strokes, inkPointer.draftStroke] }
-      : inkDocument;
+    const previewDocument =
+      inkPointer.draftStroke && inkTool !== "stroke-eraser"
+        ? {
+            ...inkDocument,
+            strokes: [...inkDocument.strokes, inkPointer.draftStroke],
+          }
+        : inkDocument;
     renderInkDocument(context, previewDocument, {
       ...pageLayout,
       cssWidth,
@@ -478,17 +610,25 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [inkDocument, inkPointer.draftStroke, inkTool, pagesCount, showPageBreaks, totalDocumentHeight, zoom]);
+  }, [
+    inkDocument,
+    inkPointer.draftStroke,
+    inkTool,
+    pagesCount,
+    showPageBreaks,
+    totalDocumentHeight,
+    zoom,
+  ]);
 
   useEffect(() => {
-    if (typeof globalThis.matchMedia !== 'function') return undefined;
+    if (typeof globalThis.matchMedia !== "function") return undefined;
     let mediaQuery = null;
     let disposed = false;
 
     const removeListener = () => {
       if (!mediaQuery) return;
-      if (typeof mediaQuery.removeEventListener === 'function') {
-        mediaQuery.removeEventListener('change', handleDprChange);
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleDprChange);
       } else {
         mediaQuery.removeListener?.(handleDprChange);
       }
@@ -498,8 +638,8 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
       if (disposed) return;
       const dpr = globalThis.devicePixelRatio || 1;
       mediaQuery = globalThis.matchMedia(`(resolution: ${dpr}dppx)`);
-      if (typeof mediaQuery.addEventListener === 'function') {
-        mediaQuery.addEventListener('change', handleDprChange);
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", handleDprChange);
       } else {
         mediaQuery.addListener?.(handleDprChange);
       }
@@ -531,8 +671,14 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   }, [isFullMode]);
 
   const handlePointerDown = (e) => {
-    if (!isSelectMode) { inkPointer.onPointerDown(e); return; }
-    const point = mapViewportPoint(pageLayout, relativePoint(containerRef.current, e));
+    if (!isSelectMode) {
+      inkPointer.onPointerDown(e);
+      return;
+    }
+    const point = mapViewportPoint(
+      pageLayout,
+      relativePoint(containerRef.current, e),
+    );
     if (!point) return;
     setDraftFocusBox({
       pageId: point.pageId,
@@ -546,14 +692,20 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   };
 
   const handlePointerMove = (e) => {
-    if (!isSelectMode) { inkPointer.onPointerMove(e); return; }
+    if (!isSelectMode) {
+      inkPointer.onPointerMove(e);
+      return;
+    }
     if (!draftFocusBox) return;
-    const point = mapViewportPoint(pageLayout, relativePoint(containerRef.current, e));
+    const point = mapViewportPoint(
+      pageLayout,
+      relativePoint(containerRef.current, e),
+    );
     if (!point || point.pageId !== draftFocusBox.pageId) return;
     const currentX = point.x;
     const currentY = point.y;
-    
-    setDraftFocusBox(prev => {
+
+    setDraftFocusBox((prev) => {
       const x = Math.min(prev.startX, currentX);
       const y = Math.min(prev.startY, currentY);
       const width = Math.abs(currentX - prev.startX);
@@ -563,7 +715,10 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
   };
 
   const handlePointerUp = (e) => {
-    if (!isSelectMode) { inkPointer.onPointerUp(e); return; }
+    if (!isSelectMode) {
+      inkPointer.onPointerUp(e);
+      return;
+    }
     if (!draftFocusBox) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
@@ -571,7 +726,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         x: draftFocusBox.x,
         y: draftFocusBox.y,
         width: draftFocusBox.width,
-        height: draftFocusBox.height
+        height: draftFocusBox.height,
       });
     }
     setDraftFocusBox(null);
@@ -595,21 +750,24 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     const drag = focusDragRef.current;
     if (!drag) return;
     focusDragRef.current = null;
-    if (drag.animationFrameId !== null) cancelAnimationFrame(drag.animationFrameId);
-    document.removeEventListener('pointermove', drag.onPointerMove);
-    document.removeEventListener('pointerup', drag.onPointerUp);
-    document.removeEventListener('pointercancel', drag.onPointerUp);
+    if (drag.animationFrameId !== null)
+      cancelAnimationFrame(drag.animationFrameId);
+    document.removeEventListener("pointermove", drag.onPointerMove);
+    document.removeEventListener("pointerup", drag.onPointerUp);
+    document.removeEventListener("pointercancel", drag.onPointerUp);
   };
 
   useEffect(() => () => cancelFocusBoxDrag(), [inkDocument.documentId]);
 
   const handleGestureStart = (e) => {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== "touch") return;
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (activePointers.current.size === 1
-      && isFullMode
-      && inkController?.inputMode !== 'finger') {
+    if (
+      activePointers.current.size === 1 &&
+      isFullMode &&
+      inkController?.inputMode !== "finger"
+    ) {
       const scrollContainer = containerRef.current?.parentElement;
       if (scrollContainer) {
         touchPanInitialData.current = {
@@ -621,40 +779,49 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         };
       }
     }
-    
+
     if (activePointers.current.size === 2) {
       touchPanInitialData.current = null;
       const pointers = Array.from(activePointers.current.values());
-      const distance = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+      const distance = Math.hypot(
+        pointers[0].x - pointers[1].x,
+        pointers[0].y - pointers[1].y,
+      );
       const scrollContainer = containerRef.current?.parentElement;
       if (!scrollContainer) return;
 
       pinchInitialData.current = {
         distance,
         zoom: zoom,
-        focusBox: focusBoxState?.focusBox ? { ...focusBoxState.focusBox } : null,
+        focusBox: focusBoxState?.focusBox
+          ? { ...focusBoxState.focusBox }
+          : null,
         centerX: (pointers[0].x + pointers[1].x) / 2,
         centerY: (pointers[0].y + pointers[1].y) / 2,
         scrollTop: scrollContainer.scrollTop,
-        scrollLeft: scrollContainer.scrollLeft
+        scrollLeft: scrollContainer.scrollLeft,
       };
     }
   };
 
   const handleGestureMove = (e) => {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== "touch") return;
     if (activePointers.current.has(e.pointerId)) {
       activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
 
-    if (activePointers.current.size === 1
-      && touchPanInitialData.current?.pointerId === e.pointerId) {
+    if (
+      activePointers.current.size === 1 &&
+      touchPanInitialData.current?.pointerId === e.pointerId
+    ) {
       const scrollContainer = containerRef.current?.parentElement;
       if (scrollContainer) {
-        scrollContainer.scrollLeft = touchPanInitialData.current.scrollLeft
-          - (e.clientX - touchPanInitialData.current.x);
-        scrollContainer.scrollTop = touchPanInitialData.current.scrollTop
-          - (e.clientY - touchPanInitialData.current.y);
+        scrollContainer.scrollLeft =
+          touchPanInitialData.current.scrollLeft -
+          (e.clientX - touchPanInitialData.current.x);
+        scrollContainer.scrollTop =
+          touchPanInitialData.current.scrollTop -
+          (e.clientY - touchPanInitialData.current.y);
       }
       return;
     }
@@ -671,32 +838,51 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           return;
         }
 
-        const currentDistance = Math.hypot(pointers[0].x - pointers[1].x, pointers[0].y - pointers[1].y);
+        const currentDistance = Math.hypot(
+          pointers[0].x - pointers[1].x,
+          pointers[0].y - pointers[1].y,
+        );
         const currentCenterX = (pointers[0].x + pointers[1].x) / 2;
         const currentCenterY = (pointers[0].y + pointers[1].y) / 2;
-        
-        const { distance: startDist, zoom: startZoom, centerX: startX, centerY: startY, scrollTop: startScrollTop, scrollLeft: startScrollLeft, focusBox: startFb } = pinchInitialData.current;
-        
-        const newZoom = Math.max(0.5, Math.min(3, startZoom * (currentDistance / startDist)));
+
+        const {
+          distance: startDist,
+          zoom: startZoom,
+          centerX: startX,
+          centerY: startY,
+          scrollTop: startScrollTop,
+          scrollLeft: startScrollLeft,
+          focusBox: startFb,
+        } = pinchInitialData.current;
+
+        const newZoom = Math.max(
+          0.5,
+          Math.min(3, startZoom * (currentDistance / startDist)),
+        );
         setZoom(newZoom);
-        
+
         if (startFb) {
           const ratio = startZoom / newZoom;
-          let newY = startFb.y + startFb.height / 2 - (startFb.height * ratio) / 2;
+          let newY =
+            startFb.y + startFb.height / 2 - (startFb.height * ratio) / 2;
           const newHeight = startFb.height * ratio;
           if (newY < 0) newY = 0;
-          if (newY + newHeight > pageHeight) newY = Math.max(0, pageHeight - newHeight);
-          
+          if (newY + newHeight > pageHeight)
+            newY = Math.max(0, pageHeight - newHeight);
+
           const newFb = clampFocusBoxToPage({
             ...startFb,
             x: startFb.x + startFb.width / 2 - (startFb.width * ratio) / 2,
             y: newY,
             width: startFb.width * ratio,
-            height: newHeight
+            height: newHeight,
           });
           pendingFocusBox.current = newFb;
           if (focusBoxRef.current) {
-            const viewportRect = focusRectToViewport({ ...pageLayout, zoom: newZoom }, newFb);
+            const viewportRect = focusRectToViewport(
+              { ...pageLayout, zoom: newZoom },
+              newFb,
+            );
             if (viewportRect) {
               focusBoxRef.current.style.left = `${viewportRect.x}px`;
               focusBoxRef.current.style.top = `${viewportRect.y}px`;
@@ -705,7 +891,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
             }
           }
         }
-        
+
         const scrollContainer = containerRef.current?.parentElement;
         if (scrollContainer) {
           const zoomRatio = newZoom / startZoom;
@@ -714,7 +900,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           scrollContainer.scrollLeft = startScrollLeft * zoomRatio - dx;
           scrollContainer.scrollTop = startScrollTop * zoomRatio - dy;
         }
-        
+
         if (pinchInitialData.current) {
           pinchInitialData.current.ticking = false;
         }
@@ -732,25 +918,38 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         if (!wheelTicking) {
           wheelTicking = true;
           requestAnimationFrame(() => {
-            setZoom(prev => {
-              const newZoom = Math.max(0.5, Math.min(3, prev - e.deltaY * 0.01));
+            setZoom((prev) => {
+              const newZoom = Math.max(
+                0.5,
+                Math.min(3, prev - e.deltaY * 0.01),
+              );
               if (focusBoxState?.focusBox && newZoom !== prev) {
                 const ratio = prev / newZoom;
-                let newY = focusBoxState.focusBox.y + focusBoxState.focusBox.height / 2 - (focusBoxState.focusBox.height * ratio) / 2;
+                let newY =
+                  focusBoxState.focusBox.y +
+                  focusBoxState.focusBox.height / 2 -
+                  (focusBoxState.focusBox.height * ratio) / 2;
                 const newHeight = focusBoxState.focusBox.height * ratio;
                 if (newY < 0) newY = 0;
-                if (newY + newHeight > pageHeight) newY = Math.max(0, pageHeight - newHeight);
+                if (newY + newHeight > pageHeight)
+                  newY = Math.max(0, pageHeight - newHeight);
 
                 const newFb = clampFocusBoxToPage({
                   ...focusBoxState.focusBox,
-                  x: focusBoxState.focusBox.x + focusBoxState.focusBox.width / 2 - (focusBoxState.focusBox.width * ratio) / 2,
+                  x:
+                    focusBoxState.focusBox.x +
+                    focusBoxState.focusBox.width / 2 -
+                    (focusBoxState.focusBox.width * ratio) / 2,
                   y: newY,
                   width: focusBoxState.focusBox.width * ratio,
-                  height: newHeight
+                  height: newHeight,
                 });
                 pendingFocusBox.current = newFb;
                 if (focusBoxRef.current) {
-                  const viewportRect = focusRectToViewport({ ...pageLayout, zoom: newZoom }, newFb);
+                  const viewportRect = focusRectToViewport(
+                    { ...pageLayout, zoom: newZoom },
+                    newFb,
+                  );
                   if (viewportRect) {
                     focusBoxRef.current.style.left = `${viewportRect.x}px`;
                     focusBoxRef.current.style.top = `${viewportRect.y}px`;
@@ -758,7 +957,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
                     focusBoxRef.current.style.height = `${viewportRect.height}px`;
                   }
                 }
-                
+
                 clearTimeout(wheelTimeout.current);
                 wheelTimeout.current = setTimeout(() => {
                   if (pendingFocusBox.current) {
@@ -774,12 +973,12 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         }
       }
     };
-    scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
-    return () => scrollContainer.removeEventListener('wheel', handleWheel);
+    scrollContainer.addEventListener("wheel", handleWheel, { passive: false });
+    return () => scrollContainer.removeEventListener("wheel", handleWheel);
   }, [focusBoxState]);
 
   const handleGestureEnd = (e) => {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== "touch") return;
     const wasMultiTouch = activePointers.current.size > 1;
     activePointers.current.delete(e.pointerId);
     if (touchPanInitialData.current?.pointerId === e.pointerId) {
@@ -818,7 +1017,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     const startBoxX = focusBoxState.focusBox.x;
     const startBoxY = focusBoxState.focusBox.y;
     const boxWidth = focusBoxState.focusBox.width;
-    
+
     let currentX = startX;
     let currentY = startY;
     const scrollContainer = containerRef.current?.parentElement;
@@ -835,17 +1034,25 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
 
     const updateBoxDOM = (dx, dy) => {
       if (!isActiveDrag()) return startBoxY;
-      const movedFocusBox = moveFocusBoxWithinPage({
-        ...focusBoxState.focusBox,
-        x: startBoxX,
-        y: startBoxY,
-        width: boxWidth,
-      }, dx, dy);
-      focusBoxState.setFocusBox(prev => prev ? ({
-        ...prev,
-        x: movedFocusBox.x,
-        y: movedFocusBox.y,
-      }) : prev);
+      const movedFocusBox = moveFocusBoxWithinPage(
+        {
+          ...focusBoxState.focusBox,
+          x: startBoxX,
+          y: startBoxY,
+          width: boxWidth,
+        },
+        dx,
+        dy,
+      );
+      focusBoxState.setFocusBox((prev) =>
+        prev
+          ? {
+              ...prev,
+              x: movedFocusBox.x,
+              y: movedFocusBox.y,
+            }
+          : prev,
+      );
 
       return movedFocusBox.y;
     };
@@ -855,7 +1062,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
       const rect = scrollContainer.getBoundingClientRect();
       const scrollZone = 60;
       const speed = 15;
-      
+
       let scrolled = false;
       if (currentY < rect.top + scrollZone) {
         scrollContainer.scrollTop -= speed;
@@ -872,20 +1079,26 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         scrollContainer.scrollLeft += speed;
         scrolled = true;
       }
-      
+
       if (scrolled) {
-        const dx = (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) / zoom;
-        const dy = (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) / zoom;
-        
+        const dx =
+          (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) /
+          zoom;
+        const dy =
+          (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) /
+          zoom;
+
         const newY = updateBoxDOM(dx, dy);
-        
+
         // Auto-expand in continuous mode if near the document bottom
         if (!showPageBreaks) {
           const currentBoxBottom = newY + focusBoxState.focusBox.height;
           const focusPageIndex = pageIds.indexOf(focusBoxState.focusBox.pageId);
-          if (focusPageIndex === pagesCountRef.current - 1
-            && pagesCountRef.current < maxPages
-            && currentBoxBottom > pageHeight - 400) {
+          if (
+            focusPageIndex === pagesCountRef.current - 1 &&
+            pagesCountRef.current < maxPages &&
+            currentBoxBottom > pageHeight - 400
+          ) {
             inkController?.addPage?.();
           }
         }
@@ -897,8 +1110,12 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
       if (!isActiveDrag() || moveEvent.pointerId !== pointerId) return;
       currentX = moveEvent.clientX;
       currentY = moveEvent.clientY;
-      const dx = (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) / zoom;
-      const dy = (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) / zoom;
+      const dx =
+        (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) /
+        zoom;
+      const dy =
+        (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) /
+        zoom;
       updateBoxDOM(dx, dy);
     };
 
@@ -911,9 +1128,9 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     drag.onPointerUp = onPointerUp;
     focusDragRef.current = drag;
     drag.animationFrameId = requestAnimationFrame(doScroll);
-    document.addEventListener('pointermove', onPointerMove);
-    document.addEventListener('pointerup', onPointerUp);
-    document.addEventListener('pointercancel', onPointerUp);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerUp);
   };
 
   const handleFocusBoxKeyDown = (e) => {
@@ -928,46 +1145,48 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
     e.preventDefault();
     e.stopPropagation();
     const step = (e.shiftKey ? 50 : 10) / zoom;
-    focusBoxState?.setFocusBox(prev => prev
-      ? moveFocusBoxWithinPage(prev, direction[0] * step, direction[1] * step)
-      : prev);
+    focusBoxState?.setFocusBox((prev) =>
+      prev
+        ? moveFocusBoxWithinPage(prev, direction[0] * step, direction[1] * step)
+        : prev,
+    );
   };
 
   const getStaticBackgroundStyles = () => {
     const redMarginLine = `linear-gradient(to right, transparent, transparent 88px, oklch(0.62 0.09 26/.38) 88px, oklch(0.62 0.09 26/.38) 89.5px, transparent 89.5px)`;
 
-    if (paperStyle === 'blank') {
-      return { backgroundImage: 'none' };
+    if (paperStyle === "blank") {
+      return { backgroundImage: "none" };
     }
 
-    if (paperStyle === 'lined') {
+    if (paperStyle === "lined") {
       return {
         backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.07) calc(100% - 1px))`,
-        backgroundSize: '100% 100%, 100% 34px',
-        backgroundPosition: '0 0, 0 92px',
-        backgroundRepeat: 'no-repeat, repeat-y'
+        backgroundSize: "100% 100%, 100% 34px",
+        backgroundPosition: "0 0, 0 92px",
+        backgroundRepeat: "no-repeat, repeat-y",
       };
     }
 
-    if (paperStyle === 'grid') {
+    if (paperStyle === "grid") {
       return {
         backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px))`,
-        backgroundSize: '100% 100%, 100% 24px, 24px 100%',
-        backgroundPosition: '0 0, 0 92px, 88px 0',
-        backgroundRepeat: 'no-repeat, repeat-y, repeat-x'
+        backgroundSize: "100% 100%, 100% 24px, 24px 100%",
+        backgroundPosition: "0 0, 0 92px, 88px 0",
+        backgroundRepeat: "no-repeat, repeat-y, repeat-x",
       };
     }
 
-    if (paperStyle === 'dotted') {
+    if (paperStyle === "dotted") {
       return {
         backgroundImage: `${redMarginLine}, radial-gradient(circle, rgba(255,255,255,.18) 1.2px, transparent 1.3px)`,
-        backgroundSize: '100% 100%, 24px 24px',
-        backgroundPosition: '0 0, 16px 92px',
-        backgroundRepeat: 'no-repeat, repeat'
+        backgroundSize: "100% 100%, 24px 24px",
+        backgroundPosition: "0 0, 16px 92px",
+        backgroundRepeat: "no-repeat, repeat",
       };
     }
 
-    return { backgroundImage: 'none' };
+    return { backgroundImage: "none" };
   };
 
   return (
@@ -975,7 +1194,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
       className={`document-view paper-style-${paperStyle}`}
       data-testid="document-view"
       data-document-id={inkController?.document?.documentId}
-      data-document-kind={note?.kind || 'blank'}
+      data-document-kind={note?.kind || "blank"}
       data-page-count={pagesCount}
       data-tool={tool}
       data-color={penColor}
@@ -984,11 +1203,15 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
       data-input-mode={inkController?.inputMode}
       data-eraser-mode={inkController?.eraserMode}
       data-stroke-count={inkDocument.strokes.length}
-      style={{ display: 'flex', height: '100%' }}
+      style={{ display: "flex", height: "100%" }}
     >
       <div className="editor-sidebar" style={{ flexShrink: 0, zIndex: 20 }}>
         {onBack && (
-          <button className="rail-btn active" onClick={onBack} title="Zurück zur Bibliothek">
+          <button
+            className="rail-btn active"
+            onClick={onBack}
+            title="Zurück zur Bibliothek"
+          >
             <ArrowLeft size={19} />
           </button>
         )}
@@ -1012,12 +1235,12 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         </button>
         <div className="rail-divider" />
         <button
-          className={`rail-btn pen-rail-btn ${tool !== 'highlighter' && !isEraser && !isSelectMode ? 'active' : ''}`}
+          className={`rail-btn pen-rail-btn ${tool !== "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
           onClick={() => {
-            if (tool !== 'highlighter' && !isEraser && !isSelectMode) {
-              setIsPenSettingsOpen(prev => !prev);
+            if (tool !== "highlighter" && !isEraser && !isSelectMode) {
+              setIsPenSettingsOpen((prev) => !prev);
             } else {
-              setTool?.('pen');
+              setTool?.("pen");
               setIsEraser?.(false);
               setIsSelectMode?.(false);
               setIsPenSettingsOpen(true);
@@ -1030,9 +1253,9 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           <PenLine size={18} />
         </button>
         <button
-          className={`rail-btn ${tool === 'highlighter' && !isEraser && !isSelectMode ? 'active' : ''}`}
+          className={`rail-btn ${tool === "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
           onClick={() => {
-            setTool?.('highlighter');
+            setTool?.("highlighter");
             setIsEraser?.(false);
             setIsSelectMode?.(false);
             setIsPenSettingsOpen(true);
@@ -1043,7 +1266,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           <Highlighter size={18} />
         </button>
         <button
-          className={`rail-btn ${isEraser && !isSelectMode ? 'active' : ''}`}
+          className={`rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
           onClick={() => {
             setIsEraser?.(true);
             setIsSelectMode?.(false);
@@ -1055,30 +1278,34 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           <Eraser size={18} />
         </button>
         <button
-          className={`rail-btn ${inkController?.inputMode === 'finger' ? 'active' : ''}`}
-          onClick={() => inkController?.setInputMode?.(
-            inkController.inputMode === 'finger' ? 'stylus' : 'finger'
-          )}
+          className={`rail-btn ${inkController?.inputMode === "finger" ? "active" : ""}`}
+          onClick={() =>
+            inkController?.setInputMode?.(
+              inkController.inputMode === "finger" ? "stylus" : "finger",
+            )
+          }
           aria-label="Fingermodus"
-          aria-pressed={inkController?.inputMode === 'finger'}
+          aria-pressed={inkController?.inputMode === "finger"}
           title="Fingermodus"
         >
           <Pencil size={18} />
         </button>
         <button
-          className={`rail-btn ${inkController?.eraserMode === 'stroke' ? 'active' : ''}`}
-          onClick={() => inkController?.setEraserMode?.(
-            inkController.eraserMode === 'stroke' ? 'pixel' : 'stroke'
-          )}
-          aria-label={`Radiermodus: ${inkController?.eraserMode === 'stroke' ? 'Strich' : 'Pixel'}`}
-          aria-pressed={inkController?.eraserMode === 'stroke'}
-          title={`Radiermodus: ${inkController?.eraserMode === 'stroke' ? 'Strich' : 'Pixel'}`}
+          className={`rail-btn ${inkController?.eraserMode === "stroke" ? "active" : ""}`}
+          onClick={() =>
+            inkController?.setEraserMode?.(
+              inkController.eraserMode === "stroke" ? "pixel" : "stroke",
+            )
+          }
+          aria-label={`Radiermodus: ${inkController?.eraserMode === "stroke" ? "Strich" : "Pixel"}`}
+          aria-pressed={inkController?.eraserMode === "stroke"}
+          title={`Radiermodus: ${inkController?.eraserMode === "stroke" ? "Strich" : "Pixel"}`}
         >
           <Eraser size={16} />
         </button>
         {!isFullMode && (
           <button
-            className={`rail-btn ${isSelectMode ? 'active' : ''}`}
+            className={`rail-btn ${isSelectMode ? "active" : ""}`}
             onClick={() => {
               const newMode = !isSelectMode;
               setIsSelectMode?.(newMode);
@@ -1103,7 +1330,7 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
             isEraser={isEraser}
             onSelect={() => {
               if (penColor === c && !isEraser && !isSelectMode) {
-                setIsColorPickerOpen(prev => !prev);
+                setIsColorPickerOpen((prev) => !prev);
                 setActivePickerIndex(index);
               } else {
                 setColor?.(c);
@@ -1122,42 +1349,59 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         ))}
         <div className="rail-divider" />
         <button
-          className={`rail-btn ${paperStyle !== 'blank' ? 'active' : ''}`}
+          className={`rail-btn ${paperStyle !== "blank" ? "active" : ""}`}
           onClick={cyclePaperStyle}
           title={`Papierstil: ${paperStyle} (Klicken zum Wechseln)`}
           data-testid="paper-style-btn"
         >
           {getPaperStyleIcon()}
         </button>
-        <button
-          className={`rail-btn ${showPageBreaks ? 'active' : ''}`}
-          onClick={() => {
-            const next = !showPageBreaks;
-            setShowPageBreaks?.(next);
-            setPaperToast(next ? 'Einzelseiten aktiv' : 'Unendliches Dokument aktiv');
-            setTimeout(() => setPaperToast(null), 1800);
-          }}
-          title={showPageBreaks ? 'Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)' : 'Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)'}
-          data-testid="page-mode-toggle-btn"
-        >
-          {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
-        </button>
+        {note?.kind !== 'imported' && (
+          <button
+            className={`rail-btn ${showPageBreaks ? "active" : ""}`}
+            onClick={() => {
+              const next = !showPageBreaks;
+              setShowPageBreaks?.(next);
+              setPaperToast(
+                next ? "Einzelseiten aktiv" : "Unendliches Dokument aktiv",
+              );
+              setTimeout(() => setPaperToast(null), 1800);
+            }}
+            title={
+              showPageBreaks
+                ? "Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)"
+                : "Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)"
+            }
+            data-testid="page-mode-toggle-btn"
+          >
+            {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
+          </button>
+        )}
         <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
           <Trash2 size={18} />
         </button>
         <div className="rail-divider" />
         <button
-          className={`rail-btn ${!isFullMode ? 'active' : ''}`}
+          className={`rail-btn ${!isFullMode ? "active" : ""}`}
           onClick={() => {
             setIsSelectMode?.(false);
-            setLayoutMode?.(isFullMode ? 'split' : 'full');
+            setLayoutMode?.(isFullMode ? "split" : "full");
           }}
-          title={isFullMode ? 'Geteilte Ansicht (Fokus-Box) einschalten' : 'Geteilte Ansicht ausschalten'}
+          title={
+            isFullMode
+              ? "Geteilte Ansicht (Fokus-Box) einschalten"
+              : "Geteilte Ansicht ausschalten"
+          }
           data-testid="layout-mode-btn"
         >
           <Columns2 size={18} />
         </button>
-        <button className="rail-btn" style={{ marginTop: 'auto' }} title="Ebenen (bald verfügbar)" disabled>
+        <button
+          className="rail-btn"
+          style={{ marginTop: "auto" }}
+          title="Ebenen (bald verfügbar)"
+          disabled
+        >
           <Layers size={19} />
         </button>
       </div>
@@ -1195,16 +1439,16 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         ref={scrollRef}
         style={{
           flex: 1,
-          overflowY: 'auto',
-          overflowX: isFullMode ? 'hidden' : 'auto',
-          position: 'relative',
-          textAlign: isFullMode ? 'left' : 'center',
-          touchAction: 'pan-x pan-y',
+          overflowY: "auto",
+          overflowX: isFullMode ? "hidden" : "auto",
+          position: "relative",
+          textAlign: isFullMode ? "left" : "center",
+          touchAction: "pan-x pan-y",
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
-          margin: isFullMode ? '78px 26px 0 104px' : '78px 12px 0 104px',
-          background: 'transparent',
-          color: '#FFFFFF',
+          margin: isFullMode ? "78px 26px 0 104px" : "78px 12px 0 104px",
+          background: "transparent",
+          color: "#FFFFFF",
         }}
         onPointerDown={handleGestureStart}
         onPointerMove={handleGestureMove}
@@ -1212,26 +1456,29 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
         onPointerCancel={handleGestureEnd}
         onScroll={(e) => {
           // Notes-App: am unteren Ende wächst das Papier NUR im unendlichen Modus nach.
-          if (!showPageBreaks) {
+          if (!showPageBreaks && note?.kind !== 'imported') {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
-            if (scrollHeight - scrollTop - clientHeight < 200 && pagesCount < maxPages) {
+            if (
+              scrollHeight - scrollTop - clientHeight < 200 &&
+              pagesCount < maxPages
+            ) {
               inkController?.addPage?.();
             }
           }
         }}
       >
-        <div 
+        <div
           data-testid="document-page"
           style={{
-            display: 'inline-block',
-            textAlign: 'left',
+            display: "inline-block",
+            textAlign: "left",
             width: `${baseWidth * zoom}px`,
             height: `${totalDocumentHeight}px`,
-            position: 'relative',
-            backgroundColor: 'transparent',
-            boxShadow: 'none',
-            margin: isFullMode ? 0 : '96px 0 24px 0',
-            touchAction: (isSelectMode || isFullMode) ? 'none' : 'auto',
+            position: "relative",
+            backgroundColor: "transparent",
+            boxShadow: "none",
+            margin: isFullMode ? 0 : "96px 0 24px 0",
+            touchAction: isSelectMode || isFullMode ? "none" : "auto",
           }}
           ref={containerRef}
           onPointerDown={handlePointerDown}
@@ -1239,13 +1486,69 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
         >
+          {sourceLoading && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                color: '#fff',
+                zIndex: 100,
+                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+              }}
+              data-testid="source-loading"
+            >
+              <span>Dokument wird geladen...</span>
+            </div>
+          )}
+          {sourceError && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                color: '#fff',
+                zIndex: 100,
+                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+              }}
+              data-testid="source-error"
+            >
+              <span style={{ marginBottom: 12 }}>Fehler beim Laden des Dokuments</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); retrySource?.(); }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#3E7BD8',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                Erneut versuchen
+              </button>
+            </div>
+          )}
           {/* Paper Background: 1 continuous paper for infinite mode, discrete page cards with real gaps, or imported document */}
-          {note?.kind === 'imported' ? (
+          {note?.kind === "imported" ? (
             documentMetrics.pageLayouts.map((pageLayout) => (
               <div
                 key={pageLayout.id}
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: `${pageLayout.top * zoom}px`,
                   left: 0,
                   width: `${pageLayout.width * zoom}px`,
@@ -1256,7 +1559,11 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
                   page={pageLayout}
                   sourceType={note.source?.type}
                   sourceHandle={sourceHandle}
-                  strokes={inkDocument.strokes}
+                  strokes={
+                    inkPointer.draftStroke && inkTool !== "stroke-eraser"
+                      ? [...inkDocument.strokes, inkPointer.draftStroke]
+                      : inkDocument.strokes
+                  }
                   zoom={zoom}
                   dpr={globalThis.devicePixelRatio || 1}
                 />
@@ -1265,30 +1572,32 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
           ) : !showPageBreaks ? (
             <div
               style={{
-                position: 'absolute',
+                position: "absolute",
                 top: 0,
                 left: 0,
-                width: '100%',
+                width: "100%",
                 height: `${documentHeight * zoom}px`,
-                borderRadius: isFullMode ? '22px 22px 0 0' : '20px',
-                background: 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
-                boxShadow: 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)',
-                overflow: 'hidden',
-                pointerEvents: 'none',
+                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+                background:
+                  "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
+                boxShadow:
+                  "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
+                overflow: "hidden",
+                pointerEvents: "none",
               }}
             >
-              <div 
+              <div
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: 0,
                   left: 0,
                   width: `${baseWidth}px`,
                   height: `${documentHeight}px`,
                   transform: `scale(${zoom})`,
-                  transformOrigin: '0 0',
+                  transformOrigin: "0 0",
                   ...getStaticBackgroundStyles(),
-                  pointerEvents: 'none',
-                  willChange: 'transform'
+                  pointerEvents: "none",
+                  willChange: "transform",
                 }}
               />
             </div>
@@ -1299,45 +1608,47 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
                 <div
                   key={i}
                   style={{
-                    position: 'absolute',
+                    position: "absolute",
                     top: `${pageTop}px`,
                     left: 0,
-                    width: '100%',
+                    width: "100%",
                     height: `${pageHeight * zoom}px`,
-                    borderRadius: '20px',
-                    background: 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
-                    boxShadow: 'inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 24px 50px -16px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)',
-                    overflow: 'hidden',
-                    pointerEvents: 'none',
+                    borderRadius: "20px",
+                    background:
+                      "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
+                    boxShadow:
+                      "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 24px 50px -16px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
+                    overflow: "hidden",
+                    pointerEvents: "none",
                   }}
                 >
-                  <div 
+                  <div
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       top: 0,
                       left: 0,
                       width: `${baseWidth}px`,
                       height: `${pageHeight}px`,
                       transform: `scale(${zoom})`,
-                      transformOrigin: '0 0',
+                      transformOrigin: "0 0",
                       ...getStaticBackgroundStyles(),
-                      pointerEvents: 'none',
+                      pointerEvents: "none",
                     }}
                   />
                   <span
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       right: 18,
                       top: 16,
-                      font: '600 10.5px ui-monospace, monospace',
-                      letterSpacing: '.08em',
-                      color: 'rgba(255,255,255,0.45)',
-                      background: 'rgba(255,255,255,0.06)',
-                      padding: '3px 10px',
+                      font: "600 10.5px ui-monospace, monospace",
+                      letterSpacing: ".08em",
+                      color: "rgba(255,255,255,0.45)",
+                      background: "rgba(255,255,255,0.06)",
+                      padding: "3px 10px",
                       borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.09)',
-                      backdropFilter: 'blur(10px)',
-                      pointerEvents: 'none',
+                      border: "1px solid rgba(255,255,255,0.09)",
+                      backdropFilter: "blur(10px)",
+                      pointerEvents: "none",
                     }}
                   >
                     SEITE {i + 1} / {pagesCount}
@@ -1346,20 +1657,22 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
               );
             })
           )}
-          <canvas
-            ref={inkCanvasRef}
-            className="master-canvas"
-            data-testid="ink-canvas"
-            style={{
-              width: '100%',
-              height: '100%',
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              touchAction: 'none',
-              pointerEvents: 'none'
-            }}
-          />
+          {note?.kind !== 'imported' && (
+            <canvas
+              ref={inkCanvasRef}
+              className="master-canvas"
+              data-testid="ink-canvas"
+              style={{
+                width: "100%",
+                height: "100%",
+                position: "absolute",
+                left: 0,
+                top: 0,
+                touchAction: "none",
+                pointerEvents: "none",
+              }}
+            />
+          )}
           {!isFullMode && focusBoxState?.focusBox && focusBoxViewport && (
             <div
               ref={focusBoxRef}
@@ -1373,43 +1686,43 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
                 top: focusBoxViewport.y,
                 width: focusBoxViewport.width,
                 height: focusBoxViewport.height,
-                position: 'absolute',
-                border: '2px solid #1976D2',
-                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                cursor: 'move',
+                position: "absolute",
+                border: "2px solid #1976D2",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                cursor: "move",
                 zIndex: 10,
-                touchAction: 'none'
+                touchAction: "none",
               }}
               onPointerDown={handleFocusBoxDragStart}
               onKeyDown={handleFocusBoxKeyDown}
             />
           )}
           {draftFocusBox && draftFocusBoxViewport && (
-            <div 
+            <div
               data-testid="draft-focus-box"
               style={{
-                position: 'absolute',
-                border: '2px dashed #1976D2',
-                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                pointerEvents: 'none',
+                position: "absolute",
+                border: "2px dashed #1976D2",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                pointerEvents: "none",
                 left: draftFocusBoxViewport.x,
                 top: draftFocusBoxViewport.y,
                 width: draftFocusBoxViewport.width,
                 height: draftFocusBoxViewport.height,
-                zIndex: 1000
+                zIndex: 1000,
               }}
             />
           )}
         </div>
-        {/* Plus Button under the page (only in showPageBreaks mode) */}
-        {showPageBreaks && pagesCount < maxPages && (
-          <div 
+        {/* Plus Button under the page (only in showPageBreaks mode for regular notes) */}
+        {showPageBreaks && note?.kind !== 'imported' && pagesCount < maxPages && (
+          <div
             style={{
-              display: 'flex',
-              justifyContent: 'center',
-              padding: '24px 0 54px',
-              position: 'relative',
-              zIndex: 10
+              display: "flex",
+              justifyContent: "center",
+              padding: "24px 0 54px",
+              position: "relative",
+              zIndex: 10,
             }}
           >
             <button
@@ -1418,31 +1731,38 @@ export default function DocumentView({ note, sourceHandle, sourceLoading, source
                 inkController?.addPage?.();
                 setTimeout(() => {
                   if (scrollRef.current) {
-                    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+                    scrollRef.current.scrollTo({
+                      top: scrollRef.current.scrollHeight,
+                      behavior: "smooth",
+                    });
                   }
                 }, 50);
               }}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
+                display: "inline-flex",
+                alignItems: "center",
                 gap: 8,
-                padding: '10px 22px',
+                padding: "10px 22px",
                 borderRadius: 9999,
-                background: 'linear-gradient(180deg, rgba(42, 42, 48, 0.78) 0%, rgba(18, 18, 22, 0.9) 100%)',
-                backdropFilter: 'blur(24px) saturate(1.8)',
-                WebkitBackdropFilter: 'blur(24px) saturate(1.8)',
-                border: '1px solid rgba(255, 255, 255, 0.22)',
-                boxShadow: 'inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.85), 0 16px 36px -12px rgba(0, 0, 0, 0.9)',
-                color: '#FFFFFF',
-                font: '600 13px Manrope, sans-serif',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+                background:
+                  "linear-gradient(180deg, rgba(42, 42, 48, 0.78) 0%, rgba(18, 18, 22, 0.9) 100%)",
+                backdropFilter: "blur(24px) saturate(1.8)",
+                WebkitBackdropFilter: "blur(24px) saturate(1.8)",
+                border: "1px solid rgba(255, 255, 255, 0.22)",
+                boxShadow:
+                  "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.85), 0 16px 36px -12px rgba(0, 0, 0, 0.9)",
+                color: "#FFFFFF",
+                font: "600 13px Manrope, sans-serif",
+                cursor: "pointer",
+                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
               title="Neue Seite hinzufügen"
               data-testid="add-page-btn"
             >
               <Plus size={16} strokeWidth={2.4} />
-              <span>Neue Seite hinzufügen ({pagesCount + 1}/{maxPages})</span>
+              <span>
+                Neue Seite hinzufügen ({pagesCount + 1}/{maxPages})
+              </span>
             </button>
           </div>
         )}

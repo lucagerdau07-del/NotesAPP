@@ -1,6 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from "react";
 
-export default function InkPageCanvas({ page, strokes = [], zoom = 1, dpr = 1 }) {
+export default function InkPageCanvas({
+  page,
+  strokes = [],
+  zoom = 1,
+  dpr = 1,
+}) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -14,26 +19,26 @@ export default function InkPageCanvas({ page, strokes = [], zoom = 1, dpr = 1 })
     canvas.style.width = `${Math.round(logicalWidth)}px`;
     canvas.style.height = `${Math.round(logicalHeight)}px`;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const pageStrokes = strokes.filter(s => s.pageId === page.id);
+    const pageStrokes = strokes.filter((s) => s.pageId === page.id);
     if (pageStrokes.length === 0) return;
 
     ctx.save();
     ctx.scale(zoom * dpr, zoom * dpr);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
     for (const stroke of pageStrokes) {
       if (!stroke.points || stroke.points.length === 0) continue;
       ctx.save();
-      ctx.strokeStyle = stroke.color || '#000000';
+      ctx.strokeStyle = stroke.color || "#000000";
       ctx.lineWidth = stroke.width || 3;
       ctx.globalAlpha = stroke.opacity ?? 1;
-      if (stroke.tool === 'highlighter') {
-        ctx.globalCompositeOperation = 'multiply';
+      if (stroke.tool === "highlighter") {
+        ctx.globalCompositeOperation = "multiply";
       }
 
       ctx.beginPath();
@@ -54,11 +59,11 @@ export default function InkPageCanvas({ page, strokes = [], zoom = 1, dpr = 1 })
       ref={canvasRef}
       className="document-ink-canvas"
       style={{
-        position: 'absolute',
+        position: "absolute",
         top: 0,
         left: 0,
-        pointerEvents: 'none',
-        display: 'block',
+        pointerEvents: "none",
+        display: "block",
       }}
     />
   );

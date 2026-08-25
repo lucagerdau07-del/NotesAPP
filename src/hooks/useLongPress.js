@@ -1,6 +1,10 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from "react";
 
-export default function useLongPress(onLongPress, onClick, { delay = 400 } = {}) {
+export default function useLongPress(
+  onLongPress,
+  onClick,
+  { delay = 400 } = {},
+) {
   const timeout = useRef(null);
   const target = useRef(null);
 
@@ -14,7 +18,7 @@ export default function useLongPress(onLongPress, onClick, { delay = 400 } = {})
         target.current = null;
       }, delay);
     },
-    [onLongPress, delay]
+    [onLongPress, delay],
   );
 
   const clear = useCallback(
@@ -28,7 +32,7 @@ export default function useLongPress(onLongPress, onClick, { delay = 400 } = {})
         target.current = null;
       }
     },
-    [onClick]
+    [onClick],
   );
 
   useEffect(() => {

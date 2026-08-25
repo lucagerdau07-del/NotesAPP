@@ -7,47 +7,59 @@ export function createInputState() {
 }
 
 function updateTouches(pointerIds, event) {
-  if (event.pointerType !== 'touch') return [...pointerIds];
+  if (event.pointerType !== "touch") return [...pointerIds];
 
-  if (event.phase === 'down') {
+  if (event.phase === "down") {
     return pointerIds.includes(event.pointerId)
       ? [...pointerIds]
       : [...pointerIds, event.pointerId];
   }
 
-  if (event.phase === 'up' || event.phase === 'cancel') {
+  if (event.phase === "up" || event.phase === "cancel") {
     return pointerIds.filter((pointerId) => pointerId !== event.pointerId);
   }
 
   return [...pointerIds];
 }
 
-export function reducePointerInput(state, event, inputMode = 'stylus') {
+export function reducePointerInput(state, event, inputMode = "stylus") {
   const nextState = {
     ...state,
     touchPointerIds: updateTouches(state.touchPointerIds, event),
   };
   const ownerId = state.drawingPointerId;
   const isOwner = ownerId !== null && event.pointerId === ownerId;
-  const canStart = event.pointerType === 'pen'
-    || event.pointerType === 'mouse'
-    || (inputMode === 'finger' && event.pointerType === 'touch');
+  const canStart =
+    event.pointerType === "pen" ||
+    event.pointerType === "mouse" ||
+    (inputMode === "finger" && event.pointerType === "touch");
 
-  if (event.phase === 'down') {
+  if (event.phase === "down") {
     if (ownerId !== null) {
-      if (state.drawingPointerType === 'touch' && event.pointerType === 'touch') {
+      if (
+        state.drawingPointerType === "touch" &&
+        event.pointerType === "touch"
+      ) {
         return {
-          state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
-          intent: 'cancel-draw',
+          state: {
+            ...nextState,
+            drawingPointerId: null,
+            drawingPointerType: null,
+          },
+          intent: "cancel-draw",
         };
       }
-      if (event.pointerType === 'touch') return { state: nextState, intent: 'navigate' };
-      return { state: nextState, intent: 'ignore' };
+      if (event.pointerType === "touch")
+        return { state: nextState, intent: "navigate" };
+      return { state: nextState, intent: "ignore" };
     }
 
     if (canStart) {
-      if (event.pointerType === 'touch' && state.touchPointerIds.some(pointerId => pointerId !== event.pointerId)) {
-        return { state: nextState, intent: 'navigate' };
+      if (
+        event.pointerType === "touch" &&
+        state.touchPointerIds.some((pointerId) => pointerId !== event.pointerId)
+      ) {
+        return { state: nextState, intent: "navigate" };
       }
       return {
         state: {
@@ -55,37 +67,53 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
           drawingPointerId: event.pointerId,
           drawingPointerType: event.pointerType,
         },
-        intent: 'start-draw',
+        intent: "start-draw",
       };
     }
 
-    return { state: nextState, intent: event.pointerType === 'touch' ? 'navigate' : 'ignore' };
+    return {
+      state: nextState,
+      intent: event.pointerType === "touch" ? "navigate" : "ignore",
+    };
   }
 
   if (isOwner) {
-    if (event.phase === 'move') return { state: nextState, intent: 'continue-draw' };
-    if (event.phase === 'abort') {
+    if (event.phase === "move")
+      return { state: nextState, intent: "continue-draw" };
+    if (event.phase === "abort") {
       return {
-        state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
-        intent: 'cancel-draw',
+        state: {
+          ...nextState,
+          drawingPointerId: null,
+          drawingPointerType: null,
+        },
+        intent: "cancel-draw",
       };
     }
-    if (event.phase === 'up') {
+    if (event.phase === "up") {
       return {
-        state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
-        intent: 'finish-draw',
+        state: {
+          ...nextState,
+          drawingPointerId: null,
+          drawingPointerType: null,
+        },
+        intent: "finish-draw",
       };
     }
-    if (event.phase === 'cancel') {
+    if (event.phase === "cancel") {
       return {
-        state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
-        intent: 'cancel-draw',
+        state: {
+          ...nextState,
+          drawingPointerId: null,
+          drawingPointerType: null,
+        },
+        intent: "cancel-draw",
       };
     }
   }
 
   return {
     state: nextState,
-    intent: event.pointerType === 'touch' ? 'navigate' : 'ignore',
+    intent: event.pointerType === "touch" ? "navigate" : "ignore",
   };
 }

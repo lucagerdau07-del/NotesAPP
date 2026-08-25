@@ -1,37 +1,54 @@
-import React, { useState } from 'react';
-import { Sparkles, Share, MoreHorizontal } from 'lucide-react';
-import './styles/main.css';
-import SplitLayout from './components/SplitLayout';
-import Library from './components/Library';
-import Settings from './components/Settings';
+import React, { useState } from "react";
+import { Sparkles, Share, MoreHorizontal } from "lucide-react";
+import "./styles/main.css";
+import SplitLayout from "./components/SplitLayout";
+import Library from "./components/Library";
+import Settings from "./components/Settings";
 
 export default function App() {
-  const [screen, setScreen] = useState('library');
+  const [screen, setScreen] = useState("library");
   const [activeNote, setActiveNote] = useState(null);
-  const activeTab = 'smartCanvas';
+  const activeTab = "smartCanvas";
 
   const openNote = (note) => {
-    const id = String(note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`);
+    const id = String(
+      note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`,
+    );
     setActiveNote({ ...note, id });
-    setScreen('editor');
+    setScreen("editor");
   };
 
-  if (screen === 'settings') {
-    return <Settings onBack={() => setScreen('library')} />;
+  if (screen === "settings") {
+    return <Settings onBack={() => setScreen("library")} />;
   }
 
-  if (screen === 'library') {
-    return <Library onOpenNote={openNote} onOpenSettings={() => setScreen('settings')} />;
+  if (screen === "library") {
+    return (
+      <Library
+        onOpenNote={openNote}
+        onOpenSettings={() => setScreen("settings")}
+      />
+    );
   }
 
   return (
     <div className="editor-shell">
       <div className="editor-title-pill">
-        <span className="editor-title">{activeNote?.title || 'Neue Notiz'}</span>
+        <span className="editor-title">
+          {activeNote?.title || "Neue Notiz"}
+        </span>
         {activeNote?.subject && (
           <>
-            <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,.14)' }} />
-            <span className="editor-subject">{activeNote.subject} · Seite 1</span>
+            <span
+              style={{
+                width: 1,
+                height: 18,
+                background: "rgba(255,255,255,.14)",
+              }}
+            />
+            <span className="editor-subject">
+              {activeNote.subject} · Seite 1
+            </span>
           </>
         )}
       </div>
@@ -47,7 +64,12 @@ export default function App() {
         </button>
       </div>
       <div className="editor-body">
-        <SplitLayout activeTab={activeTab} note={activeNote} documentId={activeNote.id} onBack={() => setScreen('library')} />
+        <SplitLayout
+          activeTab={activeTab}
+          note={activeNote}
+          documentId={activeNote.id}
+          onBack={() => setScreen("library")}
+        />
       </div>
     </div>
   );

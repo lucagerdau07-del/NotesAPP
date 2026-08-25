@@ -22,18 +22,23 @@ export function resizeInkCanvas(canvas, cssWidth, cssHeight, dpr = 1) {
 }
 
 export function renderInkStroke(context, stroke, transform) {
-  if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
+  if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2)
+    return;
 
   const { offsetX, offsetY, scaleX, scaleY } = strokeTransform(transform);
   context.save();
-  context.globalCompositeOperation = stroke.tool === 'pixel-eraser' ? 'destination-out' : 'source-over';
+  context.globalCompositeOperation =
+    stroke.tool === "pixel-eraser" ? "destination-out" : "source-over";
   context.globalAlpha = stroke.opacity;
   context.strokeStyle = stroke.color;
   context.lineWidth = stroke.width * scaleX;
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
+  context.lineCap = "round";
+  context.lineJoin = "round";
   context.beginPath();
-  context.moveTo(offsetX + stroke.points[0].x * scaleX, offsetY + stroke.points[0].y * scaleY);
+  context.moveTo(
+    offsetX + stroke.points[0].x * scaleX,
+    offsetY + stroke.points[0].y * scaleY,
+  );
   stroke.points.slice(1).forEach((point) => {
     context.lineTo(offsetX + point.x * scaleX, offsetY + point.y * scaleY);
   });
@@ -47,7 +52,9 @@ export function renderInkDocument(context, document, layout) {
   const scaleY = finiteOr(layout?.scaleY, scale);
   const pageIds = Array.isArray(layout?.pageIds)
     ? layout.pageIds
-    : (Array.isArray(document?.pages) ? document.pages.map((page) => page.id) : []);
+    : Array.isArray(document?.pages)
+      ? document.pages.map((page) => page.id)
+      : [];
   const pageHeight = finiteOr(layout?.pageHeight, 0);
   const pageGap = layout?.showPageBreaks ? finiteOr(layout?.pageGap, 0) : 0;
   const cssWidth = finiteOr(layout?.cssWidth, finiteOr(layout?.width, 0));
@@ -58,11 +65,13 @@ export function renderInkDocument(context, document, layout) {
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   context.clearRect(0, 0, cssWidth, cssHeight);
 
-  const pageLayouts = Array.isArray(layout?.pageLayouts) ? layout.pageLayouts : null;
+  const pageLayouts = Array.isArray(layout?.pageLayouts)
+    ? layout.pageLayouts
+    : null;
   (document?.strokes || []).forEach((stroke) => {
     let offsetY = 0;
     if (pageLayouts) {
-      const page = pageLayouts.find(p => p.id === stroke.pageId);
+      const page = pageLayouts.find((p) => p.id === stroke.pageId);
       if (!page) return;
       offsetY = page.top * scaleY;
     } else {

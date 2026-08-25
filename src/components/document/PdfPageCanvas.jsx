@@ -1,7 +1,12 @@
-import React, { useEffect, useRef } from 'react';
-import { MAX_PAGE_CANVAS_PIXELS } from '../../documents/fileImport.js';
+import React, { useEffect, useRef } from "react";
+import { MAX_PAGE_CANVAS_PIXELS } from "../../documents/fileImport.js";
 
-export default function PdfPageCanvas({ page, sourceHandle, zoom = 1, dpr = 1 }) {
+export default function PdfPageCanvas({
+  page,
+  sourceHandle,
+  zoom = 1,
+  dpr = 1,
+}) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -22,7 +27,9 @@ export default function PdfPageCanvas({ page, sourceHandle, zoom = 1, dpr = 1 })
         let scale = zoom * dpr;
 
         if (page.width * scale * page.height * scale > MAX_PAGE_CANVAS_PIXELS) {
-          scale = Math.sqrt(MAX_PAGE_CANVAS_PIXELS / (page.width * page.height));
+          scale = Math.sqrt(
+            MAX_PAGE_CANVAS_PIXELS / (page.width * page.height),
+          );
         }
 
         const viewport = pdfPage.getViewport({ scale });
@@ -32,7 +39,7 @@ export default function PdfPageCanvas({ page, sourceHandle, zoom = 1, dpr = 1 })
         canvas.style.width = `${Math.round(logicalWidth)}px`;
         canvas.style.height = `${Math.round(logicalHeight)}px`;
 
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) {
           pdfPage.cleanup?.();
           return;
@@ -46,7 +53,7 @@ export default function PdfPageCanvas({ page, sourceHandle, zoom = 1, dpr = 1 })
         await renderTask.promise;
         pdfPage.cleanup?.();
       } catch (err) {
-        if (err?.name !== 'RenderingCancelledException') {
+        if (err?.name !== "RenderingCancelledException") {
           // Ignore cancelled renders
         }
       }
@@ -69,11 +76,11 @@ export default function PdfPageCanvas({ page, sourceHandle, zoom = 1, dpr = 1 })
       ref={canvasRef}
       className="document-background-canvas"
       style={{
-        position: 'absolute',
+        position: "absolute",
         top: 0,
         left: 0,
-        pointerEvents: 'none',
-        display: 'block',
+        pointerEvents: "none",
+        display: "block",
       }}
     />
   );

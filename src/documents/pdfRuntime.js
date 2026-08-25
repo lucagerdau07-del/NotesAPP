@@ -1,5 +1,5 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -22,7 +22,11 @@ export async function inspectPdf(blob) {
   const opened = await openPdf(blob);
   try {
     const pages = [];
-    for (let pageNumber = 1; pageNumber <= opened.document.numPages; pageNumber += 1) {
+    for (
+      let pageNumber = 1;
+      pageNumber <= opened.document.numPages;
+      pageNumber += 1
+    ) {
       const page = await opened.document.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 });
       pages.push({ width: viewport.width, height: viewport.height });

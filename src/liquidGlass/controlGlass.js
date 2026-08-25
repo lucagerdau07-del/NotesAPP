@@ -1,4 +1,4 @@
-export const CONTROL_GLASS_SELECTOR = ':scope > [data-liquid-glass-control]'
+export const CONTROL_GLASS_SELECTOR = ":scope > [data-liquid-glass-control]";
 
 export const CONTROL_GLASS_DEFAULTS = Object.freeze({
   blurAmount: 0.22,
@@ -15,9 +15,9 @@ export const CONTROL_GLASS_DEFAULTS = Object.freeze({
   shadowSpread: 12,
   shadowOffsetY: 2,
   floating: false,
-})
+});
 
 export function collectControlGlassElements(root) {
-  if (!root) return []
-  return Array.from(root.querySelectorAll(CONTROL_GLASS_SELECTOR))
+  if (!root) return [];
+  return Array.from(root.querySelectorAll(CONTROL_GLASS_SELECTOR));
 }

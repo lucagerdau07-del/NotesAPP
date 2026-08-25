@@ -1,4 +1,4 @@
-import { PAGE_GAP } from './fileImport.js';
+import { PAGE_GAP } from "./fileImport.js";
 
 export function calculateDocumentMetrics(pages = []) {
   let top = 0;
@@ -21,7 +21,8 @@ export function calculateDocumentMetrics(pages = []) {
   });
   return {
     pageLayouts,
-    totalHeight: pageLayouts.length > 0 ? pageLayouts[pageLayouts.length - 1].bottom : 0,
+    totalHeight:
+      pageLayouts.length > 0 ? pageLayouts[pageLayouts.length - 1].bottom : 0,
     maxWidth,
   };
 }
@@ -44,9 +45,18 @@ export function findPageIndexAtOffset(metrics, offset) {
 }
 
 export function viewportPointToPage(layout, targetPageId, point) {
-  const { pages = [], zoom = 1, scrollX = 0, scrollY = 0, originX = 0, originY = 0 } = layout || {};
+  const {
+    pages = [],
+    zoom = 1,
+    scrollX = 0,
+    scrollY = 0,
+    originX = 0,
+    originY = 0,
+  } = layout || {};
   const metrics = calculateDocumentMetrics(pages);
-  const page = metrics.pageLayouts.find(p => p.id === targetPageId) || metrics.pageLayouts[0];
+  const page =
+    metrics.pageLayouts.find((p) => p.id === targetPageId) ||
+    metrics.pageLayouts[0];
   if (!page) return { x: 0, y: 0 };
   const clientX = point?.clientX ?? point?.x ?? 0;
   const clientY = point?.clientY ?? point?.y ?? 0;
@@ -64,9 +74,17 @@ export function viewportPointToPage(layout, targetPageId, point) {
 }
 
 export function pagePointToViewport(layout, pageId, point) {
-  const { pages = [], zoom = 1, scrollX = 0, scrollY = 0, originX = 0, originY = 0 } = layout || {};
+  const {
+    pages = [],
+    zoom = 1,
+    scrollX = 0,
+    scrollY = 0,
+    originX = 0,
+    originY = 0,
+  } = layout || {};
   const metrics = calculateDocumentMetrics(pages);
-  const page = metrics.pageLayouts.find(p => p.id === pageId) || metrics.pageLayouts[0];
+  const page =
+    metrics.pageLayouts.find((p) => p.id === pageId) || metrics.pageLayouts[0];
   if (!page) return null;
   const pageTopInLayout = page.top * zoom;
   const layoutX = (point?.x || 0) * zoom;

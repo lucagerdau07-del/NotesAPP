@@ -1,12 +1,17 @@
 function isFiniteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function layoutMetrics(layout) {
   if (!layout || !Array.isArray(layout.pageIds)) return null;
   const { pageWidth, pageHeight, pageGap = 0, zoom, showPageBreaks } = layout;
-  if (![pageWidth, pageHeight, pageGap, zoom].every(isFiniteNumber)
-    || pageWidth < 0 || pageHeight <= 0 || pageGap < 0 || zoom <= 0) {
+  if (
+    ![pageWidth, pageHeight, pageGap, zoom].every(isFiniteNumber) ||
+    pageWidth < 0 ||
+    pageHeight <= 0 ||
+    pageGap < 0 ||
+    zoom <= 0
+  ) {
     return null;
   }
 
@@ -17,8 +22,15 @@ function layoutMetrics(layout) {
 }
 
 export function mapViewportPoint(layout, point) {
-  if (!layout || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)
-    || point.x < 0 || point.y < 0) return null;
+  if (
+    !layout ||
+    !point ||
+    !isFiniteNumber(point.x) ||
+    !isFiniteNumber(point.y) ||
+    point.x < 0 ||
+    point.y < 0
+  )
+    return null;
 
   if (Array.isArray(layout.pageLayouts) && layout.pageLayouts.length > 0) {
     const zoom = layout.zoom || 1;
@@ -44,9 +56,13 @@ export function mapViewportPoint(layout, point) {
 
   const pageIndex = Math.floor(point.y / metrics.stride);
   const localVisualY = point.y - pageIndex * metrics.stride;
-  if (pageIndex < 0 || pageIndex >= layout.pageIds.length
-    || point.x > metrics.scaledPageWidth
-    || localVisualY > metrics.scaledPageHeight) return null;
+  if (
+    pageIndex < 0 ||
+    pageIndex >= layout.pageIds.length ||
+    point.x > metrics.scaledPageWidth ||
+    localVisualY > metrics.scaledPageHeight
+  )
+    return null;
 
   return {
     pageId: layout.pageIds[pageIndex],
@@ -57,11 +73,19 @@ export function mapViewportPoint(layout, point) {
 }
 
 export function pagePointToViewport(layout, pageId, point) {
-  if (!layout || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) return null;
+  if (!layout || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y))
+    return null;
 
   if (Array.isArray(layout.pageLayouts) && layout.pageLayouts.length > 0) {
-    const page = layout.pageLayouts.find(p => p.id === pageId);
-    if (!page || point.x < 0 || point.y < 0 || point.x > page.width || point.y > page.height) return null;
+    const page = layout.pageLayouts.find((p) => p.id === pageId);
+    if (
+      !page ||
+      point.x < 0 ||
+      point.y < 0 ||
+      point.x > page.width ||
+      point.y > page.height
+    )
+      return null;
     const zoom = layout.zoom || 1;
     return {
       x: point.x * zoom,
@@ -73,8 +97,14 @@ export function pagePointToViewport(layout, pageId, point) {
   if (!metrics) return null;
 
   const pageIndex = layout.pageIds.indexOf(pageId);
-  if (pageIndex < 0 || point.x < 0 || point.y < 0
-    || point.x > layout.pageWidth || point.y > layout.pageHeight) return null;
+  if (
+    pageIndex < 0 ||
+    point.x < 0 ||
+    point.y < 0 ||
+    point.x > layout.pageWidth ||
+    point.y > layout.pageHeight
+  )
+    return null;
 
   return {
     x: point.x * layout.zoom,
@@ -83,14 +113,31 @@ export function pagePointToViewport(layout, pageId, point) {
 }
 
 export function mapFocusPoint(focusRect, viewport, point) {
-  if (!focusRect || !viewport || !point
-    || typeof focusRect.pageId !== 'string'
-    || ![focusRect.x, focusRect.y, focusRect.width, focusRect.height,
-      viewport.width, viewport.height, point.x, point.y].every(isFiniteNumber)
-    || focusRect.width < 0 || focusRect.height < 0
-    || viewport.width <= 0 || viewport.height <= 0
-    || point.x < 0 || point.y < 0
-    || point.x > viewport.width || point.y > viewport.height) return null;
+  if (
+    !focusRect ||
+    !viewport ||
+    !point ||
+    typeof focusRect.pageId !== "string" ||
+    ![
+      focusRect.x,
+      focusRect.y,
+      focusRect.width,
+      focusRect.height,
+      viewport.width,
+      viewport.height,
+      point.x,
+      point.y,
+    ].every(isFiniteNumber) ||
+    focusRect.width < 0 ||
+    focusRect.height < 0 ||
+    viewport.width <= 0 ||
+    viewport.height <= 0 ||
+    point.x < 0 ||
+    point.y < 0 ||
+    point.x > viewport.width ||
+    point.y > viewport.height
+  )
+    return null;
 
   return {
     pageId: focusRect.pageId,
