@@ -26,7 +26,6 @@ export default function App() {
 
   return (
     <div className="editor-shell">
-      <div className="liquid-fluted-bg" />
       <div className="editor-title-pill">
         <span className="editor-title">{activeNote?.title || 'Neue Notiz'}</span>
         {activeNote?.subject && (
