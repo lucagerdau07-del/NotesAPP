@@ -269,4 +269,15 @@ describe('useInkDocument', () => {
     act(() => result.current.undo());
     expect(result.current.document.strokes.map(stroke => stroke.id)).toEqual(['a']);
   });
+
+  it('uses initial page IDs only when no saved history exists', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    const { result, rerender } = renderHook(
+      ({ ids }) => useInkDocument({ documentId: 'imported', initialPageIds: ids, repository, saveDelay: 0 }),
+      { initialProps: { ids: ['p1', 'p2'] } },
+    );
+    expect(result.current.document.pages.map(page => page.id)).toEqual(['p1', 'p2']);
+    rerender({ ids: ['changed'] });
+    expect(result.current.document.pages.map(page => page.id)).toEqual(['p1', 'p2']);
+  });
 });

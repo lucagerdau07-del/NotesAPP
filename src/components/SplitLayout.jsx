@@ -4,13 +4,17 @@ import WritingZone from './WritingZone';
 import useInkDocument from '../hooks/useInkDocument';
 import useFocusBox from '../hooks/useFocusBox';
 
-export default function SplitLayout({ activeTab, onBack, documentId }) {
+export default function SplitLayout({ activeTab, onBack, documentId: propDocumentId, note }) {
+  const documentId = String(note?.id ?? propDocumentId ?? 'default');
+  const initialPageIds = note?.kind === 'imported' && Array.isArray(note.pages)
+    ? note.pages.map(page => page.id)
+    : undefined;
   const [isEraser, setIsEraser] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [paperStyle, setPaperStyle] = useState('lined');
   const [showPageBreaks, setShowPageBreaks] = useState(true);
   const [layoutMode, setLayoutMode] = useState('full'); // 'full' | 'split'
-  const inkController = useInkDocument({ documentId });
+  const inkController = useInkDocument({ documentId, initialPageIds });
 
   const toolState = {
     color: inkController.color, setColor: inkController.setColor,
@@ -32,9 +36,9 @@ export default function SplitLayout({ activeTab, onBack, documentId }) {
   if (activeTab === 'smartCanvas') {
     return (
       <div className={`split-layout ${layoutMode === 'split' ? '' : 'full-mode'}`}>
-        <DocumentView inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} onBack={onBack} />
+        <DocumentView note={note} inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} onBack={onBack} />
         {layoutMode === 'split' && (
-          <WritingZone inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} />
+          <WritingZone note={note} inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} />
         )}
       </div>
     );

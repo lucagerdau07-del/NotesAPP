@@ -1,12 +1,20 @@
 export const INK_SCHEMA_VERSION = 1;
 
-export function createInkDocument(documentId, pageCount = 1) {
+function normalizePageIds(documentId, pages) {
+  if (Array.isArray(pages)) {
+    const unique = [...new Set(pages.map(String).filter(Boolean))];
+    if (unique.length > 0) return unique;
+  }
+  const count = Math.max(1, Number.isFinite(pages) ? Math.floor(pages) : 1);
+  return Array.from({ length: count }, (_, index) => `${documentId}-page-${index + 1}`);
+}
+
+export function createInkDocument(documentId, pages = 1) {
   const id = String(documentId);
-  const count = Math.max(1, Number.isFinite(pageCount) ? Math.floor(pageCount) : 1);
   return {
     version: INK_SCHEMA_VERSION,
     documentId: id,
-    pages: Array.from({ length: count }, (_, index) => ({ id: `${id}-page-${index + 1}` })),
+    pages: normalizePageIds(id, pages).map(pageId => ({ id: pageId })),
     strokes: [],
     updatedAt: 0
   };

@@ -47,7 +47,7 @@ export default function App() {
         </button>
       </div>
       <div className="editor-body">
-        <SplitLayout activeTab={activeTab} documentId={activeNote.id} onBack={() => setScreen('library')} />
+        <SplitLayout activeTab={activeTab} note={activeNote} documentId={activeNote.id} onBack={() => setScreen('library')} />
       </div>
     </div>
   );

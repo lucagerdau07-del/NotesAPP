@@ -16,6 +16,12 @@ describe('ink document schema', () => {
     });
   });
 
+  it('creates an ink document with supplied imported page IDs', () => {
+    expect(createInkDocument('imported', ['imported-page-1', 'imported-page-2']).pages).toEqual([
+      { id: 'imported-page-1' }, { id: 'imported-page-2' },
+    ]);
+  });
+
   it('rejects malformed persisted documents', () => {
     expect(isInkDocument({ version: 1, documentId: 'x', pages: [], strokes: 'bad' })).toBe(false);
   });

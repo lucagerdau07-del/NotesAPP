@@ -31,4 +31,17 @@ describe('SplitLayout', () => {
     expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-eraser-mode', 'pixel');
   });
 
+  it('propagates note metadata to document view', () => {
+    const note = {
+      id: 'imported-layout', kind: 'imported', title: 'Blatt', subject: 'Mathe',
+      source: { fileId: 'file-1', type: 'pdf' },
+      pages: [
+        { id: 'imported-layout-page-1', index: 0, width: 800, height: 1200 },
+        { id: 'imported-layout-page-2', index: 1, width: 800, height: 400 },
+      ],
+    };
+    render(<SplitLayout activeTab="smartCanvas" note={note} />);
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-kind', 'imported');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-page-count', '2');
+  });
 });

@@ -19,11 +19,11 @@ const defaultPreferences = {
   eraserMode: 'pixel'
 };
 
-function createHistoryForDocument(repository, documentId) {
+function createHistoryForDocument(repository, documentId, initialPageIds) {
   try {
-    return repository.loadHistory(documentId) || createInkHistory(createInkDocument(documentId));
+    return repository.loadHistory(documentId) || createInkHistory(createInkDocument(documentId, initialPageIds));
   } catch {
-    return createInkHistory(createInkDocument(documentId));
+    return createInkHistory(createInkDocument(documentId, initialPageIds));
   }
 }
 
@@ -47,20 +47,20 @@ function saveSafely(save) {
   }
 }
 
-export default function useInkDocument({ documentId, repository = browserInkRepository, saveDelay = 120 }) {
+export default function useInkDocument({ documentId, initialPageIds, repository = browserInkRepository, saveDelay = 120 }) {
   const activeDocumentId = String(documentId);
   const documentIdRef = useRef(activeDocumentId);
   const repositoryRef = useRef(repository);
   documentIdRef.current = activeDocumentId;
   repositoryRef.current = repository;
 
-  const [history, setHistory] = useState(() => createHistoryForDocument(repository, activeDocumentId));
+  const [history, setHistory] = useState(() => createHistoryForDocument(repository, activeDocumentId, initialPageIds));
   const [preferences, setPreferences] = useState(() => loadPreferences(repository, activeDocumentId));
 
   // A render-phase update makes the new note available in this same render,
   // rather than letting callbacks briefly target the previously displayed note.
   if (history.present.documentId !== activeDocumentId) {
-    setHistory(createHistoryForDocument(repository, activeDocumentId));
+    setHistory(createHistoryForDocument(repository, activeDocumentId, initialPageIds));
   }
   if (preferences.documentId !== activeDocumentId) {
     setPreferences(loadPreferences(repository, activeDocumentId));
