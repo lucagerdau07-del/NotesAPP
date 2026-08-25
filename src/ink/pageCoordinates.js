@@ -17,9 +17,30 @@ function layoutMetrics(layout) {
 }
 
 export function mapViewportPoint(layout, point) {
+  if (!layout || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)
+    || point.x < 0 || point.y < 0) return null;
+
+  if (Array.isArray(layout.pageLayouts) && layout.pageLayouts.length > 0) {
+    const zoom = layout.zoom || 1;
+    for (let i = 0; i < layout.pageLayouts.length; i += 1) {
+      const page = layout.pageLayouts[i];
+      const pageTop = page.top * zoom;
+      const pageBottom = page.bottom * zoom;
+      const pageWidth = page.width * zoom;
+      if (point.y >= pageTop && point.y <= pageBottom && point.x <= pageWidth) {
+        return {
+          pageId: page.id,
+          pageIndex: page.index ?? i,
+          x: point.x / zoom,
+          y: (point.y - pageTop) / zoom,
+        };
+      }
+    }
+    return null;
+  }
+
   const metrics = layoutMetrics(layout);
-  if (!metrics || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)
-    || point.x < 0 || point.y < 0 || metrics.stride <= 0) return null;
+  if (!metrics || metrics.stride <= 0) return null;
 
   const pageIndex = Math.floor(point.y / metrics.stride);
   const localVisualY = point.y - pageIndex * metrics.stride;
@@ -36,8 +57,20 @@ export function mapViewportPoint(layout, point) {
 }
 
 export function pagePointToViewport(layout, pageId, point) {
+  if (!layout || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) return null;
+
+  if (Array.isArray(layout.pageLayouts) && layout.pageLayouts.length > 0) {
+    const page = layout.pageLayouts.find(p => p.id === pageId);
+    if (!page || point.x < 0 || point.y < 0 || point.x > page.width || point.y > page.height) return null;
+    const zoom = layout.zoom || 1;
+    return {
+      x: point.x * zoom,
+      y: page.top * zoom + point.y * zoom,
+    };
+  }
+
   const metrics = layoutMetrics(layout);
-  if (!metrics || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) return null;
+  if (!metrics) return null;
 
   const pageIndex = layout.pageIds.indexOf(pageId);
   if (pageIndex < 0 || point.x < 0 || point.y < 0

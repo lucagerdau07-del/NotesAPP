@@ -3,6 +3,7 @@ import DocumentView from './DocumentView';
 import WritingZone from './WritingZone';
 import useInkDocument from '../hooks/useInkDocument';
 import useFocusBox from '../hooks/useFocusBox';
+import useDocumentSource from '../hooks/useDocumentSource';
 
 export default function SplitLayout({ activeTab, onBack, documentId: propDocumentId, note }) {
   const documentId = String(note?.id ?? propDocumentId ?? 'default');
@@ -15,6 +16,7 @@ export default function SplitLayout({ activeTab, onBack, documentId: propDocumen
   const [showPageBreaks, setShowPageBreaks] = useState(true);
   const [layoutMode, setLayoutMode] = useState('full'); // 'full' | 'split'
   const inkController = useInkDocument({ documentId, initialPageIds });
+  const { sourceHandle, loading: sourceLoading, error: sourceError } = useDocumentSource({ note });
 
   const toolState = {
     color: inkController.color, setColor: inkController.setColor,
@@ -36,9 +38,28 @@ export default function SplitLayout({ activeTab, onBack, documentId: propDocumen
   if (activeTab === 'smartCanvas') {
     return (
       <div className={`split-layout ${layoutMode === 'split' ? '' : 'full-mode'}`}>
-        <DocumentView note={note} inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} onBack={onBack} />
+        <DocumentView
+          note={note}
+          sourceHandle={sourceHandle}
+          sourceLoading={sourceLoading}
+          sourceError={sourceError}
+          inkController={inkController}
+          toolState={toolState}
+          focusBoxState={focusBoxState}
+          toolbarState={toolState}
+          onBack={onBack}
+        />
         {layoutMode === 'split' && (
-          <WritingZone note={note} inkController={inkController} toolState={toolState} focusBoxState={focusBoxState} toolbarState={toolState} />
+          <WritingZone
+            note={note}
+            sourceHandle={sourceHandle}
+            sourceLoading={sourceLoading}
+            sourceError={sourceError}
+            inkController={inkController}
+            toolState={toolState}
+            focusBoxState={focusBoxState}
+            toolbarState={toolState}
+          />
         )}
       </div>
     );

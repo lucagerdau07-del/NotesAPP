@@ -9,6 +9,8 @@ import useLongPress from '../hooks/useLongPress';
 import useInkPointer from '../hooks/useInkPointer';
 import { mapViewportPoint, pagePointToViewport } from '../ink/pageCoordinates';
 import { renderInkDocument, resizeInkCanvas } from '../ink/renderInk';
+import { calculateDocumentMetrics } from '../documents/documentLayout';
+import DocumentPage from './document/DocumentPage';
 
 function PenSettingsPopover({
   tool,
@@ -331,7 +333,7 @@ function focusRectToViewport(layout, focusBox) {
   };
 }
 
-export default function DocumentView({ note, inkController, focusBoxState, toolbarState, onBack }) {
+export default function DocumentView({ note, sourceHandle, sourceLoading, sourceError, inkController, focusBoxState, toolbarState, onBack }) {
   const { 
     color, setColor, 
     isEraser, setIsEraser, 
@@ -415,14 +417,19 @@ export default function DocumentView({ note, inkController, focusBoxState, toolb
   const scrollRef = useRef(null);
   const inkCanvasRef = useRef(null);
   const documentHeight = pageHeight * pagesCount;
+  const pageDescriptors = note?.kind === 'imported' && Array.isArray(note.pages) && note.pages.length > 0
+    ? note.pages
+    : pageIds.map((id, index) => ({ id, index, width: baseWidth, height: pageHeight }));
+  const documentMetrics = calculateDocumentMetrics(pageDescriptors);
   const totalDocumentHeight = showPageBreaks
-    ? pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP
-    : documentHeight * zoom;
+    ? (note?.kind === 'imported' ? documentMetrics.totalHeight * zoom : pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP)
+    : (note?.kind === 'imported' ? documentMetrics.totalHeight * zoom : documentHeight * zoom);
   const pageLayout = {
     pageIds,
     pageWidth: baseWidth,
     pageHeight,
     pageGap: PAGE_GAP,
+    pageLayouts: documentMetrics.pageLayouts,
     zoom,
     showPageBreaks: Boolean(showPageBreaks),
   };
@@ -1232,8 +1239,30 @@ export default function DocumentView({ note, inkController, focusBoxState, toolb
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
         >
-          {/* Paper Background: 1 continuous paper for infinite mode, or discrete page cards with real gaps */}
-          {!showPageBreaks ? (
+          {/* Paper Background: 1 continuous paper for infinite mode, discrete page cards with real gaps, or imported document */}
+          {note?.kind === 'imported' ? (
+            documentMetrics.pageLayouts.map((pageLayout) => (
+              <div
+                key={pageLayout.id}
+                style={{
+                  position: 'absolute',
+                  top: `${pageLayout.top * zoom}px`,
+                  left: 0,
+                  width: `${pageLayout.width * zoom}px`,
+                  height: `${pageLayout.height * zoom}px`,
+                }}
+              >
+                <DocumentPage
+                  page={pageLayout}
+                  sourceType={note.source?.type}
+                  sourceHandle={sourceHandle}
+                  strokes={inkDocument.strokes}
+                  zoom={zoom}
+                  dpr={globalThis.devicePixelRatio || 1}
+                />
+              </div>
+            ))
+          ) : !showPageBreaks ? (
             <div
               style={{
                 position: 'absolute',
