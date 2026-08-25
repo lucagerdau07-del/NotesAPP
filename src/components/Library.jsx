@@ -4,7 +4,7 @@ import {
   Clock, Star, Tag, Sparkles, Globe, ScanText, Check, 
   Settings, Download, ZoomIn, Code2, Quote,
   X, ArrowLeft, BookOpen, Layers, Sparkle, Plus, Mic, 
-  SlidersHorizontal, Sparkles as SparklesIcon
+  SlidersHorizontal, Sparkles as SparklesIcon, FileUp
 } from 'lucide-react';
 import matheCard from '../assets/subjects/mathe-card.jpg';
 import chemieCard from '../assets/subjects/chemie-card.jpg';
@@ -14,6 +14,7 @@ import philosophieCard from '../assets/subjects/philosophie-card.jpg';
 import englischCard from '../assets/subjects/englisch-card.jpg';
 import spanischCard from '../assets/subjects/spanisch-card.jpg';
 import useLiquidGlass from '../hooks/useLiquidGlass';
+import useDocumentLibrary from '../hooks/useDocumentLibrary';
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
    matches the Ask AI pill's geometry rather than the panel's. */
@@ -939,6 +940,19 @@ function RecentCard({ n, onOpen }) {
         </div>
       )}
 
+      {/* 12. Imported Document Card */}
+      {n.type === 'imported-document' && (
+        <div style={{ padding: '16px 18px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, background: 'rgba(138,212,255,0.2)', font: '600 9.5px ui-monospace,monospace', letterSpacing: '.05em', color: '#8AD4FF' }}>
+              <FileUp size={11} />{n.source?.type === 'pdf' ? 'PDF' : 'BILD'}
+            </span>
+          </div>
+          <div style={{ font: '700 17px/1.25 "Bricolage Grotesque",sans-serif', letterSpacing: '-.02em', color: '#FFFFFF' }}>{n.title}</div>
+          <div style={{ marginTop: 8, font: '500 12px/1.5 Manrope,sans-serif', color: 'rgba(255,255,255,0.7)' }}>{n.body}</div>
+        </div>
+      )}
+
       {/* Card Footer */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 15px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: n.dot }} />
@@ -961,7 +975,17 @@ function RecentListRow({ n, onOpen }) {
   );
 }
 
-export default function Library({ onOpenNote, onOpenSettings }) {
+export default function Library({ onOpenNote, onOpenSettings, documentLibraryOptions }) {
+  const documentLibrary = useDocumentLibrary(documentLibraryOptions);
+  const fileInputRef = useRef(null);
+  const dragDepthRef = useRef(0);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
+
+  const runImport = async (files) => {
+    const note = await documentLibrary.importFiles(files, selectedSubject?.name || '');
+    if (note) onOpenNote?.(note);
+  };
+
   const [selectedSubject, setSelectedSubject] = useState(null); // null = all subjects
   const [viewMode, setViewMode] = useState('masonry'); // 'masonry' | 'list'
   const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'title' | 'subject'
@@ -1016,26 +1040,35 @@ export default function Library({ onOpenNote, onOpenSettings }) {
     }
   };
 
+  const importedCards = (documentLibrary.importedNotes || []).map(note => ({
+    ...note,
+    type: 'imported-document',
+    dot: '#8AD4FF',
+    when: 'importiert',
+    body: `${note.pages?.length || 1} ${(note.pages?.length || 1) === 1 ? 'Seite' : 'Seiten'} · ${note.source?.type === 'pdf' ? 'PDF' : 'Bild'}`,
+  }));
+  const allNotes = [...importedCards, ...RECENT];
+
   // Filter notes by selected subject and search query
-  const filteredNotes = RECENT.filter(n => {
+  const filteredNotes = allNotes.filter(n => {
     const matchesSubject = !selectedSubject || (
-      n.subject.toLowerCase() === selectedSubject.name.toLowerCase() || 
-      n.subject.toLowerCase() === selectedSubject.id.toLowerCase()
+      (n.subject && n.subject.toLowerCase() === selectedSubject.name.toLowerCase()) || 
+      (n.subject && n.subject.toLowerCase() === selectedSubject.id.toLowerCase())
     );
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch = !q || (
-      n.title.toLowerCase().includes(q) ||
+      (n.title && n.title.toLowerCase().includes(q)) ||
       (n.body && n.body.toLowerCase().includes(q)) ||
       (n.tag && n.tag.toLowerCase().includes(q)) ||
-      n.subject.toLowerCase().includes(q)
+      (n.subject && n.subject.toLowerCase().includes(q))
     );
     return matchesSubject && matchesSearch;
   });
 
   const sortedRecent = [...filteredNotes].sort((a, b) => {
-    if (sortBy === 'title') return a.title.localeCompare(b.title);
-    if (sortBy === 'subject') return a.subject.localeCompare(b.subject);
-    return a.id - b.id;
+    if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+    if (sortBy === 'subject') return (a.subject || '').localeCompare(b.subject || '');
+    return String(a.id).localeCompare(String(b.id));
   });
 
   // Dynamic Background Gradient depending on selected subject - Deep almost-black tones with reeded glass
@@ -1074,6 +1107,30 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       }}
       data-subject={selectedSubject?.id || 'all'}
       data-testid="liquid-glass-root"
+      onDragEnter={(e) => {
+        e.preventDefault();
+        dragDepthRef.current += 1;
+        setIsFileDragActive(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragDepthRef.current -= 1;
+        if (dragDepthRef.current <= 0) {
+          dragDepthRef.current = 0;
+          setIsFileDragActive(false);
+        }
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        dragDepthRef.current = 0;
+        setIsFileDragActive(false);
+        if (e.dataTransfer?.files?.length) {
+          await runImport(e.dataTransfer.files);
+        }
+      }}
     >
       <div className="liquid-glass-scene" aria-hidden="true" />
 
@@ -1231,11 +1288,69 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         </span>
       </div>
 
+      {/* File Open / Import Button */}
+      <button
+        type="button"
+        className="liquid-glass-pill lib-file-open"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={documentLibrary.isImporting}
+        aria-label={documentLibrary.isImporting ? 'Datei wird importiert' : 'Datei öffnen'}
+        style={{
+          position: 'absolute',
+          right: 110 + newNoteWidth + 14 + 130 + 10,
+          top: 20,
+          zIndex: 15,
+          height: 52,
+          padding: '0 18px',
+          gap: 8,
+          display: 'inline-flex',
+          alignItems: 'center',
+          cursor: documentLibrary.isImporting ? 'not-allowed' : 'pointer',
+        }}
+      >
+        <FileUp size={17} />
+        <span style={{ font: '700 13px "Bricolage Grotesque",sans-serif', whiteSpace: 'nowrap' }}>
+          {documentLibrary.isImporting ? 'Wird importiert…' : 'Datei öffnen'}
+        </span>
+      </button>
+      <input
+        ref={fileInputRef}
+        className="visually-hidden"
+        type="file"
+        aria-label="Datei öffnen"
+        data-testid="file-import-input"
+        accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
+        onChange={async (event) => {
+          await runImport(event.target.files);
+          event.target.value = '';
+        }}
+      />
+
       {/* Sort Toast */}
       {sortToast && (
         <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: 110, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000 }} data-testid="sort-toast">
           <ArrowUpDown size={14} color={theme.accent} />
           <span>{sortToast}</span>
+        </div>
+      )}
+
+      {/* File Drop Overlay */}
+      {isFileDragActive && (
+        <div className="library-file-drop-overlay" data-testid="library-drop-overlay">
+          <div className="library-file-drop-content">
+            <FileUp size={40} />
+            <span style={{ font: '700 20px "Bricolage Grotesque", sans-serif' }}>Datei hier ablegen</span>
+          </div>
+        </div>
+      )}
+
+      {/* Import Error Alert */}
+      {documentLibrary.error && (
+        <div role="alert" className="library-import-alert" style={{ position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', padding: '10px 20px', background: 'rgba(255, 69, 58, 0.95)', backdropFilter: 'blur(20px)', borderRadius: 16, color: '#FFFFFF', font: '600 13px Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: 12, zIndex: 9999, boxShadow: '0 12px 32px rgba(0,0,0,0.8)' }}>
+          <span>{documentLibrary.error.message || 'Fehler beim Import'}</span>
+          <button type="button" onClick={documentLibrary.clearError} style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }} title="Schließen">
+            <X size={16} />
+          </button>
         </div>
       )}
 
