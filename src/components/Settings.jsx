@@ -1,10 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { 
-  ChevronLeft, Plus, PenLine, Folder, 
+import {
+  ChevronLeft, Plus, PenLine, Folder,
   Wifi, RotateCcw, X, ShieldCheck, Check
 } from 'lucide-react';
+import useLiquidGlass from '../hooks/useLiquidGlass';
+
+/* The settings top bar is a floating control bar, same family as the Library's
+   pills — the content boxes below it stay CSS glass. */
+const TOPBAR_GLASS_CONFIG = { cornerRadius: 24, zRadius: 22 };
+const SIDEBAR_GLASS_CONFIG = { cornerRadius: 22, zRadius: 22 };
 
 export default function Settings({ onBack }) {
+  const glassRootRef = useRef(null);
   const [activeNav, setActiveNav] = useState('palm');
   const [isAdvanced, setIsAdvanced] = useState(false);
   const [autoImprove, setAutoImprove] = useState(true);
@@ -23,6 +30,8 @@ export default function Settings({ onBack }) {
 
   const testCanvasRef = useRef(null);
   const isDrawingRef = useRef(false);
+
+  useLiquidGlass(glassRootRef, `${activeNav}:${isAdvanced}`);
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -73,10 +82,22 @@ export default function Settings({ onBack }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
+  // The shell is the LiquidGlass root: the library refracts a root's non-glass
+  // children, so the bar can only pick up the settings content behind it if
+  // they share this root.
   return (
-    <div className="settings-shell" data-testid="settings-screen">
+    <div ref={glassRootRef} className="settings-shell" data-testid="settings-screen">
+      {/* Capturable backdrop for the top bar's shader — same reeded scene the
+          Library root uses. Without a child to rasterise there is nothing
+          behind the bar to refract and it renders as flat white. */}
+      <div className="liquid-glass-scene" aria-hidden="true" />
+
       {/* Topbar */}
-      <header className="settings-topbar">
+      <header
+        className="settings-topbar"
+        data-liquid-glass-control="settings-topbar"
+        data-config={JSON.stringify(TOPBAR_GLASS_CONFIG)}
+      >
         <button className="settings-back-btn" onClick={onBack} title="Zurück">
           <ChevronLeft size={20} />
           <span className="settings-title">Einstellungen</span>
@@ -86,10 +107,13 @@ export default function Settings({ onBack }) {
         </button>
       </header>
 
-      {/* Main Container */}
-      <div className="settings-container">
-        {/* Sidebar */}
-        <aside className="settings-sidebar">
+      {/* Sidebar and content are direct children of the shell (no wrapper),
+          because a LiquidGlass element has to be a direct child of its root. */}
+      <aside
+        className="settings-sidebar"
+        data-liquid-glass-control="settings-sidebar"
+        data-config={JSON.stringify(SIDEBAR_GLASS_CONFIG)}
+      >
           <div className="settings-nav-label">APP</div>
           <button 
             className={`settings-nav-item ${activeNav === 'general' ? 'active' : ''}`}
@@ -128,10 +152,10 @@ export default function Settings({ onBack }) {
             <Wifi size={15} />
             <span>KI & Netzwerk</span>
           </button>
-        </aside>
+      </aside>
 
-        {/* Content Pane */}
-        <main className="settings-content">
+      {/* Content Pane */}
+      <main className="settings-content">
           {activeNav === 'palm' && (
             <>
               {!isAdvanced ? (
@@ -378,8 +402,7 @@ export default function Settings({ onBack }) {
               </div>
             </div>
           )}
-        </main>
-      </div>
+      </main>
 
       {/* Calibration Modal */}
       {isCalibrating && (

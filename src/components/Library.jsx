@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { 
   LayoutGrid, Rows3, ArrowUpDown, Search, PenLine, 
   Clock, Star, Tag, Sparkles, Globe, ScanText, Check, 
-  ArrowUp, Settings, Download, ZoomIn, Code2, Quote, 
+  Settings, Download, ZoomIn, Code2, Quote,
   X, ArrowLeft, BookOpen, Layers, Sparkle, Plus, Mic, 
   SlidersHorizontal, Sparkles as SparklesIcon
 } from 'lucide-react';
@@ -15,6 +15,8 @@ import englischCard from '../assets/subjects/englisch-card.jpg';
 import spanischCard from '../assets/subjects/spanisch-card.jpg';
 import useLiquidGlass from '../hooks/useLiquidGlass';
 
+/* The agent input is a pill-sized control nested inside the agent panel, so it
+   matches the Ask AI pill's geometry rather than the panel's. */
 const SUBJECT_CARD_IMAGES = {
   mathe: matheCard,
   chemie: chemieCard,
@@ -968,11 +970,13 @@ export default function Library({ onOpenNote, onOpenSettings }) {
   const [sortToast, setSortToast] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
-  const [agentDraft, setAgentDraft] = useState('');
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
 
   useLiquidGlass(liquidGlassRootRef, selectedSubject?.id || 'all');
+
+  const newNoteRef = useRef(null);
+  const [newNoteWidth, setNewNoteWidth] = useState(0);
 
   const showToast = (msg) => {
     setSortToast(msg);
@@ -1053,6 +1057,12 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
   const theme = (selectedSubject && SUBJECT_THEMES[selectedSubject.id]) || DEFAULT_THEME;
 
+  // "Neue {Fach}-Notiz" is wider than "Neue Notiz" — measure it so the
+  // view/sort pill (right-anchored, same as this button) doesn't overlap it.
+  useLayoutEffect(() => {
+    if (newNoteRef.current) setNewNoteWidth(newNoteRef.current.offsetWidth);
+  }, [selectedSubject]);
+
   return (
     <div
       ref={liquidGlassRootRef}
@@ -1090,6 +1100,8 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
       {/* Liquid Glass Search & AI Capsule + Standalone Circle Button (Exact Image 1 Style) */}
       {/* Main Liquid Glass Pill */}
+      {/* Same field the chat uses to prompt — it just relocates to the bottom
+          of the chat column once the panel is open, same element throughout. */}
       <div
         className="liquid-glass-pill liquid-control liquid-control-search"
         data-liquid-glass-control="search"
@@ -1097,13 +1109,15 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         style={{
           position: 'absolute',
           left: 106,
-          top: 20,
+          top: agentOpen ? 'auto' : 20,
+          bottom: agentOpen ? 20 : 'auto',
           zIndex: 30,
           height: 52,
           width: 440,
           padding: '0 20px 0 16px',
           gap: 12,
-          cursor: 'text'
+          cursor: 'text',
+          transition: 'top 0.42s cubic-bezier(0.16, 1, 0.3, 1), bottom 0.42s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
       >
           <button 
@@ -1119,7 +1133,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') askAgent(searchQuery); }}
-            placeholder={selectedSubject ? `Ask AI zu ${selectedSubject.name}…` : 'Ask AI'}
+            placeholder={agentOpen ? (selectedSubject ? `Auftrag für ${selectedSubject.name}…` : 'Auftrag an den Agenten…') : (selectedSubject ? `Ask AI zu ${selectedSubject.name}…` : 'Ask AI')}
             data-testid="ask-ai-input"
             style={{
               flex: 1,
@@ -1174,7 +1188,7 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </button>
 
       {/* view toggle + new note (right aligned) */}
-      <div className="liquid-glass-pill liquid-control liquid-control-view-sort" data-liquid-glass-control="view-sort" data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })} style={{ position: 'absolute', right: agentOpen ? 690 : 270, top: 20, zIndex: 15, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)', height: 52, padding: '0 6px', gap: 2 }}>
+      <div className="liquid-glass-pill liquid-control liquid-control-view-sort" data-liquid-glass-control="view-sort" data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })} style={{ position: 'absolute', right: 110 + newNoteWidth + 14, top: 20, zIndex: 15, height: 52, padding: '0 6px', gap: 2 }}>
           <button 
             className={`lib-view-btn ${viewMode === 'masonry' ? 'active' : ''}`} 
             style={{ width: 40, height: 40, borderRadius: 20, background: viewMode === 'masonry' ? 'rgba(255,255,255,.24)' : 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', transition: 'all 0.15s' }} 
@@ -1205,9 +1219,10 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       </div>
 
       <div
+        ref={newNoteRef}
         onClick={() => onOpenNote?.({ title: selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : 'Neue Notiz', subject: selectedSubject ? selectedSubject.name : '' })}
         className="liquid-glass-pill lib-newnote"
-        style={{ position: 'absolute', right: agentOpen ? 530 : 110, top: 20, zIndex: 15, height: 52, padding: '0 22px 0 18px', gap: 10, background: selectedSubject ? theme.accent : '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: selectedSubject ? `0 18px 44px -12px ${theme.accentSoft}, 0 0 0 1px ${theme.accentSoft}` : '0 20px 48px -12px rgba(0,0,0,0.95)', transition: 'background 0.35s ease, box-shadow 0.35s ease' }}
+        style={{ position: 'absolute', right: 110, top: 20, zIndex: 15, height: 52, padding: '0 22px 0 18px', gap: 10, background: selectedSubject ? theme.accent : '#FFFFFF', color: '#08080A', cursor: 'pointer', border: 'none', boxShadow: selectedSubject ? `0 18px 44px -12px ${theme.accentSoft}, 0 0 0 1px ${theme.accentSoft}` : '0 20px 48px -12px rgba(0,0,0,0.95)', transition: 'background 0.35s ease, box-shadow 0.35s ease' }}
         data-testid="new-note-btn"
       >
         <PenLine size={17} />
@@ -1218,14 +1233,14 @@ export default function Library({ onOpenNote, onOpenSettings }) {
 
       {/* Sort Toast */}
       {sortToast && (
-        <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: agentOpen ? 530 : 110, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }} data-testid="sort-toast">
+        <div className="liquid-glass-pill" style={{ position: 'fixed', top: 84, right: 110, padding: '8px 18px', color: '#FFFFFF', font: '600 12px Manrope,sans-serif', display: 'flex', alignItems: 'center', gap: 8, zIndex: 1000 }} data-testid="sort-toast">
           <ArrowUpDown size={14} color={theme.accent} />
           <span>{sortToast}</span>
         </div>
       )}
 
       {/* main content */}
-      <div className="lib-scroll" style={{ position: 'absolute', left: 96, top: 82, right: agentOpen ? 514 : 0, bottom: 20, overflowY: 'auto', overflowX: 'hidden', padding: `10px ${agentOpen ? 24 : 14}px 24px 10px`, transition: 'right 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+      <div className="lib-scroll" style={{ position: 'absolute', left: agentOpen ? 570 : 96, top: 82, right: 0, bottom: 20, overflowY: 'auto', overflowX: 'hidden', padding: '10px 14px 24px 10px', transition: 'left 0.42s cubic-bezier(0.16, 1, 0.3, 1)' }}>
         {/* Header: Library Title */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 15, margin: '0 0 18px' }}>
           <h2 style={{ margin: 0, font: '800 46px/.92 "Bricolage Grotesque",sans-serif', letterSpacing: '-.035em', color: '#FFFFFF' }}>Bibliothek</h2>
@@ -1283,7 +1298,8 @@ export default function Library({ onOpenNote, onOpenSettings }) {
         <Sparkles size={18} strokeWidth={2.2} />
       </button>
 
-      <div className="lib-glass agent-panel" data-open={agentOpen} data-testid="agent-panel">
+      <div className="agent-panel" data-open={agentOpen} data-testid="agent-panel">
+        <div className="lib-glass agent-panel-card">
         <div className="agent-panel-head">
           <span className="agent-badge">{2 + agentTasks.length} AKTIV</span>
           <button className="agent-close" onClick={() => setAgentOpen(false)} title="Agent schließen" data-testid="agent-close-btn">
@@ -1338,19 +1354,6 @@ export default function Library({ onOpenNote, onOpenSettings }) {
             </div>
           ))}
         </div>
-
-        <div style={{ marginTop: 'auto', padding: '12px 14px 14px' }}>
-          <div className="liquid-glass-pill agent-input">
-            <input
-              type="text"
-              value={agentDraft}
-              onChange={(e) => setAgentDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { askAgent(agentDraft); setAgentDraft(''); } }}
-              placeholder={selectedSubject ? `Auftrag für ${selectedSubject.name}…` : 'Auftrag an den Agenten…'}
-              data-testid="agent-input"
-            />
-            <button onClick={() => { askAgent(agentDraft); setAgentDraft(''); }} title="Auftrag senden"><ArrowUp size={15} /></button>
-          </div>
         </div>
       </div>
     </div>

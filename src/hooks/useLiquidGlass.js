@@ -18,7 +18,7 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         await document.fonts?.ready
         if (cancelled) return
         const glassElements = collectControlGlassElements(root)
-        if (glassElements.length !== 5) throw new Error(`Expected 5 Liquid Glass controls, found ${glassElements.length}`)
+        if (glassElements.length === 0) throw new Error('Expected at least one Liquid Glass control, found none')
         const created = await LiquidGlass.init({ root, glassElements, defaults: CONTROL_GLASS_DEFAULTS })
         if (cancelled) {
           created.destroy()

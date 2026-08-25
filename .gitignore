@@ -3,6 +3,7 @@ dist/
 .env
 .superpowers/
 .worktrees/
+backups/
 
 # Android
 android/.gradle/
