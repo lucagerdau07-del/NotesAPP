@@ -580,6 +580,77 @@ body::after {
 }
 
 /* ==========================================================================
+   Liquid Glass WebGL Control Surfaces (Task 3)
+   The five liquid-glass controls (nav rail, Ask AI pill, reset circle,
+   view/sort pill, agent circle) start out on the CSS glass above — that
+   stays as the pre-init/error fallback. Once useLiquidGlass finishes
+   initializing, the root flips data-liquid-glass-state to "enhanced" and
+   each control gets a WebGL canvas injected as its first child; the CSS
+   fallback surface then steps aside so the canvas shows through.
+   ========================================================================== */
+
+/* Real DOM copy of the fixed body reeded-glass background, scoped inside the
+   liquid-glass root so the WebGL capture pass has something local to sample
+   ("capturable" — body::before is a fixed pseudo-element and isn't captured
+   the same way). Purely decorative, sits behind every control. */
+.liquid-glass-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #08080A;
+  background-image:
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    linear-gradient(rgba(138, 212, 255, 0.08), rgba(138, 212, 255, 0.08)),
+    linear-gradient(180deg, rgba(4, 4, 7, 0.20), rgba(4, 4, 7, 0.34)),
+    url('../assets/reeded-glass-background.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.liquid-glass-scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 58% 54% at 50% 48%, transparent 30%, rgba(0, 0, 0, 0.24) 100%);
+}
+
+/* Enhanced state: the WebGL canvas renders the refraction, so the CSS glass
+   fallback (gradient fill, blur, border, shadow) steps aside for the five
+   controls. The library injects the canvas as z-index:-1 inside the control,
+   so unrelated content already paints above it in normal DOM order — focus
+   outlines and inner button "active" states need no extra stacking rules. */
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] {
+  background: transparent !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::before {
+  display: none;
+}
+
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] > canvas:first-child {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-liquid-glass-control],
+  [data-liquid-glass-control] * {
+    transition: none !important;
+    animation: none !important;
+  }
+  [data-liquid-glass-control]:hover,
+  [data-liquid-glass-control]:focus-within {
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
    Liquid Glass Cards & Subject Tiles (Fächer & Datei-Karten)
    ========================================================================== */
 
