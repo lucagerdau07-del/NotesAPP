@@ -6,29 +6,46 @@ import {
   X, ArrowLeft, BookOpen, Layers, Sparkle, Plus, Mic, 
   SlidersHorizontal, Sparkles as SparklesIcon
 } from 'lucide-react';
+import matheCard from '../assets/subjects/mathe-card.jpg';
+import chemieCard from '../assets/subjects/chemie-card.jpg';
+import kunstCard from '../assets/subjects/kunst-card.jpg';
+import pgwCard from '../assets/subjects/pgw-card.jpg';
+import philosophieCard from '../assets/subjects/philosophie-card.jpg';
+import englischCard from '../assets/subjects/englisch-card.jpg';
+import spanischCard from '../assets/subjects/spanisch-card.jpg';
+
+const SUBJECT_CARD_IMAGES = {
+  mathe: matheCard,
+  chemie: chemieCard,
+  kunst: kunstCard,
+  pgw: pgwCard,
+  philosophie: philosophieCard,
+  englisch: englischCard,
+  spanisch: spanischCard,
+};
 
 const SUBJECTS = [
-  { id: 'mathe', name: 'Mathe', count: 24, themeColor: 'oklch(0.68 0.16 255)' },
-  { id: 'chemie', name: 'Chemie', count: 17, themeColor: 'oklch(0.70 0.16 158)' },
+  { id: 'mathe', name: 'Mathe', count: 24, themeColor: 'oklch(0.82 0.17 93)' },
+  { id: 'chemie', name: 'Chemie', count: 17, themeColor: 'oklch(0.68 0.19 304)' },
   { id: 'kunst', name: 'Kunst', count: 31, themeColor: 'oklch(0.68 0.19 330)' },
-  { id: 'pgw', name: 'PGW', count: 12, themeColor: 'oklch(0.68 0.18 315)' },
-  { id: 'philosophie', name: 'Philosophie', count: 9, themeColor: 'oklch(0.76 0.10 78)' },
-  { id: 'englisch', name: 'Englisch', count: 21, themeColor: 'oklch(0.72 0.17 26)' },
-  { id: 'spanisch', name: 'Spanisch', count: 14, themeColor: 'oklch(0.72 0.17 52)' },
+  { id: 'pgw', name: 'PGW', count: 12, themeColor: 'oklch(0.79 0.11 232)' },
+  { id: 'philosophie', name: 'Philosophie', count: 9, themeColor: 'oklch(0.78 0.02 260)' },
+  { id: 'englisch', name: 'Englisch', count: 21, themeColor: 'oklch(0.72 0.18 53)' },
+  { id: 'spanisch', name: 'Spanisch', count: 14, themeColor: 'oklch(0.62 0.22 27)' },
 ];
 
 // Thematic decor per subject: accent color, decorative top-band pattern, wordmark + motto
 const SUBJECT_THEMES = {
   mathe: {
-    accent: '#4C93FF', accentSoft: 'rgba(76,147,255,.32)',
+    accent: '#F5C842', accentSoft: 'rgba(245,200,66,.32)',
     mark: 'ƒ(x)', motto: 'ANALYSIS · VEKTOREN · STOCHASTIK',
-    pattern: 'linear-gradient(rgba(76,147,255,.36) 1px, transparent 1px), linear-gradient(90deg, rgba(76,147,255,.36) 1px, transparent 1px)',
+    pattern: 'linear-gradient(rgba(245,200,66,.36) 1px, transparent 1px), linear-gradient(90deg, rgba(245,200,66,.36) 1px, transparent 1px)',
     patternSize: '26px 26px, 26px 26px',
   },
   chemie: {
-    accent: '#22C55E', accentSoft: 'rgba(34,197,94,.32)',
+    accent: '#A970FF', accentSoft: 'rgba(169,112,255,.32)',
     mark: '⌬', motto: 'SYNTHESE · REDOX · TITRATION',
-    pattern: 'radial-gradient(circle at 50% 50%, rgba(34,197,94,.45) 1.6px, transparent 2px)',
+    pattern: 'radial-gradient(circle at 50% 50%, rgba(169,112,255,.45) 1.6px, transparent 2px)',
     patternSize: '22px 22px',
   },
   kunst: {
@@ -38,27 +55,27 @@ const SUBJECT_THEMES = {
     patternSize: 'auto',
   },
   pgw: {
-    accent: '#A855F7', accentSoft: 'rgba(168,85,247,.32)',
+    accent: '#8AD4FF', accentSoft: 'rgba(138,212,255,.32)',
     mark: '▤', motto: 'POLITIK · GESELLSCHAFT · WIRTSCHAFT',
-    pattern: 'repeating-linear-gradient(90deg, rgba(168,85,247,.36) 0 3px, transparent 3px 16px)',
+    pattern: 'repeating-linear-gradient(90deg, rgba(138,212,255,.36) 0 3px, transparent 3px 16px)',
     patternSize: 'auto',
   },
   philosophie: {
-    accent: '#FBBF24', accentSoft: 'rgba(251,191,36,.30)',
+    accent: '#D8D8DE', accentSoft: 'rgba(216,216,222,.26)',
     mark: 'Φ', motto: 'ETHIK · ERKENNTNIS · METAPHYSIK',
-    pattern: 'repeating-linear-gradient(0deg, rgba(251,191,36,.28) 0 1px, transparent 1px 30px)',
+    pattern: 'repeating-linear-gradient(0deg, rgba(216,216,222,.26) 0 1px, transparent 1px 30px)',
     patternSize: 'auto',
   },
   englisch: {
-    accent: '#FB7185', accentSoft: 'rgba(251,113,133,.32)',
+    accent: '#FF8A2A', accentSoft: 'rgba(255,138,42,.32)',
     mark: 'Aa', motto: 'LITERATURE · ESSAY · SHAKESPEARE',
-    pattern: 'repeating-linear-gradient(0deg, rgba(251,113,133,.32) 0 1px, transparent 1px 14px)',
+    pattern: 'repeating-linear-gradient(0deg, rgba(255,138,42,.32) 0 1px, transparent 1px 14px)',
     patternSize: 'auto',
   },
   spanisch: {
-    accent: '#F97316', accentSoft: 'rgba(249,115,22,.32)',
+    accent: '#E5484D', accentSoft: 'rgba(229,72,77,.32)',
     mark: '¡Ñ!', motto: 'VOCABULARIO · SUBJUNTIVO · CULTURA',
-    pattern: 'repeating-linear-gradient(-45deg, rgba(249,115,22,.30) 0 10px, transparent 10px 26px)',
+    pattern: 'repeating-linear-gradient(-45deg, rgba(229,72,77,.30) 0 10px, transparent 10px 26px)',
     patternSize: 'auto',
   },
 };
@@ -336,15 +353,37 @@ const RECENT = [
   }
 ];
 
-function TileWrap({ onOpen, w, h, bg, className = '', testId, children }) {
+function TileWrap({ onOpen, w, h, bg, className = '', testId, subject, children }) {
+  const cardImage = subject ? SUBJECT_CARD_IMAGES[subject.id] : null;
+  const titleFont = subject?.id === 'philosophie'
+    ? 'italic 600 27px/1 "Instrument Serif",serif'
+    : '800 24px/1 "Bricolage Grotesque",sans-serif';
+
   return (
     <div
       onClick={onOpen}
       className={`lib-tile ${className}`}
       data-testid={testId}
-      style={{ position: 'relative', flex: 'none', width: w, height: h, background: bg, cursor: 'pointer' }}
+      style={{
+        position: 'relative',
+        flex: 'none',
+        width: w,
+        height: h,
+        background: cardImage
+          ? `linear-gradient(180deg, rgba(4,5,8,.04) 28%, rgba(4,5,8,.88) 100%), url(${cardImage}) center / cover no-repeat`
+          : bg,
+        cursor: 'pointer',
+      }}
     >
-      {children}
+      {cardImage ? (
+        <>
+          <div className="subject-card-sheen" aria-hidden="true" />
+          <div className="subject-card-copy">
+            <div style={{ font: titleFont, letterSpacing: subject.id === 'philosophie' ? '-.01em' : '-.035em' }}>{subject.name}</div>
+            <div className="subject-card-count">{subject.count} Notizen</div>
+          </div>
+        </>
+      ) : children}
     </div>
   );
 }
@@ -355,7 +394,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'mathe') {
     return (
-      <TileWrap onOpen={onToggle} w={220} h={148} bg="linear-gradient(155deg, oklch(0.32 0.12 258), #090B14 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={220} h={148} bg="linear-gradient(155deg, oklch(0.32 0.12 258), #090B14 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.14) 1px,transparent 1px)', backgroundSize: '18px 18px' }} />
         <div style={{ position: 'absolute', left: 0, right: 0, top: 34, height: 58, background: 'linear-gradient(72deg,transparent 12%,oklch(0.75 0.16 250/.85) 12%,oklch(0.75 0.16 250/.85) 13.4%,transparent 13.4%)', transform: 'skewY(-16deg)' }} />
         <div style={{ position: 'absolute', right: 18, top: 14, font: 'italic 20px "Instrument Serif",serif', color: '#FFFFFF' }}>f(x)</div>
@@ -369,7 +408,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'chemie') {
     return (
-      <TileWrap onOpen={onToggle} w={150} h={164} bg="linear-gradient(155deg, oklch(0.32 0.12 158), #06120A 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={150} h={164} bg="linear-gradient(155deg, oklch(0.32 0.12 158), #06120A 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(rgba(255,255,255,.16) 1.3px,transparent 1.4px)', backgroundSize: '15px 15px' }} />
         <div style={{ position: 'absolute', right: -16, top: 22, width: 76, height: 76, borderRadius: '50%', border: '2px solid oklch(0.76 0.15 158/.8)' }} />
         <div style={{ position: 'absolute', right: 8, top: 74, width: 44, height: 44, borderRadius: '50%', border: '1.5px solid oklch(0.76 0.15 158/.55)' }} />
@@ -386,7 +425,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'kunst') {
     return (
-      <TileWrap onOpen={onToggle} w={140} h={148} bg="linear-gradient(155deg, oklch(0.30 0.12 330), #120912 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={140} h={148} bg="linear-gradient(155deg, oklch(0.30 0.12 330), #120912 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', left: -14, top: -10, width: 160, height: 30, background: 'oklch(0.66 0.20 38)', transform: 'rotate(-11deg)' }} />
         <div style={{ position: 'absolute', left: -14, top: 20, width: 160, height: 24, background: 'oklch(0.78 0.18 85)' }} />
         <div style={{ position: 'absolute', left: -14, top: 44, width: 160, height: 26, background: 'oklch(0.60 0.17 215)', transform: 'rotate(-11deg)' }} />
@@ -401,7 +440,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'pgw') {
     return (
-      <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg, oklch(0.30 0.12 315), #0F0916 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg, oklch(0.30 0.12 315), #0F0916 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', left: 16, bottom: 38, display: 'flex', alignItems: 'flex-end', gap: 6, height: 58 }}>
           <div style={{ width: 11, height: 22, background: 'oklch(0.65 0.18 315/.65)' }} />
           <div style={{ width: 11, height: 40, background: 'oklch(0.72 0.20 315/.85)' }} />
@@ -418,7 +457,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'philosophie') {
     return (
-      <TileWrap onOpen={onToggle} w={190} h={156} bg="linear-gradient(155deg, oklch(0.32 0.09 78), #140F08 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={190} h={156} bg="linear-gradient(155deg, oklch(0.32 0.09 78), #140F08 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', right: -8, top: -14, font: 'italic 110px/1 "Instrument Serif",serif', color: 'oklch(0.78 0.12 78/.22)' }}>Φ</div>
         <div style={{ position: 'absolute', left: 18, top: 18, right: 16, font: 'italic 31px/1.02 "Instrument Serif",serif', color: '#FFFFFF' }}>Philo­sophie</div>
         <div style={{ position: 'absolute', left: 18, top: 96, width: 40, height: 1, background: 'oklch(0.78 0.14 78/.6)' }} />
@@ -429,7 +468,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   if (s.id === 'englisch') {
     return (
-      <TileWrap onOpen={onToggle} w={136} h={144} bg="linear-gradient(155deg, oklch(0.30 0.13 26), #14090C 75%)" className={tileClass} testId={testId}>
+      <TileWrap onOpen={onToggle} w={136} h={144} bg="linear-gradient(155deg, oklch(0.30 0.13 26), #14090C 75%)" className={tileClass} testId={testId} subject={s}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(to bottom,transparent calc(100% - 1px),rgba(255,255,255,.18) calc(100% - 1px))', backgroundSize: '100% 24px' }} />
         <div style={{ position: 'absolute', left: 22, top: 0, bottom: 0, width: 1, background: 'oklch(0.72 0.18 26/.75)' }} />
         <div style={{ position: 'absolute', right: 10, top: 4, font: '400 54px/1 "Instrument Serif",serif', color: 'oklch(0.75 0.14 26/.25)' }}>Aa</div>
@@ -441,7 +480,7 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
 
   // spanisch
   return (
-    <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg, oklch(0.32 0.14 56), #140B05 75%)" className={tileClass} testId={testId}>
+    <TileWrap onOpen={onToggle} w={150} h={132} bg="linear-gradient(155deg, oklch(0.32 0.14 56), #140B05 75%)" className={tileClass} testId={testId} subject={s}>
       <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(118deg,transparent 0 12px,oklch(0.65 0.16 52/.6) 12px 22px)' }} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 24, height: 34, background: '#FFFFFF', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 7 }}>
         <span style={{ font: '700 15px "Bricolage Grotesque",sans-serif', color: '#08080A' }}>Spanisch</span>
@@ -1020,8 +1059,6 @@ export default function Library({ onOpenNote, onOpenSettings }) {
       }}
       data-subject={selectedSubject?.id || 'all'}
     >
-      {/* 1. Fluted Reeded Glass Textured Dark Background Layer (Image 1 reference) */}
-      <div className="liquid-fluted-bg" />
 
       {/* 2. Dynamic Thematic Ambient Lighting overlay */}
       <div style={{ position: 'absolute', inset: 0, background: bgGradient, opacity: 0.55, mixBlendMode: 'soft-light', transition: 'background 0.4s ease', pointerEvents: 'none' }} />

@@ -388,52 +388,111 @@ body {
    ========================================================================== */
 
 /* Fluted Reeded Glass Textured Dark Background */
-body::before,
-.liquid-fluted-bg {
+/* ==========================================================================
+   Riffelglas-Hintergrund in drei Ebenen:
+   -3 Lichtfeld (stark weichgezeichnet)  ->  -2 breite Lamellen (weich)
+   ->  -1 Mikroraster (knackscharf, traegt die Aufloesung)
+   Alle Perioden sind teilerfremd gewaehlt, dadurch ueberlagern sie sich
+   ueber die ganze Flaeche unregelmaessig statt in einem sauberen Raster.
+   ========================================================================== */
+
+/* Lichtfeld: liegt ganz hinten und wird echt weichgezeichnet, damit das
+   Licht diffus im Glaskoerper steht statt als harte Verlaufskante. */
+body::before {
   content: "";
   position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-color: #050506;
+  inset: -14%;
+  z-index: -2;
+  background-color: #0A0A0D;
   background-image:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.10) 0.9px, transparent 1.3px),
-    /* 2. Gewebe — senkrechte Rippen */
-    repeating-linear-gradient(90deg,
-      rgba(255, 255, 255, 0.18) 0px,
-      rgba(255, 255, 255, 0.18) 1px,
-      transparent 1px,
-      transparent 2.5px,
-      rgba(0, 0, 0, 0.32) 2.5px,
-      rgba(0, 0, 0, 0.32) 4px,
-      transparent 4px,
-      transparent 6px
-    ),
-    /* 3. Gewebe — waagerechte Rippen */
-    repeating-linear-gradient(0deg,
-      rgba(255, 255, 255, 0.13) 0px,
-      rgba(255, 255, 255, 0.13) 1px,
-      transparent 1px,
-      transparent 2.5px,
-      rgba(0, 0, 0, 0.25) 2.5px,
-      rgba(0, 0, 0, 0.25) 4px,
-      transparent 4px,
-      transparent 6px
-    ),
-    radial-gradient(ellipse 760px 900px at 1% 44%, rgba(214, 214, 224, 0.65), transparent 64%),
-    radial-gradient(ellipse 880px 600px at 80% 2%, rgba(200, 200, 212, 0.58), transparent 66%),
-    radial-gradient(ellipse 700px 540px at 100% 36%, rgba(190, 190, 204, 0.52), transparent 66%),
-    radial-gradient(ellipse 860px 600px at 18% 100%, rgba(182, 182, 198, 0.48), transparent 68%),
-    radial-gradient(ellipse 620px 480px at 95% 99%, rgba(172, 172, 190, 0.42), transparent 66%),
-    radial-gradient(ellipse 780px 580px at 50% 48%, rgba(0, 0, 0, 0.42), transparent 76%);
-  background-size:
-    5px 5px,
-    6px 100%,
-    100% 6px,
-    auto, auto, auto, auto, auto, auto;
-  background-attachment: fixed;
-  opacity: 0.45;
+    /* Kern-Vignette haelt die Mitte tiefschwarz */
+    radial-gradient(ellipse 40% 38% at 47% 53%, rgba(0, 0, 0, 0.42), transparent 78%),
+    /* Lichtbaeder an den Raendern */
+    radial-gradient(ellipse 34% 58% at 0% 44%, rgba(244, 244, 252, 1), transparent 70%),
+    radial-gradient(ellipse 42% 34% at 84% 0%, rgba(234, 234, 246, 0.96), transparent 70%),
+    radial-gradient(ellipse 30% 38% at 100% 32%, rgba(222, 222, 238, 0.88), transparent 70%),
+    radial-gradient(ellipse 42% 32% at 10% 100%, rgba(214, 214, 232, 0.84), transparent 72%),
+    radial-gradient(ellipse 32% 28% at 98% 100%, rgba(204, 204, 224, 0.72), transparent 70%),
+    /* Schwacher Grundschleier, damit die Lamellen auch abseits der Blooms Licht haben */
+    radial-gradient(ellipse 104% 104% at 48% 50%, transparent 20%, rgba(196, 196, 212, 0.86) 100%);
+  /* ponytail: statischer Vollbild-Blur, laeuft einmal auf der GPU. Wenn ein
+     schwaeheres Tablet ruckelt, Radius senken statt Layer entfernen. */
+  filter: blur(44px);
   pointer-events: none;
 }
+/* Riffelglas-Lamellen: breite, weiche Zylinderlinsen im Overlay-Modus.
+   Sie brechen nur vorhandenes Licht, deshalb bleibt Schwarz schwarz. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -4px;
+  z-index: -1;
+  background-image:
+    /* 1. Waagerechte Lamellen — flacher, damit die Senkrechten fuehren */
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.30) 0px,
+      rgba(0, 0, 0, 0.10) 3.5px,
+      rgba(255, 255, 255, 0.13) 11px,
+      rgba(255, 255, 255, 0.04) 17px,
+      rgba(0, 0, 0, 0.12) 23px,
+      rgba(0, 0, 0, 0.30) 29px
+    ),
+
+    /* 2. Zweite senkrechte Lage, leicht verdreht und anders geteilt —
+       erzeugt die breite Moire-Schwebung ueber das ganze Bild */
+    repeating-linear-gradient(84.1deg,
+      rgba(0, 0, 0, 0.30) 0px,
+      rgba(0, 0, 0, 0.10) 2px,
+      rgba(255, 255, 255, 0.19) 6.5px,
+      rgba(255, 255, 255, 0.06) 10px,
+      rgba(0, 0, 0, 0.14) 14px,
+      rgba(0, 0, 0, 0.30) 16.9px
+    ),
+    /* 3. Senkrechte Hauptlamellen — jede Rippe eine Zylinderlinse:
+       Naht dunkel, Mitte Glanzkante, Rand wieder dunkel */
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, 0.62) 0px,
+      rgba(0, 0, 0, 0.30) 1.5px,
+      rgba(255, 255, 255, 0.10) 4px,
+      rgba(255, 255, 255, 0.44) 6.5px,
+      rgba(255, 255, 255, 0.14) 9px,
+      rgba(0, 0, 0, 0.22) 11.5px,
+      rgba(0, 0, 0, 0.48) 14px,
+      rgba(0, 0, 0, 0.62) 16px
+    );
+  /* Sub-Pixel-Blur nimmt den Lamellen die Druckraster-Haerte */
+  filter: blur(0.9px);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Generated reeded-glass plate. The restrained overlays keep white UI copy
+   legible while preserving the real refraction captured in the raster asset. */
+body::before {
+  inset: 0;
+  background-color: #08080A;
+  background-image:
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    linear-gradient(rgba(138, 212, 255, 0.08), rgba(138, 212, 255, 0.08)),
+    linear-gradient(180deg, rgba(4, 4, 7, 0.20), rgba(4, 4, 7, 0.34)),
+    url('../assets/reeded-glass-background.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: none;
+}
+
+body::after {
+  inset: 0;
+  background:
+    radial-gradient(ellipse 58% 54% at 50% 48%, transparent 30%, rgba(0, 0, 0, 0.24) 100%);
+  filter: none;
+  mix-blend-mode: normal;
+}
+
+
+
 
 /* Liquid Glass Capsule / Pill (Direct match for Image 1 center bar) */
 .liquid-glass-pill {
@@ -603,6 +662,34 @@ body::before,
     inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
     0 0 0 2.5px var(--subj-accent, #FFFFFF),
     0 26px 56px -14px var(--subj-accent-soft, rgba(0, 0, 0, 0.95)) !important;
+}
+
+.subject-card-sheen {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, rgba(255,255,255,.18), transparent 22%, transparent 72%, rgba(255,255,255,.08)),
+    radial-gradient(ellipse 90% 52% at 50% 108%, rgba(0,0,0,.72), transparent 72%);
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.subject-card-copy {
+  position: absolute;
+  left: 15px;
+  right: 14px;
+  bottom: 13px;
+  z-index: 2;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,.9);
+}
+
+.subject-card-count {
+  margin-top: 6px;
+  font: 700 8.5px/1 ui-monospace, monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.78);
 }
 
 /* Audio Waveform Live Pulse Animation (Image 1 Audio Waves) */
