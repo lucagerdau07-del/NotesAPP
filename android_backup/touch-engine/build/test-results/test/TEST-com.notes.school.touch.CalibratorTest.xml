@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.touch.CalibratorTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:38" hostname="DESKTOP-5LP1CJ6" time="0.102">
+  <properties/>
+  <testcase name="incompleteCalibrationFallsBackToConservativeDefaults" classname="com.notes.school.touch.CalibratorTest" time="0.073"/>
+  <testcase name="builtProfileIsStableAndCarriesItsScoreAndDevice" classname="com.notes.school.touch.CalibratorTest" time="0.026"/>
+  <testcase name="buildReturnsTheStoredSamplesForLaterValidation" classname="com.notes.school.touch.CalibratorTest" time="0.001"/>
+  <testcase name="safeRangesAreDerivedFromTheObservedDataNotHardcoded" classname="com.notes.school.touch.CalibratorTest" time="0.001"/>
+  <testcase name="calibrationIsIncompleteUntilEveryPhaseHasSamples" classname="com.notes.school.touch.CalibratorTest" time="0.0"/>
+  <testcase name="scoreProfileMeasuresAgreementWithStoredSamples" classname="com.notes.school.touch.CalibratorTest" time="0.001"/>
+  <testcase name="completeCalibrationReportsPerPhaseCounts" classname="com.notes.school.touch.CalibratorTest" time="0.0"/>
+  <testcase name="builtProfileSeparatesTheObservedStylusAndPalmSizes" classname="com.notes.school.touch.CalibratorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.touch.ContactClassifierTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:38" hostname="DESKTOP-5LP1CJ6" time="0.016">
+  <properties/>
+  <testcase name="theFirstSampleIsNeverImmediatelyLocked" classname="com.notes.school.touch.ContactClassifierTest" time="0.013"/>
+  <testcase name="positivePenBiasResolvesAmbiguityTowardPen" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="resetClearsAllPointerState" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="aClearPalmRestLocksAsPalm" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="ambiguousContactStaysUndecidedInsideTheDecisionWindow" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="negativePenBiasResolvesAmbiguityTowardPalm" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="manyStationaryContactsAtOnceAreAllTreatedAsPalm" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="aPointerNeverFlipsFromPenLockedToPalmLocked" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="aLockedPenStaysLockedEvenIfItSlowsToAStop" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="palmArrivingAfterALockedPenIsRejectedWithoutInterruptingIt" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="liftClearsThePenLockSoTheNextStrokeStartsFresh" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="aClearPenTraceLocksAsPen" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="forceDecisionResolvesAnAmbiguousContactAfterTheWindow" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <testcase name="aWiderMaxPenSizeAcceptsALargerContactAsPen" classname="com.notes.school.touch.ContactClassifierTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+com.notes.school.document.test.document-engine-test-0 C:\Antigravity\NotesAPP\android\document-engine\build\generated\res\resValues\test\release
+com.notes.school.document.test.document-engine-mergeReleaseUnitTestResources-1 C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\incremental\releaseUnitTest\mergeReleaseUnitTestResources\merged.dir
+com.notes.school.document.test.document-engine-mergeReleaseUnitTestResources-2 C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\incremental\releaseUnitTest\mergeReleaseUnitTestResources\stripped.dir
+com.notes.school.document.test.document-engine-releaseUnitTest-3 C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\merged_res\releaseUnitTest\mergeReleaseUnitTestResources
+com.notes.school.document.test.document-engine-release-4 C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\packaged_res\release\packageReleaseResources
+com.notes.school.document.test.document-engine-release-5 C:\Antigravity\NotesAPP\android\ink-engine\build\intermediates\packaged_res\release\packageReleaseResources
+com.notes.school.document.test.document-engine-core-1.13.1-6 C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\res
+com.notes.school.document.test.document-engine-annotation-experimental-1.4.0-7 C:\Users\lucag\.gradle\caches\transforms-4\4b50d5a9d17093f0433bc43b6e37a1d0\transformed\annotation-experimental-1.4.0\res
+com.notes.school.document.test.document-engine-startup-runtime-1.1.1-8 C:\Users\lucag\.gradle\caches\transforms-4\7dcb7785aebefce19258d84e511990b4\transformed\startup-runtime-1.1.1\res
+com.notes.school.document.test.document-engine-core-ktx-1.13.1-9 C:\Users\lucag\.gradle\caches\transforms-4\921aab845d6d455ba6e035eacccbddc8\transformed\core-ktx-1.13.1\res
+com.notes.school.document.test.document-engine-core-runtime-2.2.0-10 C:\Users\lucag\.gradle\caches\transforms-4\a18348fc3a1f0ff10565a3d2726e425d\transformed\core-runtime-2.2.0\res
+com.notes.school.document.test.document-engine-lifecycle-runtime-2.6.2-11 C:\Users\lucag\.gradle\caches\transforms-4\ac11bbd3c2ecae874d8f14d3599cf5d0\transformed\lifecycle-runtime-2.6.2\res
+com.notes.school.document.test.document-engine-tracing-1.1.0-12 C:\Users\lucag\.gradle\caches\transforms-4\cddc4479ecd5985417d37db53aa80e4c\transformed\tracing-1.1.0\res
+com.notes.school.document.test.document-engine-core-1.6.1-13 C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\res
+com.notes.school.document.test.document-engine-profileinstaller-1.3.0-14 C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\res

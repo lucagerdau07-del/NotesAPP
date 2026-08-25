@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.remote.NotesApiClientTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-22T00:26:34" hostname="DESKTOP-5LP1CJ6" time="0.322">
+  <properties/>
+  <testcase name="everyRequestCarriesTheRestrictedNotesToken" classname="com.notes.school.remote.NotesApiClientTest" time="0.282"/>
+  <testcase name="a503IsReportedAsASleepingBackendRatherThanAHardFailure" classname="com.notes.school.remote.NotesApiClientTest" time="0.005"/>
+  <testcase name="cancelDeletesTheJob" classname="com.notes.school.remote.NotesApiClientTest" time="0.004"/>
+  <testcase name="aMissingTokenFailsBeforeAnythingIsSent" classname="com.notes.school.remote.NotesApiClientTest" time="0.003"/>
+  <testcase name="healthReadsTheHealthEndpoint" classname="com.notes.school.remote.NotesApiClientTest" time="0.004"/>
+  <testcase name="pollReadsTheJobById" classname="com.notes.school.remote.NotesApiClientTest" time="0.006"/>
+  <testcase name="a429CarriesTheRetryAfterDelay" classname="com.notes.school.remote.NotesApiClientTest" time="0.005"/>
+  <testcase name="a401IsReportedAsAnAuthFailure" classname="com.notes.school.remote.NotesApiClientTest" time="0.004"/>
+  <testcase name="anUnreachableHostIsReportedAsOffline" classname="com.notes.school.remote.NotesApiClientTest" time="0.004"/>
+  <testcase name="submitPostsToTheVersionedJobsEndpoint" classname="com.notes.school.remote.NotesApiClientTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,385 @@
+# 2026-08-22T16:23:45.276785500Z:
+test_suite_meta_data {
+  scheduled_test_case_count: 7
+}
+test_status: FAILED
+test_result {
+  test_case {
+    test_class: "CrashRecoveryTest"
+    test_package: "com.notes.school"
+    test_method: "flushedStrokesSurviveALossOfTheProcess"
+    start_time {
+      seconds: 1787415818
+      nanos: 217000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 89000000
+    }
+  }
+  test_status: FAILED
+  error {
+    error_message: "java.lang.AssertionError: expected:<25> but was:<24>\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.failNotEquals(Assert.java:835)\nat org.junit.Assert.assertEquals(Assert.java:120)\nat org.junit.Assert.assertEquals(Assert.java:146)\nat com.notes.school.CrashRecoveryTest$flushedStrokesSurviveALossOfTheProcess$1.invokeSuspend(CrashRecoveryTest.kt:63)\nat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)\nat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)\nat kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:277)\nat kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)\nat kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)\nat kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)\nat kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)\nat kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)\nat com.notes.school.CrashRecoveryTest.flushedStrokesSurviveALossOfTheProcess(CrashRecoveryTest.kt:45)\n"
+    error_type: "java.lang.AssertionError"
+    stack_trace: "java.lang.AssertionError: expected:<25> but was:<24>\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.failNotEquals(Assert.java:835)\nat org.junit.Assert.assertEquals(Assert.java:120)\nat org.junit.Assert.assertEquals(Assert.java:146)\nat com.notes.school.CrashRecoveryTest$flushedStrokesSurviveALossOfTheProcess$1.invokeSuspend(CrashRecoveryTest.kt:63)\nat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)\nat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)\nat kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:277)\nat kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)\nat kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)\nat kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)\nat kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)\nat kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)\nat com.notes.school.CrashRecoveryTest.flushedStrokesSurviveALossOfTheProcess(CrashRecoveryTest.kt:45)\n"
+  }
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.CrashRecoveryTest-flushedStrokesSurviveALossOfTheProcess.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "InkLatencyTest"
+    test_package: "com.notes.school"
+    test_method: "theInputPathStaysInsideTheFrameBudgetAtP95"
+    start_time {
+      seconds: 1787415820
+      nanos: 101000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 131000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.InkLatencyTest-theInputPathStaysInsideTheFrameBudgetAtP95.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "InkLatencyTest"
+    test_package: "com.notes.school"
+    test_method: "aLongStrokeDoesNotDegradeSampleHandlingOverTime"
+    start_time {
+      seconds: 1787415820
+      nanos: 133000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 239000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.InkLatencyTest-aLongStrokeDoesNotDegradeSampleHandlingOverTime.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "PalmScenarioTest"
+    test_package: "com.notes.school"
+    test_method: "aPalmArrivingAfterALockedPenIsRejectedAtLeast99PercentOfTheTime"
+    start_time {
+      seconds: 1787415820
+      nanos: 240000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 270000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.PalmScenarioTest-aPalmArrivingAfterALockedPenIsRejectedAtLeast99PercentOfTheTime.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "PalmScenarioTest"
+    test_package: "com.notes.school"
+    test_method: "palmFirstAmbiguousResultsAreRecordedSeparatelyRatherThanAsserted"
+    start_time {
+      seconds: 1787415820
+      nanos: 297000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 300000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.PalmScenarioTest-palmFirstAmbiguousResultsAreRecordedSeparatelyRatherThanAsserted.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "PalmScenarioTest"
+    test_package: "com.notes.school"
+    test_method: "slowDotsAreRecognizedAsPen"
+    start_time {
+      seconds: 1787415820
+      nanos: 303000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 307000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.PalmScenarioTest-slowDotsAreRecognizedAsPen.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+test_result {
+  test_case {
+    test_class: "PalmScenarioTest"
+    test_package: "com.notes.school"
+    test_method: "fastPenStrokesRemainUnlocked"
+    start_time {
+      seconds: 1787415820
+      nanos: 309000000
+    }
+    end_time {
+      seconds: 1787415820
+      nanos: 312000000
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\logcat-com.notes.school.PalmScenarioTest-fastPenStrokesRemainUnlocked.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\cpuinfo"
+    }
+  }
+}
+output_artifact {
+  label {
+    label: "test-results.log"
+    namespace: "com.google.testing.platform.runtime.android.driver.AndroidInstrumentationDriver"
+  }
+  source_path {
+    path: "C:\\Antigravity\\NotesAPP\\android\\app\\build\\outputs\\androidTest-results\\connected\\debug\\SM-T505 - 12\\testlog\\test-results.log"
+  }
+  type: TEST_DATA
+  mime_type: "text/plain"
+}

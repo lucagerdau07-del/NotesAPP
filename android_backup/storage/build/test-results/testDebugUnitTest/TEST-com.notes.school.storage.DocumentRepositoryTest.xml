@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.storage.DocumentRepositoryTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:22" hostname="DESKTOP-5LP1CJ6" time="0.64">
+  <properties/>
+  <testcase name="creatingADocumentAlsoCreatesItsFirstPage" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.109"/>
+  <testcase name="closingTheRepositoryStopsAcceptingWorkWithoutLosingWhatWasFlushed" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.06"/>
+  <testcase name="strokesAlreadyWrittenSurviveAProcessRestart" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.051"/>
+  <testcase name="strokesReloadInTheirOriginalOrder" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.055"/>
+  <testcase name="anEraseIsPersistedAsAnActiveFlagChangeNotADelete" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.063"/>
+  <testcase name="queueStrokeDoesNotBlockTheCaller" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.067"/>
+  <testcase name="persistingAStrokeBumpsTheDocumentTimestamp" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.044"/>
+  <testcase name="viewportStateIsSavedPerPage" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.045"/>
+  <testcase name="flushForcesEverythingPendingToDiskImmediately" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.044"/>
+  <testcase name="aQueuedStrokeReachesTheDatabaseWithinTheFlushInterval" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.06"/>
+  <testcase name="createDocumentHonoursTheRequestedPageCount" classname="com.notes.school.storage.DocumentRepositoryTest" time="0.04"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

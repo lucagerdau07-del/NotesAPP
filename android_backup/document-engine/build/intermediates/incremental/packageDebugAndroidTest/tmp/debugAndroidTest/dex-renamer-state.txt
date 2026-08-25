@@ -1,0 +1,22 @@
+#Sat Aug 22 18:20:49 CEST 2026
+base.0=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeExtDexDebugAndroidTest\\classes.dex
+base.1=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeLibDexDebugAndroidTest\\11\\classes.dex
+base.2=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeLibDexDebugAndroidTest\\2\\classes.dex
+base.3=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeLibDexDebugAndroidTest\\4\\classes.dex
+base.4=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeProjectDexDebugAndroidTest\\0\\classes.dex
+base.5=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeProjectDexDebugAndroidTest\\11\\classes.dex
+base.6=C\:\\Antigravity\\NotesAPP\\android\\document-engine\\build\\intermediates\\dex\\debugAndroidTest\\mergeExtDexDebugAndroidTest\\classes2.dex
+path.0=classes.dex
+path.1=11/classes.dex
+path.2=2/classes.dex
+path.3=4/classes.dex
+path.4=0/classes.dex
+path.5=11/classes.dex
+path.6=classes2.dex
+renamed.0=classes.dex
+renamed.1=classes2.dex
+renamed.2=classes3.dex
+renamed.3=classes4.dex
+renamed.4=classes5.dex
+renamed.5=classes6.dex
+renamed.6=classes7.dex

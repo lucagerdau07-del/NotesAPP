@@ -1,0 +1,91 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.notes.school.storage.test" >
+4
+5    <uses-sdk
+5-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:5:5-74
+6        android:minSdkVersion="26"
+6-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:5:15-41
+7        android:targetSdkVersion="26" />
+7-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:5:42-71
+8
+9    <instrumentation
+9-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:11:5-13:79
+10        android:name="android.test.InstrumentationTestRunner"
+10-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:11:22-75
+11        android:label="Tests for com.notes.school.storage.test"
+11-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:13:22-77
+12        android:targetPackage="com.notes.school.storage.test" />
+12-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:12:22-75
+13
+14    <uses-permission android:name="android.permission.REORDER_TASKS" />
+14-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:24:5-72
+14-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:24:22-69
+15
+16    <application android:debuggable="true" >
+16-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:7:5-9:19
+16-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:7:18-43
+17        <uses-library android:name="android.test.runner" />
+17-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:8:9-60
+17-->C:\Antigravity\NotesAPP\android\storage\build\intermediates\tmp\manifest\test\debug\tempFile1ProcessTestManifest7506947731146613867.xml:8:23-57
+18
+19        <activity
+19-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:27:9-34:20
+20            android:name="androidx.test.core.app.InstrumentationActivityInvoker$BootstrapActivity"
+20-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:28:13-99
+21            android:exported="true"
+21-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:29:13-36
+22            android:theme="@style/WhiteBackgroundTheme" >
+22-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:30:13-56
+23            <intent-filter android:priority="-100" >
+23-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+23-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+24                <category android:name="android.intent.category.LAUNCHER" />
+24-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+24-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+25            </intent-filter>
+26        </activity>
+27        <activity
+27-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:35:9-42:20
+28            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyActivity"
+28-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:36:13-95
+29            android:exported="true"
+29-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:37:13-36
+30            android:theme="@style/WhiteBackgroundTheme" >
+30-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:38:13-56
+31            <intent-filter android:priority="-100" >
+31-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+31-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+32                <category android:name="android.intent.category.LAUNCHER" />
+32-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+32-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+33            </intent-filter>
+34        </activity>
+35        <activity
+35-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:43:9-50:20
+36            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyFloatingActivity"
+36-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:44:13-103
+37            android:exported="true"
+37-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:45:13-36
+38            android:theme="@style/WhiteBackgroundDialogTheme" >
+38-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:46:13-62
+39            <intent-filter android:priority="-100" >
+39-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+39-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+40                <category android:name="android.intent.category.LAUNCHER" />
+40-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+40-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+41            </intent-filter>
+42        </activity>
+43
+44        <service
+44-->[androidx.room:room-runtime:2.6.1] C:\Users\lucag\.gradle\caches\transforms-4\eb8b060b75b11acfd491450f4ee294bd\transformed\room-runtime-2.6.1\AndroidManifest.xml:24:9-28:63
+45            android:name="androidx.room.MultiInstanceInvalidationService"
+45-->[androidx.room:room-runtime:2.6.1] C:\Users\lucag\.gradle\caches\transforms-4\eb8b060b75b11acfd491450f4ee294bd\transformed\room-runtime-2.6.1\AndroidManifest.xml:25:13-74
+46            android:directBootAware="true"
+46-->[androidx.room:room-runtime:2.6.1] C:\Users\lucag\.gradle\caches\transforms-4\eb8b060b75b11acfd491450f4ee294bd\transformed\room-runtime-2.6.1\AndroidManifest.xml:26:13-43
+47            android:exported="false" />
+47-->[androidx.room:room-runtime:2.6.1] C:\Users\lucag\.gradle\caches\transforms-4\eb8b060b75b11acfd491450f4ee294bd\transformed\room-runtime-2.6.1\AndroidManifest.xml:27:13-37
+48    </application>
+49
+50</manifest>

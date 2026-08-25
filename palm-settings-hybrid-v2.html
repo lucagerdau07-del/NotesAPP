@@ -1,0 +1,98 @@
+<style>
+  :root {
+    --rv-bg: #101012;
+    --rv-panel: #19191c;
+    --rv-row: #242428;
+    --rv-line: rgba(255,255,255,.105);
+    --rv-text: #f5f5f7;
+    --rv-muted: #96969e;
+    --rv-blue: #0a84ff;
+    --rv-green: #30d158;
+  }
+
+  * { box-sizing: border-box; }
+  .rv-note { margin: 12px 0 20px; padding: 12px 14px; border: 1px solid rgba(10,132,255,.2); border-radius: 13px; background: rgba(10,132,255,.075); color: #b8c4d0; font-size: 12px; line-height: 1.5; }
+  .rv-state-label { margin: 16px 0 7px; color: #888890; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+  .rv-tablet { width: 100%; aspect-ratio: 16 / 7.2; padding: 7px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 19px; background: #080809; box-shadow: 0 12px 30px rgba(0,0,0,.22); }
+  .rv-screen { position: relative; width: 100%; height: 100%; overflow: hidden; background: radial-gradient(circle at 12% 8%, rgba(10,132,255,.11), transparent 24%), radial-gradient(circle at 88% 88%, rgba(90,200,250,.05), transparent 26%), var(--rv-bg); color: var(--rv-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+  .rv-glass { border: 1px solid rgba(255,255,255,.22); background: linear-gradient(145deg, rgba(255,255,255,.15), rgba(255,255,255,.025) 45%, rgba(255,255,255,.08)), rgba(80,80,88,.34); box-shadow: inset 0 1px 0 rgba(255,255,255,.24), inset 0 -1px 0 rgba(255,255,255,.06), 0 9px 28px rgba(0,0,0,.32); backdrop-filter: blur(22px) saturate(1.6) brightness(1.08); }
+  .rv-topbar { position: absolute; z-index: 4; top: 9px; left: 10px; right: 10px; height: 43px; display: flex; align-items: center; padding: 0 13px; border-radius: 22px; }
+  .rv-back { width: 28px; height: 28px; display: grid; place-items: center; color: #fff; }
+  .rv-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .rv-title { margin-left: 5px; font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
+  .rv-done { margin-left: auto; padding: 7px 11px; border-radius: 999px; background: var(--rv-blue); color: #fff; font-size: 9px; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 12px rgba(10,132,255,.28); }
+
+  .rv-sidebar { position: absolute; z-index: 3; top: 59px; bottom: 9px; left: 10px; width: 146px; padding: 10px 8px; border-radius: 18px; }
+  .rv-nav-label { margin: 7px 9px 5px; color: #9a9aa2; font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .rv-nav-item { height: 29px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border-radius: 9px; color: #d3d3d8; font-size: 9px; font-weight: 550; }
+  .rv-nav-item.active { background: rgba(10,132,255,.19); color: #69b1ff; box-shadow: inset 0 0 0 1px rgba(10,132,255,.15); }
+  .rv-nav-item svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .rv-detail { position: absolute; top: 59px; right: 10px; bottom: 9px; left: 166px; overflow: hidden; padding: 13px 16px; border: 1px solid rgba(255,255,255,.055); border-radius: 18px; background: rgba(25,25,28,.94); }
+  .rv-detail-title { font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
+  .rv-detail-copy { margin-top: 3px; color: var(--rv-muted); font-size: 8px; line-height: 1.4; }
+  .rv-status { display: flex; align-items: center; gap: 7px; margin: 10px 0 9px; }
+  .rv-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rv-green); box-shadow: 0 0 0 4px rgba(48,209,88,.1); }
+  .rv-status strong { font-size: 9px; }
+  .rv-status span { color: var(--rv-muted); font-size: 7.5px; }
+  .rv-group { width: min(470px, 100%); overflow: hidden; border: 1px solid rgba(255,255,255,.075); border-radius: 13px; background: var(--rv-row); }
+  .rv-row { min-height: 40px; display: flex; align-items: center; gap: 9px; padding: 7px 11px; }
+  .rv-row + .rv-row { border-top: 1px solid var(--rv-line); }
+  .rv-row-main { flex: 1; min-width: 0; }
+  .rv-row-title { color: #f1f1f4; font-size: 9px; font-weight: 650; }
+  .rv-row-copy { margin-top: 2px; color: #85858d; font-size: 7.2px; line-height: 1.35; }
+  .rv-button { padding: 7px 10px; flex: 0 0 auto; border-radius: 999px; background: var(--rv-blue); color: #fff; font-size: 8px; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 4px 12px rgba(10,132,255,.22); }
+  .rv-switch { position: relative; width: 31px; height: 18px; flex: 0 0 auto; border-radius: 999px; background: #505057; }
+  .rv-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+  .rv-switch.on { background: var(--rv-green); }
+  .rv-switch.on::after { left: 15px; }
+  .rv-chevron { color: #85858d; font-size: 17px; line-height: 1; }
+
+  .rv-advanced-head { display: flex; align-items: center; gap: 5px; margin-bottom: 11px; }
+  .rv-advanced-head .rv-back { width: 21px; height: 21px; color: #64adff; }
+  .rv-advanced-head .rv-detail-title { font-size: 14px; }
+  .rv-section-caption { margin: 8px 3px 5px; color: #7f7f87; font-size: 7.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .rv-control { min-height: 42px; display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 12px; padding: 7px 11px; }
+  .rv-control + .rv-control { border-top: 1px solid var(--rv-line); }
+  .rv-control-title { color: #eeeef1; font-size: 8.5px; font-weight: 650; }
+  .rv-control-copy { margin-top: 2px; color: #818189; font-size: 7px; }
+  .rv-slider { position: relative; width: 115px; height: 4px; border-radius: 999px; background: #4d4d54; }
+  .rv-slider::before { content: ''; position: absolute; inset: 0 42% 0 0; border-radius: inherit; background: var(--rv-blue); }
+  .rv-slider::after { content: ''; position: absolute; top: 50%; left: 56%; width: 13px; height: 13px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.35); transform: translate(-50%,-50%); }
+  .rv-actions { display: flex; gap: 7px; width: min(470px, 100%); margin-top: 9px; }
+  .rv-secondary { flex: 1; padding: 8px 9px; border-radius: 10px; background: rgba(255,255,255,.07); color: #dadade; text-align: center; font-size: 8px; font-weight: 650; }
+  .rv-secondary.danger { color: #ff6961; }
+
+  .rv-approval { margin-top: 18px; padding: 13px 15px; display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 11px; border: 1px solid #424248; border-radius: 14px; background: #242428; cursor: pointer; }
+  .rv-approval:hover { border-color: var(--rv-blue); }
+  .rv-approval.selected { border-color: var(--rv-blue); background: rgba(10,132,255,.12); box-shadow: 0 0 0 3px rgba(10,132,255,.12); }
+  .rv-letter { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 9px; background: #34343a; color: #fff; font-size: 12px; font-weight: 750; }
+  .rv-approval h3 { margin: 0 0 2px; color: var(--rv-text); font-size: 13px; }
+  .rv-approval p { margin: 0; color: var(--rv-muted); font-size: 10px; line-height: 1.4; }
+
+  @media (max-width: 760px) { .rv-tablet { aspect-ratio: 16 / 8.4; } }
+</style>
+
+<h2>Palm-Schutz-Einstellungen · überarbeitet</h2>
+<p class="subtitle">Die Hauptseite ist wieder vollständig kompakt. „Erweiterte Einstellungen“ ist eine normale Navigationszeile.</p>
+
+<div class="rv-note"><strong>Änderung übernommen:</strong> Die drei Kacheln wurden entfernt. Der Pfeil öffnet eine eigene Unterseite; dadurch bleiben die manuellen Regler aus der Standardansicht verschwunden.</div>
+
+<div class="rv-state-label">1 · Standardansicht</div>
+<div class="rv-tablet"><div class="rv-screen">
+  <header class="rv-topbar rv-glass"><span class="rv-back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span><span class="rv-title">Einstellungen</span><span class="rv-done">Fertig</span></header>
+  <aside class="rv-sidebar rv-glass"><div class="rv-nav-label">App</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/></svg>Allgemein</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="m5 19 4-1 10-10-3-3L6 15l-1 4Z"/></svg>Schreiben</div><div class="rv-nav-item active"><svg viewBox="0 0 24 24"><path d="M8 11V6M11 10V5M14 10V6M17 12V8M5 10l4 8h6c3 0 5-2 5-5"/><path d="M4 4l16 16"/></svg>Palm-Schutz</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3V7Z"/></svg>Dateien</div><div class="rv-nav-label">Online</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M12 3v18M4 8h16M5 16h14"/></svg>KI & Netzwerk</div></aside>
+  <section class="rv-detail"><div class="rv-detail-title">Palm-Schutz</div><div class="rv-detail-copy">Einfache Standardansicht mit deinem persönlichen Profil.</div><div class="rv-status"><span class="rv-status-dot"></span><strong>Bereit</strong><span>· stabile Version 4</span></div><div class="rv-group"><div class="rv-row"><div class="rv-row-main"><div class="rv-row-title">Neu kalibrieren</div><div class="rv-row-copy">Handballen, Stift und kurze Bewegungen testen</div></div><span class="rv-button">Starten</span></div><div class="rv-row"><div class="rv-row-main"><div class="rv-row-title">Profil automatisch verbessern</div><div class="rv-row-copy">Nur eindeutige Muster; Änderungen nach der Sitzung</div></div><span class="rv-switch on"></span></div><div class="rv-row"><div class="rv-row-main"><div class="rv-row-title">25-%-Sicherheitsmodus</div><div class="rv-row-copy">Schreibbereich rechts begrenzen</div></div><span class="rv-switch"></span></div><div class="rv-row"><div class="rv-row-main"><div class="rv-row-title">Erweiterte Einstellungen</div><div class="rv-row-copy">Manuelle Grundtendenz, Testfläche und Profil-Reset</div></div><span class="rv-chevron">›</span></div></div></section>
+</div></div>
+
+<div class="rv-state-label">2 · Nach Tippen auf „Erweiterte Einstellungen“</div>
+<div class="rv-tablet"><div class="rv-screen">
+  <header class="rv-topbar rv-glass"><span class="rv-back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span><span class="rv-title">Einstellungen</span><span class="rv-done">Fertig</span></header>
+  <aside class="rv-sidebar rv-glass"><div class="rv-nav-label">App</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/></svg>Allgemein</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="m5 19 4-1 10-10-3-3L6 15l-1 4Z"/></svg>Schreiben</div><div class="rv-nav-item active"><svg viewBox="0 0 24 24"><path d="M8 11V6M11 10V5M14 10V6M17 12V8M5 10l4 8h6c3 0 5-2 5-5"/><path d="M4 4l16 16"/></svg>Palm-Schutz</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3V7Z"/></svg>Dateien</div><div class="rv-nav-label">Online</div><div class="rv-nav-item"><svg viewBox="0 0 24 24"><path d="M12 3v18M4 8h16M5 16h14"/></svg>KI & Netzwerk</div></aside>
+  <section class="rv-detail"><div class="rv-advanced-head"><span class="rv-back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span><span class="rv-detail-title">Erweiterte Einstellungen</span></div><div class="rv-detail-copy">Manuelle Grundtendenz; die automatische Anpassung bleibt innerhalb eines kleinen Bereichs darum herum.</div><div class="rv-section-caption">Erkennung</div><div class="rv-group"><div class="rv-control"><div><div class="rv-control-title">Erkennungsstärke</div><div class="rv-control-copy">Ausgewogen zwischen Schreiben und Blockieren</div></div><span class="rv-slider"></span></div><div class="rv-control"><div><div class="rv-control-title">Kleine Kontakte</div><div class="rv-control-copy">Kurze Handkontakte stärker berücksichtigen</div></div><span class="rv-slider"></span></div><div class="rv-control"><div><div class="rv-control-title">Kontakt-Zeitfenster</div><div class="rv-control-copy">120 ms für Auflegen und Bewegungswechsel</div></div><span class="rv-slider"></span></div></div><div class="rv-actions"><span class="rv-secondary">Testfläche öffnen</span><span class="rv-secondary danger">Profil zurücksetzen</span></div></section>
+</div></div>
+
+<div class="rv-approval" data-choice="approve_settings_v2" onclick="toggleSelect(this)"><div class="rv-letter">A</div><div><h3>Diese Fassung übernehmen</h3><p>Kompakte Hauptseite; „Erweiterte Einstellungen ›“ öffnet eine getrennte Unterseite.</p></div></div>
+
+<p style="margin-top:16px;color:#8e8e96;font-size:12px;line-height:1.5">Klicke auf „Diese Fassung übernehmen“ oder markiere noch eine gewünschte Änderung.</p>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.editor.PadMappingTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:26:33" hostname="DESKTOP-5LP1CJ6" time="0.008">
+  <properties/>
+  <testcase name="writingOnTheLargePadProducesSmallerInkOnTheDocument" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="mappedBoundsAreRecomputedRatherThanCopied" classname="com.notes.school.editor.PadMappingTest" time="0.007"/>
+  <testcase name="advanceStopsAtTheBottomOfThePage" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="aMappedStrokeLandsInsideTheFocusBox" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="advanceMovesTheFocusBoxRightThenWraps" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="theCenterOfThePadMapsToTheCenterOfTheFocusBox" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="aDegeneratePadSizeDoesNotProduceNaN" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="aMappedStrokeKeepsItsToolColorAndPointCount" classname="com.notes.school.editor.PadMappingTest" time="0.001"/>
+  <testcase name="theOriginOfThePadMapsToTheOriginOfTheFocusBox" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <testcase name="theFarCornerOfThePadMapsToTheFarCornerOfTheFocusBox" classname="com.notes.school.editor.PadMappingTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.ui.settings.CalibrationScreenTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:28" hostname="DESKTOP-5LP1CJ6" time="0.179">
+  <properties/>
+  <testcase name="theThirdPhaseAsksForNormalWriting" classname="com.notes.school.ui.settings.CalibrationScreenTest" time="0.043"/>
+  <testcase name="theCaptureSurfaceIsPresentInEveryPhase" classname="com.notes.school.ui.settings.CalibrationScreenTest" time="0.039"/>
+  <testcase name="theSecondPhaseAsksForStylusOnlyWriting" classname="com.notes.school.ui.settings.CalibrationScreenTest" time="0.034"/>
+  <testcase name="theFirstPhaseAsksForARestingPalm" classname="com.notes.school.ui.settings.CalibrationScreenTest" time="0.032"/>
+  <testcase name="progressIsShown" classname="com.notes.school.ui.settings.CalibrationScreenTest" time="0.031"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+]]></system-err>
+</testsuite>

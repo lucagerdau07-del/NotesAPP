@@ -1,0 +1,2 @@
+08-22 18:23:36.934 28451 28730 I TestRunner: started: aPalmArrivingAfterALockedPenIsRejectedAtLeast99PercentOfTheTime(com.notes.school.PalmScenarioTest)
+08-22 18:23:36.960 28451 28730 I TestRunner: finished: aPalmArrivingAfterALockedPenIsRejectedAtLeast99PercentOfTheTime(com.notes.school.PalmScenarioTest)

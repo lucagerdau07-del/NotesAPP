@@ -24,11 +24,13 @@ export default function PdfPageCanvas({
 
         const logicalWidth = page.width * zoom;
         const logicalHeight = page.height * zoom;
-        let scale = zoom * dpr;
+        const nativeViewport = pdfPage.getViewport({ scale: 1 });
+        const scaleToCanonical = (page.width * zoom) / nativeViewport.width;
+        let scale = scaleToCanonical * dpr;
 
-        if (page.width * scale * page.height * scale > MAX_PAGE_CANVAS_PIXELS) {
+        if (nativeViewport.width * scale * nativeViewport.height * scale > MAX_PAGE_CANVAS_PIXELS) {
           scale = Math.sqrt(
-            MAX_PAGE_CANVAS_PIXELS / (page.width * page.height),
+            MAX_PAGE_CANVAS_PIXELS / (nativeViewport.width * nativeViewport.height),
           );
         }
 

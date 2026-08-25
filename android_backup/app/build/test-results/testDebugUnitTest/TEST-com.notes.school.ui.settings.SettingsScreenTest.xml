@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.ui.settings.SettingsScreenTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:28" hostname="DESKTOP-5LP1CJ6" time="0.309">
+  <properties/>
+  <testcase name="theAdvancedPageExposesBiasSmallContactAndDecisionWindow" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.072"/>
+  <testcase name="theAdvancedRowOpensTheSubpage" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.038"/>
+  <testcase name="resettingTheProfileIsReported" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.045"/>
+  <testcase name="theExplanatoryCardsAreNotShownInProduction" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.034"/>
+  <testcase name="theDefaultPageShowsStatusRecalibrateAutoImproveAndSafetyMode" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.037"/>
+  <testcase name="toggleStateIsCommunicatedByTextAsWellAsColor" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.036"/>
+  <testcase name="aThresholdChangeIsReportedWithItsKey" classname="com.notes.school.ui.settings.SettingsScreenTest" time="0.046"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+]]></system-err>
+</testsuite>

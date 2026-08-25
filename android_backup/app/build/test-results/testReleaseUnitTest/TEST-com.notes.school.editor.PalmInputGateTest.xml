@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.editor.PalmInputGateTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:26:33" hostname="DESKTOP-5LP1CJ6" time="2.064">
+  <properties/>
+  <testcase name="anAmbiguousContactSchedulesADecisionUsingTheProfileWindow" classname="com.notes.school.editor.PalmInputGateTest" time="1.964"/>
+  <testcase name="runningTheScheduledDecisionResolvesTheProvisionalPointer" classname="com.notes.school.editor.PalmInputGateTest" time="0.022"/>
+  <testcase name="aPalmLikeContactIsRejectedAndProducesNoStroke" classname="com.notes.school.editor.PalmInputGateTest" time="0.015"/>
+  <testcase name="aStylusLikeContactIsAcceptedAndProducesAStroke" classname="com.notes.school.editor.PalmInputGateTest" time="0.014"/>
+  <testcase name="motionEventConversionCopiesEveryClassificationInput" classname="com.notes.school.editor.PalmInputGateTest" time="0.019"/>
+  <testcase name="statusReportsPalmRejectedWhenAContactIsDropped" classname="com.notes.school.editor.PalmInputGateTest" time="0.014"/>
+  <testcase name="statusReportsPenActiveWhileWritingAndIdleAfterLift" classname="com.notes.school.editor.PalmInputGateTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

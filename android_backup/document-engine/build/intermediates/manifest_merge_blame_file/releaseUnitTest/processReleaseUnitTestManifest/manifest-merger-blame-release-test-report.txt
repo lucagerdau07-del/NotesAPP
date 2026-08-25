@@ -1,0 +1,150 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.notes.school.document.test" >
+4
+5    <uses-sdk
+5-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:5:5-74
+6        android:minSdkVersion="26"
+6-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:5:15-41
+7        android:targetSdkVersion="26" />
+7-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:5:42-71
+8
+9    <instrumentation
+9-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:11:5-13:80
+10        android:name="android.test.InstrumentationTestRunner"
+10-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:11:22-75
+11        android:label="Tests for com.notes.school.document.test"
+11-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:13:22-78
+12        android:targetPackage="com.notes.school.document.test" />
+12-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:12:22-76
+13
+14    <uses-permission android:name="android.permission.REORDER_TASKS" />
+14-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:24:5-72
+14-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:24:22-69
+15
+16    <permission
+16-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+17        android:name="com.notes.school.document.test.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+17-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+18        android:protectionLevel="signature" />
+18-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+19
+20    <uses-permission android:name="com.notes.school.document.test.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+20-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+20-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+21
+22    <application
+22-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:7:5-9:19
+23        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+23-->[androidx.core:core:1.13.1] C:\Users\lucag\.gradle\caches\transforms-4\1a2dca0aa9b60a5e60579069797d2eba\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+24        android:debuggable="true" >
+24-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:7:18-43
+25        <uses-library android:name="android.test.runner" />
+25-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:8:9-60
+25-->C:\Antigravity\NotesAPP\android\document-engine\build\intermediates\tmp\manifest\test\release\tempFile1ProcessTestManifest6557703718310431314.xml:8:23-57
+26
+27        <activity
+27-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:27:9-34:20
+28            android:name="androidx.test.core.app.InstrumentationActivityInvoker$BootstrapActivity"
+28-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:28:13-99
+29            android:exported="true"
+29-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:29:13-36
+30            android:theme="@style/WhiteBackgroundTheme" >
+30-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:30:13-56
+31            <intent-filter android:priority="-100" >
+31-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+31-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+32                <category android:name="android.intent.category.LAUNCHER" />
+32-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+32-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+33            </intent-filter>
+34        </activity>
+35        <activity
+35-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:35:9-42:20
+36            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyActivity"
+36-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:36:13-95
+37            android:exported="true"
+37-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:37:13-36
+38            android:theme="@style/WhiteBackgroundTheme" >
+38-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:38:13-56
+39            <intent-filter android:priority="-100" >
+39-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+39-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+40                <category android:name="android.intent.category.LAUNCHER" />
+40-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+40-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+41            </intent-filter>
+42        </activity>
+43        <activity
+43-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:43:9-50:20
+44            android:name="androidx.test.core.app.InstrumentationActivityInvoker$EmptyFloatingActivity"
+44-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:44:13-103
+45            android:exported="true"
+45-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:45:13-36
+46            android:theme="@style/WhiteBackgroundDialogTheme" >
+46-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:46:13-62
+47            <intent-filter android:priority="-100" >
+47-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:13-33:29
+47-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:31:28-51
+48                <category android:name="android.intent.category.LAUNCHER" />
+48-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:17-77
+48-->[androidx.test:core:1.6.1] C:\Users\lucag\.gradle\caches\transforms-4\cea9c96e3ab9f47916ac547b0753fa40\transformed\core-1.6.1\AndroidManifest.xml:32:27-74
+49            </intent-filter>
+50        </activity>
+51
+52        <provider
+52-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:24:9-32:20
+53            android:name="androidx.startup.InitializationProvider"
+53-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:25:13-67
+54            android:authorities="com.notes.school.document.test.androidx-startup"
+54-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:26:13-68
+55            android:exported="false" >
+55-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:27:13-37
+56            <meta-data
+56-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:29:13-31:52
+57                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+57-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:30:17-85
+58                android:value="androidx.startup" />
+58-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:31:17-49
+59        </provider>
+60
+61        <receiver
+61-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:34:9-52:20
+62            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+62-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:35:13-76
+63            android:directBootAware="false"
+63-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:36:13-44
+64            android:enabled="true"
+64-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:37:13-35
+65            android:exported="true"
+65-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:38:13-36
+66            android:permission="android.permission.DUMP" >
+66-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:39:13-57
+67            <intent-filter>
+67-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:40:13-42:29
+68                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+68-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:41:17-91
+68-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:41:25-88
+69            </intent-filter>
+70            <intent-filter>
+70-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:43:13-45:29
+71                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+71-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:44:17-85
+71-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:44:25-82
+72            </intent-filter>
+73            <intent-filter>
+73-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:46:13-48:29
+74                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+74-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:47:17-88
+74-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:47:25-85
+75            </intent-filter>
+76            <intent-filter>
+76-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:49:13-51:29
+77                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+77-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:50:17-95
+77-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\lucag\.gradle\caches\transforms-4\d5f191ce43d47cc2b70e8e0c698ec258\transformed\profileinstaller-1.3.0\AndroidManifest.xml:50:25-92
+78            </intent-filter>
+79        </receiver>
+80    </application>
+81
+82</manifest>

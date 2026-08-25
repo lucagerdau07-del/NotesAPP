@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.document.ExportPlanTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:18" hostname="DESKTOP-5LP1CJ6" time="0.083">
+  <properties/>
+  <testcase name="aFailedExportLeavesAPreexistingTargetFileUntouched" classname="com.notes.school.document.ExportPlanTest" time="0.067"/>
+  <testcase name="aFailedAnnotationExportFallsBackToFlattening" classname="com.notes.school.document.ExportPlanTest" time="0.003"/>
+  <testcase name="theAnnotationPathIsUsedWhenItSucceeds" classname="com.notes.school.document.ExportPlanTest" time="0.003"/>
+  <testcase name="temporaryFilesAreCleanedUpAfterASuccessfulExport" classname="com.notes.school.document.ExportPlanTest" time="0.004"/>
+  <testcase name="bothPathsFailingReportsAFailureAndPublishesNothing" classname="com.notes.school.document.ExportPlanTest" time="0.002"/>
+  <testcase name="aThrowingPrimaryExporterAlsoTriggersTheFallback" classname="com.notes.school.document.ExportPlanTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

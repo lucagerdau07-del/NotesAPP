@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.document.PdfImporterTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-22T00:26:34" hostname="DESKTOP-5LP1CJ6" time="0.085">
+  <properties/>
+  <testcase name="eachImportGetsItsOwnPathSoDocumentsNeverShareASource" classname="com.notes.school.document.PdfImporterTest" time="0.033"/>
+  <testcase name="importCopiesTheSourceIntoAppPrivateStorageAndLeavesItUnmodified" classname="com.notes.school.document.PdfImporterTest" time="0.031"/>
+  <testcase name="deleteRemovesTheStoredCopy" classname="com.notes.school.document.PdfImporterTest" time="0.021"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

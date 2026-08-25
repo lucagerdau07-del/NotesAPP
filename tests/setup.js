@@ -176,3 +176,16 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+import '@testing-library/jest-dom';
+class IntersectionObserver {
+  constructor(callback) {
+    this.callback = callback;
+  }
+  observe(element) {
+    this.callback([ { isIntersecting: true, target: element } ]);
+  }
+  disconnect() {}
+  unobserve() {}
+}
+
+globalThis.IntersectionObserver = IntersectionObserver;

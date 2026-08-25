@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.document.PaperTemplateTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:21" hostname="DESKTOP-5LP1CJ6" time="3.071">
+  <properties/>
+  <testcase name="aZeroSizedPageIsHandledWithoutCrashing" classname="com.notes.school.document.PaperTemplateTest" time="2.875"/>
+  <testcase name="blankPaperIsUniformWhite" classname="com.notes.school.document.PaperTemplateTest" time="0.058"/>
+  <testcase name="linedPaperDrawsHorizontalRulesAndNothingElse" classname="com.notes.school.document.PaperTemplateTest" time="0.054"/>
+  <testcase name="thePageStaysWhiteEvenThoughTheAppIsDark" classname="com.notes.school.document.PaperTemplateTest" time="0.016"/>
+  <testcase name="gridPaperMarksBothRowsAndColumns" classname="com.notes.school.document.PaperTemplateTest" time="0.023"/>
+  <testcase name="pdfBackedPagesGetNoTemplateInkDrawnOverThem" classname="com.notes.school.document.PaperTemplateTest" time="0.045"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

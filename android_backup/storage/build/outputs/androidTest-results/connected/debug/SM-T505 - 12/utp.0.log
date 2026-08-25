@@ -1,0 +1,21 @@
+INFORMATION: Constructing runner from config.
+INFORMATION: Configuring Android Instrumentation driver: android_instrumentation_runtime {
+  instrumentation_info {
+    app_package: "com.notes.school.storage.test"
+    test_package: "com.notes.school.storage.test"
+    test_runner_class: "android.test.InstrumentationTestRunner"
+  }
+  instrumentation_args {
+    args_map {
+      key: "additionalTestOutputDir"
+      value: "/sdcard/Android/media/com.notes.school.storage.test/additional_test_output"
+    }
+  }
+}
+am_instrument_timeout: 31536000
+
+INFORMATION: No installables found in test fixture. Nothing to install.
+INFORMATION: Installing [C:\Antigravity\NotesAPP\android\storage\build\outputs\apk\androidTest\debug\storage-debug-androidTest.apk] on device R9WN915W5FJ.
+INFORMATION: Start logcat streaming.
+INFORMATION: Running Android Instrumentation driver.
+INFORMATION: Stop logcat streaming.

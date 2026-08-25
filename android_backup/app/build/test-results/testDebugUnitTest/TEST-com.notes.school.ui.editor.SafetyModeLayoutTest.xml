@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.ui.editor.SafetyModeLayoutTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:27" hostname="DESKTOP-5LP1CJ6" time="0.124">
+  <properties/>
+  <testcase name="bothTheDocumentAndTheWritingPadAreVisible" classname="com.notes.school.ui.editor.SafetyModeLayoutTest" time="0.048"/>
+  <testcase name="theFocusRectangleIsDrawnOnTheDocument" classname="com.notes.school.ui.editor.SafetyModeLayoutTest" time="0.036"/>
+  <testcase name="theWritingPadSitsOnTheRightSoTheHandStaysOffTheDocument" classname="com.notes.school.ui.editor.SafetyModeLayoutTest" time="0.039"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+]]></system-err>
+</testsuite>

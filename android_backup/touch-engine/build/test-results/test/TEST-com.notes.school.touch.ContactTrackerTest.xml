@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.touch.ContactTrackerTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:38" hostname="DESKTOP-5LP1CJ6" time="0.001">
+  <properties/>
+  <testcase name="arrivalIndexOrdersSimultaneousContacts" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="directionChangesCountZigZag" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="resetClearsEverything" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="pointerCountAtDownIsFrozenAtTouchDown" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="loneContactReportsNoNeighbour" classname="com.notes.school.touch.ContactTrackerTest" time="0.001"/>
+  <testcase name="nearestOtherContactIsReportedForSimultaneousPointers" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="sizeStatisticsFollowTheReportedContact" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="pathLengthAccumulatesWhileDisplacementStaysDirect" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="degenerateMinorAxisDoesNotProduceInfinity" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="penTraceHasHigherMeanSpeedThanRestingPalm" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="durationIsMeasuredFromTheFirstSample" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="liftReturnsFinalFeaturesAndForgetsThePointer" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <testcase name="axisRatioIsMajorOverMinor" classname="com.notes.school.touch.ContactTrackerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

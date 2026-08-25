@@ -14,8 +14,18 @@ export default function InkPageCanvas({
 
     const logicalWidth = page.width * zoom;
     const logicalHeight = page.height * zoom;
-    canvas.width = Math.round(logicalWidth * dpr);
-    canvas.height = Math.round(logicalHeight * dpr);
+    const MAX_PAGE_CANVAS_PIXELS = 16_000_000;
+    let backingWidth = Math.round(logicalWidth * dpr);
+    let backingHeight = Math.round(logicalHeight * dpr);
+    
+    if (backingWidth * backingHeight > MAX_PAGE_CANVAS_PIXELS) {
+      const scaleFactor = Math.sqrt(MAX_PAGE_CANVAS_PIXELS / (backingWidth * backingHeight));
+      backingWidth = Math.floor(backingWidth * scaleFactor);
+      backingHeight = Math.floor(backingHeight * scaleFactor);
+    }
+
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
     canvas.style.width = `${Math.round(logicalWidth)}px`;
     canvas.style.height = `${Math.round(logicalHeight)}px`;
 
@@ -27,7 +37,7 @@ export default function InkPageCanvas({
     if (pageStrokes.length === 0) return;
 
     ctx.save();
-    ctx.scale(zoom * dpr, zoom * dpr);
+    ctx.scale(backingWidth / page.width, backingHeight / page.height);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -37,8 +47,13 @@ export default function InkPageCanvas({
       ctx.strokeStyle = stroke.color || "#000000";
       ctx.lineWidth = stroke.width || 3;
       ctx.globalAlpha = stroke.opacity ?? 1;
-      if (stroke.tool === "highlighter") {
+      
+      if (stroke.tool === "pixel-eraser") {
+        ctx.globalCompositeOperation = "destination-out";
+      } else if (stroke.tool === "highlighter") {
         ctx.globalCompositeOperation = "multiply";
+      } else {
+        ctx.globalCompositeOperation = "source-over";
       }
 
       ctx.beginPath();

@@ -1,0 +1,12 @@
+com.notes.school.remote.test.remote-androidTest-0 C:\Antigravity\NotesAPP\android\remote\build\generated\res\resValues\androidTest\debug
+com.notes.school.remote.test.remote-mergeDebugAndroidTestResources-1 C:\Antigravity\NotesAPP\android\remote\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.notes.school.remote.test.remote-mergeDebugAndroidTestResources-2 C:\Antigravity\NotesAPP\android\remote\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.notes.school.remote.test.remote-debugAndroidTest-3 C:\Antigravity\NotesAPP\android\remote\build\intermediates\merged_res\debugAndroidTest\mergeDebugAndroidTestResources
+com.notes.school.remote.test.remote-debug-4 C:\Antigravity\NotesAPP\android\remote\build\intermediates\packaged_res\debug\packageDebugResources
+com.notes.school.remote.test.remote-debug-5 C:\Antigravity\NotesAPP\android\storage\build\intermediates\packaged_res\debug\packageDebugResources
+com.notes.school.remote.test.remote-sqlite-2.4.0-6 C:\Users\lucag\.gradle\caches\transforms-4\015fcb9fd03881a7782a5227bf0c8501\transformed\sqlite-2.4.0\res
+com.notes.school.remote.test.remote-sqlite-framework-2.4.0-7 C:\Users\lucag\.gradle\caches\transforms-4\1db3fcd5503e705e9e1425a3cab45367\transformed\sqlite-framework-2.4.0\res
+com.notes.school.remote.test.remote-annotation-experimental-1.1.0-rc01-8 C:\Users\lucag\.gradle\caches\transforms-4\2082e9f1a08194967daf0adb09df942c\transformed\annotation-experimental-1.1.0-rc01\res
+com.notes.school.remote.test.remote-room-ktx-2.6.1-9 C:\Users\lucag\.gradle\caches\transforms-4\693208afbb6d189609f76315adc2842c\transformed\room-ktx-2.6.1\res
+com.notes.school.remote.test.remote-core-runtime-2.2.0-10 C:\Users\lucag\.gradle\caches\transforms-4\a18348fc3a1f0ff10565a3d2726e425d\transformed\core-runtime-2.2.0\res
+com.notes.school.remote.test.remote-room-runtime-2.6.1-11 C:\Users\lucag\.gradle\caches\transforms-4\eb8b060b75b11acfd491450f4ee294bd\transformed\room-runtime-2.6.1\res

@@ -1,0 +1,62 @@
+INFORMATION: Constructing runner from config.
+INFORMATION: Configuring Android Instrumentation driver: android_instrumentation_runtime {
+  instrumentation_info {
+    app_package: "com.notes.school"
+    test_package: "com.notes.school.test"
+    test_runner_class: "androidx.test.runner.AndroidJUnitRunner"
+  }
+  instrumentation_args {
+    args_map {
+      key: "additionalTestOutputDir"
+      value: "/sdcard/Android/media/com.notes.school/additional_test_output"
+    }
+  }
+}
+am_instrument_timeout: 31536000
+
+INFORMATION: No installables found in test fixture. Nothing to install.
+INFORMATION: Installing [C:\Antigravity\NotesAPP\android\app\build\outputs\apk\debug\app-debug.apk] on device R9WN915W5FJ.
+INFORMATION: Installing [C:\Antigravity\NotesAPP\android\app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk] on device R9WN915W5FJ.
+INFORMATION: Start logcat streaming.
+INFORMATION: Running Android Instrumentation driver.
+INFORMATION: Stop logcat streaming.
+INFORMATION: Uninstalling com.notes.school for device R9WN915W5FJ.
+INFORMATION: Uninstalling com.notes.school.test for device R9WN915W5FJ.
+SCHWERWIEGEND: Execute com.notes.school.CrashRecoveryTest.flushedStrokesSurviveALossOfTheProcess: FAILED
+java.lang.AssertionError: java.lang.AssertionError: expected:<25> but was:<24>
+at org.junit.Assert.fail(Assert.java:89)
+at org.junit.Assert.failNotEquals(Assert.java:835)
+at org.junit.Assert.assertEquals(Assert.java:120)
+at org.junit.Assert.assertEquals(Assert.java:146)
+at com.notes.school.CrashRecoveryTest$flushedStrokesSurviveALossOfTheProcess$1.invokeSuspend(CrashRecoveryTest.kt:63)
+at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:277)
+at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+at com.notes.school.CrashRecoveryTest.flushedStrokesSurviveALossOfTheProcess(CrashRecoveryTest.kt:45)
+
+java.lang.AssertionError: expected:<25> but was:<24>
+at org.junit.Assert.fail(Assert.java:89)
+at org.junit.Assert.failNotEquals(Assert.java:835)
+at org.junit.Assert.assertEquals(Assert.java:120)
+at org.junit.Assert.assertEquals(Assert.java:146)
+at com.notes.school.CrashRecoveryTest$flushedStrokesSurviveALossOfTheProcess$1.invokeSuspend(CrashRecoveryTest.kt:63)
+at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:277)
+at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:95)
+at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:69)
+at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+at com.notes.school.CrashRecoveryTest.flushedStrokesSurviveALossOfTheProcess(CrashRecoveryTest.kt:45)
+INFORMATION: Execute com.notes.school.InkLatencyTest.theInputPathStaysInsideTheFrameBudgetAtP95: PASSED
+INFORMATION: Execute com.notes.school.InkLatencyTest.aLongStrokeDoesNotDegradeSampleHandlingOverTime: PASSED
+INFORMATION: Execute com.notes.school.PalmScenarioTest.aPalmArrivingAfterALockedPenIsRejectedAtLeast99PercentOfTheTime: PASSED
+INFORMATION: Execute com.notes.school.PalmScenarioTest.palmFirstAmbiguousResultsAreRecordedSeparatelyRatherThanAsserted: PASSED
+INFORMATION: Execute com.notes.school.PalmScenarioTest.slowDotsAreRecognizedAsPen: PASSED
+INFORMATION: Execute com.notes.school.PalmScenarioTest.fastPenStrokesRemainUnlocked: PASSED

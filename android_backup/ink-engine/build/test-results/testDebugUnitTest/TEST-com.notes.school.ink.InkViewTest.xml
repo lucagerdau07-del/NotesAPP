@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.ink.InkViewTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:18" hostname="DESKTOP-5LP1CJ6" time="4.866">
+  <properties/>
+  <testcase name="cancelDiscardsTheInProgressStroke" classname="com.notes.school.ink.InkViewTest" time="4.63"/>
+  <testcase name="eventsWithoutASceneAreIgnoredWithoutCrashing" classname="com.notes.school.ink.InkViewTest" time="0.025"/>
+  <testcase name="provisionalPointerIsBufferedAndOnlyCommittedOnPromotion" classname="com.notes.school.ink.InkViewTest" time="0.034"/>
+  <testcase name="pointTimestampsAreRelativeToTheStrokeStart" classname="com.notes.school.ink.InkViewTest" time="0.024"/>
+  <testcase name="undoAndRedoGoThroughTheScene" classname="com.notes.school.ink.InkViewTest" time="0.022"/>
+  <testcase name="strokeUsesTheCurrentToolSettings" classname="com.notes.school.ink.InkViewTest" time="0.025"/>
+  <testcase name="discardedProvisionalPointerLeavesNoTrace" classname="com.notes.school.ink.InkViewTest" time="0.031"/>
+  <testcase name="eraserToolDeactivatesStrokesInsteadOfAddingOne" classname="com.notes.school.ink.InkViewTest" time="0.028"/>
+  <testcase name="rejectedPointerNeverProducesAStroke" classname="com.notes.school.ink.InkViewTest" time="0.026"/>
+  <testcase name="aCompletedGestureBecomesExactlyOneStroke" classname="com.notes.school.ink.InkViewTest" time="0.021"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

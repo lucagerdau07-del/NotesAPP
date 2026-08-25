@@ -1,0 +1,2 @@
+08-22 18:23:36.988 28451 28730 I TestRunner: started: slowDotsAreRecognizedAsPen(com.notes.school.PalmScenarioTest)
+08-22 18:23:36.993 28451 28730 I TestRunner: finished: slowDotsAreRecognizedAsPen(com.notes.school.PalmScenarioTest)

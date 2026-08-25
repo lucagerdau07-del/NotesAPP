@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.notes.school.ui.editor.ToolRailTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:27:27" hostname="DESKTOP-5LP1CJ6" time="0.338">
+  <properties/>
+  <testcase name="theRailShowsExactlyTheSixSpecifiedControls" classname="com.notes.school.ui.editor.ToolRailTest" time="0.039"/>
+  <testcase name="theColorPopoverStaysClosedUntilTheActiveToolIsTappedAgain" classname="com.notes.school.ui.editor.ToolRailTest" time="0.05"/>
+  <testcase name="everyRailControlMeetsTheMinimumTouchTarget" classname="com.notes.school.ui.editor.ToolRailTest" time="0.038"/>
+  <testcase name="undoAndRedoReportTheirTaps" classname="com.notes.school.ui.editor.ToolRailTest" time="0.044"/>
+  <testcase name="thePopoverReportsAColorChoice" classname="com.notes.school.ui.editor.ToolRailTest" time="0.049"/>
+  <testcase name="tappingAToolSelectsIt" classname="com.notes.school.ui.editor.ToolRailTest" time="0.036"/>
+  <testcase name="thePopoverReportsAWidthChoice" classname="com.notes.school.ui.editor.ToolRailTest" time="0.049"/>
+  <testcase name="calibrationAndSafetyModeAreNotReachableFromTheEditorRail" classname="com.notes.school.ui.editor.ToolRailTest" time="0.032"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+Invalid ID 0x00000000.
+]]></system-err>
+</testsuite>
