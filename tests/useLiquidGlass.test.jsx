@@ -23,11 +23,21 @@ function Harness({ invalidateKey = 'all' }) {
 }
 
 describe('LiquidGlass control adapter', () => {
+  const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
+
   beforeEach(() => {
     init.mockReset()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: Promise.resolve() },
+    })
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts)
+    else delete document.fonts
+  })
 
   it('collects only direct marked controls', () => {
     const root = document.createElement('div')
@@ -67,8 +77,27 @@ describe('LiquidGlass control adapter', () => {
     const destroy = vi.fn()
     init.mockReturnValue(new Promise(resolve => { resolveInit = resolve }))
     const view = render(<Harness />)
+    await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
     view.unmount()
     await act(async () => resolveInit({ destroy, markChanged: vi.fn() }))
     expect(destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not initialize when unmounted while fonts are still loading', async () => {
+    let resolveFonts
+    const previousFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: new Promise(resolve => { resolveFonts = resolve }) },
+    })
+    try {
+      const view = render(<Harness />)
+      view.unmount()
+      await act(async () => resolveFonts())
+      expect(init).not.toHaveBeenCalled()
+    } finally {
+      if (previousFonts) Object.defineProperty(document, 'fonts', previousFonts)
+      else delete document.fonts
+    }
   })
 })
