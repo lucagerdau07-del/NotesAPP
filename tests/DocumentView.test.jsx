@@ -239,86 +239,45 @@ test('does not commit touch ink in stylus mode but commits page-local pen ink', 
   }));
 });
 
-test('pans the full document with one touch in stylus mode without creating ink', () => {
-  const controller = createControllerDouble({
-    document: {
-      version: 1,
-      documentId: 'note-1',
-      pages: [{ id: 'page-1' }, { id: 'page-2' }],
-      strokes: [],
-      updatedAt: 0,
-    },
-  });
-  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+test.each(['stylus', 'finger'])(
+  'does not pan the document surface with one touch in %s mode',
+  (inputMode) => {
+    render(<DocumentView
+      inkController={createControllerDouble({ inputMode })}
+      toolbarState={toolState()}
+    />);
+    const page = screen.getByTestId('document-page');
+    const scroller = page.parentElement;
+    scroller.scrollTop = 200;
+    scroller.scrollLeft = 40;
+    fireEvent.pointerDown(page, {
+      pointerId: 3, pointerType: 'touch', clientX: 200, clientY: 300,
+    });
+    fireEvent.pointerMove(page, {
+      pointerId: 3, pointerType: 'touch', clientX: 150, clientY: 240,
+    });
+    fireEvent.pointerUp(page, {
+      pointerId: 3, pointerType: 'touch', clientX: 150, clientY: 240,
+    });
+    expect(scroller.scrollTop).toBe(200);
+    expect(scroller.scrollLeft).toBe(40);
+  },
+);
+
+test('zooms and pans around the moving two-finger centroid', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
+  render(<DocumentView inkController={createControllerDouble()} toolbarState={toolState()} />);
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
-  mockRect(page, { left: 0, top: 0, width: 800, height: 2300 });
-  scroller.scrollTop = 200;
-  scroller.scrollLeft = 10;
-
-  fireEvent.pointerDown(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 80, clientY: 240,
-  });
-  fireEvent.pointerUp(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 80, clientY: 240,
-  });
-
-  expect(scroller.scrollTop).toBe(260);
-  expect(scroller.scrollLeft).toBe(30);
-  expect(controller.commitStroke).not.toHaveBeenCalled();
-});
-
-test.each([
-  { liftedPointerId: 3, survivorPointerId: 4, survivorX: 300 },
-  { liftedPointerId: 4, survivorPointerId: 3, survivorX: 100 },
-])('resumes pan without a jump after pinch when touch $liftedPointerId lifts', ({
-  liftedPointerId, survivorPointerId, survivorX,
-}) => {
-  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
-    callback();
-    return 1;
-  });
-  const controller = createControllerDouble();
-  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
-  const page = screen.getByTestId('document-page');
-  const scroller = page.parentElement;
-  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
-  scroller.scrollTop = 200;
-
-  fireEvent.pointerDown(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
-  });
-  fireEvent.pointerDown(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
-  });
-  expect(page.style.width).toBe('1600px');
-  const scrollAfterPinch = scroller.scrollTop;
-
-  fireEvent.pointerUp(page, {
-    pointerId: liftedPointerId,
-    pointerType: 'touch',
-    clientX: liftedPointerId === 3 ? 100 : 300,
-    clientY: 250,
-  });
-  expect(scroller.scrollTop).toBe(scrollAfterPinch);
-  fireEvent.pointerMove(page, {
-    pointerId: survivorPointerId,
-    pointerType: 'touch',
-    clientX: survivorX,
-    clientY: 230,
-  });
-
-  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
-  expect(controller.commitStroke).not.toHaveBeenCalled();
+  scroller.scrollLeft = 50;
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(page, { pointerId: 10, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(page, { pointerId: 11, pointerType: 'touch', clientX: 200, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
+  fireEvent.pointerMove(page, { pointerId: 11, pointerType: 'touch', clientX: 350, clientY: 150 });
+  expect(page).toHaveStyle({ width: '1600px' });
+  expect(scroller.scrollLeft).toBe(150);
+  expect(scroller.scrollTop).toBe(250);
 });
 
 test('keeps a pinch-resized focus rectangle inside its selected page', () => {
@@ -430,53 +389,29 @@ test('cancels focus drag resources on document replacement and unmount', () => {
   expect(setFocusBox).not.toHaveBeenCalled();
 });
 
-test('keeps a surviving finger in navigation after pinch until a fresh touch starts drawing', () => {
-  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
-    callback();
-    return 1;
-  });
+test('keeps the surviving finger inert until every touch is released', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
   const controller = createControllerDouble({ inputMode: 'finger' });
   render(<DocumentView inkController={controller} toolbarState={toolState()} />);
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
-  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
   scroller.scrollTop = 200;
-
-  fireEvent.pointerDown(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 250,
-  });
-  fireEvent.pointerDown(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 250,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
-  });
-  expect(page.style.width).toBe('1600px');
+  fireEvent.pointerDown(page, { pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 300 });
+  fireEvent.pointerDown(page, { pointerId: 4, pointerType: 'touch', clientX: 200, clientY: 300 });
+  fireEvent.pointerMove(page, { pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 300 });
+  fireEvent.pointerUp(page, { pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 300 });
   const scrollAfterPinch = scroller.scrollTop;
-
-  fireEvent.pointerUp(page, {
-    pointerId: 4, pointerType: 'touch', clientX: 300, clientY: 250,
-  });
-  fireEvent.pointerMove(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
-  });
-  fireEvent.pointerUp(page, {
-    pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230,
-  });
-
-  expect(scroller.scrollTop).toBe(scrollAfterPinch + 20);
+  fireEvent.pointerMove(page, { pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230 });
+  expect(scroller.scrollTop).toBe(scrollAfterPinch);
   expect(controller.commitStroke).not.toHaveBeenCalled();
-
+  fireEvent.pointerUp(page, { pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 230 });
   drawPointerStroke(page, {
     pointerId: 5,
     pointerType: 'touch',
     start: { x: 20, y: 20 },
     end: { x: 30, y: 30 },
   });
-  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
+  expect(controller.commitStroke).toHaveBeenCalledOnce();
 });
 
 test('toggles finger and stroke-eraser modes with accessible pressed state', () => {

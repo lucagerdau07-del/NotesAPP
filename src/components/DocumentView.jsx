@@ -740,7 +740,7 @@ export default function DocumentView({
 
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
-  const touchPanInitialData = useRef(null);
+
   const focusBoxRef = useRef(null);
   const focusDragRef = useRef(null);
   const pendingFocusBox = useRef(null);
@@ -759,71 +759,32 @@ export default function DocumentView({
 
   useEffect(() => () => cancelFocusBoxDrag(), [inkDocument.documentId]);
 
-  const handleGestureStart = (e) => {
-    if (e.pointerType !== "touch") return;
-    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (
-      activePointers.current.size === 1 &&
-      isFullMode &&
-      inkController?.inputMode !== "finger"
-    ) {
-      const scrollContainer = containerRef.current?.parentElement;
-      if (scrollContainer) {
-        touchPanInitialData.current = {
-          pointerId: e.pointerId,
-          x: e.clientX,
-          y: e.clientY,
-          scrollTop: scrollContainer.scrollTop,
-          scrollLeft: scrollContainer.scrollLeft,
-        };
-      }
-    }
-
-    if (activePointers.current.size === 2) {
-      touchPanInitialData.current = null;
-      const pointers = Array.from(activePointers.current.values());
-      const distance = Math.hypot(
-        pointers[0].x - pointers[1].x,
-        pointers[0].y - pointers[1].y,
-      );
-      const scrollContainer = containerRef.current?.parentElement;
-      if (!scrollContainer) return;
-
-      pinchInitialData.current = {
-        distance,
-        zoom: zoom,
-        focusBox: focusBoxState?.focusBox
-          ? { ...focusBoxState.focusBox }
-          : null,
-        centerX: (pointers[0].x + pointers[1].x) / 2,
-        centerY: (pointers[0].y + pointers[1].y) / 2,
-        scrollTop: scrollContainer.scrollTop,
-        scrollLeft: scrollContainer.scrollLeft,
-      };
-    }
+  const handleGestureStart = (event) => {
+    if (event.pointerType !== 'touch') return;
+    if (inkPointer.shouldBlockTouch(event.timeStamp, event.pointerId)) return;
+    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
+    activePointers.current.set(event.pointerId, {
+      x: event.clientX, y: event.clientY, startedOnPage,
+    });
+    if (activePointers.current.size !== 2) return;
+    const [first, second] = Array.from(activePointers.current.values());
+    pinchInitialData.current = {
+      distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
+      zoom,
+      centerX: (first.x + second.x) / 2,
+      centerY: (first.y + second.y) / 2,
+      scrollTop: scrollRef.current.scrollTop,
+      scrollLeft: scrollRef.current.scrollLeft,
+      focusBox: focusBoxState?.focusBox ? { ...focusBoxState.focusBox } : null,
+      ticking: false,
+    };
   };
 
   const handleGestureMove = (e) => {
     if (e.pointerType !== "touch") return;
     if (activePointers.current.has(e.pointerId)) {
-      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    }
-
-    if (
-      activePointers.current.size === 1 &&
-      touchPanInitialData.current?.pointerId === e.pointerId
-    ) {
-      const scrollContainer = containerRef.current?.parentElement;
-      if (scrollContainer) {
-        scrollContainer.scrollLeft =
-          touchPanInitialData.current.scrollLeft -
-          (e.clientX - touchPanInitialData.current.x);
-        scrollContainer.scrollTop =
-          touchPanInitialData.current.scrollTop -
-          (e.clientY - touchPanInitialData.current.y);
-      }
-      return;
+      const prev = activePointers.current.get(e.pointerId);
+      activePointers.current.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY });
     }
 
     if (activePointers.current.size === 2 && pinchInitialData.current) {
@@ -895,10 +856,8 @@ export default function DocumentView({
         const scrollContainer = containerRef.current?.parentElement;
         if (scrollContainer) {
           const zoomRatio = newZoom / startZoom;
-          const dx = currentCenterX - startX;
-          const dy = currentCenterY - startY;
-          scrollContainer.scrollLeft = startScrollLeft * zoomRatio - dx;
-          scrollContainer.scrollTop = startScrollTop * zoomRatio - dy;
+          scrollContainer.scrollLeft = (startScrollLeft + startX) * zoomRatio - currentCenterX;
+          scrollContainer.scrollTop = (startScrollTop + startY) * zoomRatio - currentCenterY;
         }
 
         if (pinchInitialData.current) {
@@ -977,30 +936,13 @@ export default function DocumentView({
     return () => scrollContainer.removeEventListener("wheel", handleWheel);
   }, [focusBoxState]);
 
-  const handleGestureEnd = (e) => {
-    if (e.pointerType !== "touch") return;
-    const wasMultiTouch = activePointers.current.size > 1;
-    activePointers.current.delete(e.pointerId);
-    if (touchPanInitialData.current?.pointerId === e.pointerId) {
-      touchPanInitialData.current = null;
-    }
+  const handleGestureEnd = (event) => {
+    if (event.pointerType !== 'touch') return;
+    activePointers.current.delete(event.pointerId);
     if (activePointers.current.size < 2) {
       pinchInitialData.current = null;
-      if (wasMultiTouch && activePointers.current.size === 1 && isFullMode) {
-        const [[pointerId, point]] = activePointers.current.entries();
-        const scrollContainer = containerRef.current?.parentElement;
-        if (scrollContainer) {
-          touchPanInitialData.current = {
-            pointerId,
-            x: point.x,
-            y: point.y,
-            scrollTop: scrollContainer.scrollTop,
-            scrollLeft: scrollContainer.scrollLeft,
-          };
-        }
-      }
       if (pendingFocusBox.current) {
-        focusBoxState.setFocusBox(pendingFocusBox.current);
+        focusBoxState?.setFocusBox?.(pendingFocusBox.current);
         pendingFocusBox.current = null;
       }
     }
@@ -1443,7 +1385,7 @@ export default function DocumentView({
           overflowX: isFullMode ? "hidden" : "auto",
           position: "relative",
           textAlign: isFullMode ? "left" : "center",
-          touchAction: "pan-x pan-y",
+          touchAction: "none",
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
           margin: isFullMode ? "78px 26px 0 104px" : "78px 12px 0 104px",
