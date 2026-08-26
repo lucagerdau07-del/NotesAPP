@@ -163,15 +163,17 @@ export default function useInkPointer(options) {
     return true;
   }, []);
 
-  const onPointerDown = useCallback((event) => {
+  const onPointerDown = useCallback((event, options = {}) => {
     const routed = route(event, 'down');
     if (routed.intent === 'cancel-draw') return discardDraft();
     if (routed.intent === 'replace-draw') {
       discardDraft();
-      if (!startDraft(event)) abortDraft(event);
+      if (!options.preventDraw && !startDraft(event)) abortDraft(event);
       return;
     }
-    if (routed.intent === 'start-draw' && !startDraft(event)) abortDraft(event);
+    if (routed.intent === 'start-draw' && !options.preventDraw && !startDraft(event)) {
+      abortDraft(event);
+    }
   }, [abortDraft, discardDraft, route, startDraft]);
 
   const onPointerMove = useCallback(
@@ -184,9 +186,10 @@ export default function useInkPointer(options) {
       if (routed.intent !== "continue-draw") return;
 
       const draft = draftRef.current;
+      if (!draft) return;
       const current = optionsRef.current;
       const point = mappedPoint(current.mapPoint?.(event));
-      if (!draft || !ownsLivePage(draftOwnerRef.current, current.document)) {
+      if (!ownsLivePage(draftOwnerRef.current, current.document)) {
         abortDraft(event);
         return;
       }

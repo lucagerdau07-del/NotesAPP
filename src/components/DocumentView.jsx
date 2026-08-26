@@ -666,17 +666,21 @@ export default function DocumentView({
     return () => ro.disconnect();
   }, [isFullMode]);
 
+  const clearAllGestures = () => {
+    activePointers.current.clear();
+    gutterPanData.current = null;
+    if (pinchInitialData.current) {
+      if (pendingFocusBox.current) {
+        focusBoxState?.setFocusBox?.(pendingFocusBox.current);
+        pendingFocusBox.current = null;
+      }
+      pinchInitialData.current = null;
+    }
+  };
+
   const handlePointerDown = (e) => {
     if (e.pointerType === "pen") {
-      activePointers.current.clear();
-      gutterPanData.current = null;
-      if (pinchInitialData.current) {
-        if (pendingFocusBox.current) {
-          focusBoxState?.setFocusBox?.(pendingFocusBox.current);
-          pendingFocusBox.current = null;
-        }
-        pinchInitialData.current = null;
-      }
+      clearAllGestures();
     }
     
     if (!isSelectMode) {
@@ -786,9 +790,15 @@ export default function DocumentView({
   }, [inkDocument.documentId]);
 
   const handleGestureStart = (event) => {
+    if (event.pointerType === "pen") {
+      clearAllGestures();
+    }
+    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
+    if (!startedOnPage) {
+      inkPointer.onPointerDown(event, { preventDraw: true });
+    }
     if (event.pointerType !== 'touch') return;
     if (inkPointer.shouldBlockTouch(event.timeStamp, event.pointerId)) return;
-    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
     activePointers.current.set(event.pointerId, {
       x: event.clientX, y: event.clientY, startedOnPage,
     });
@@ -828,6 +838,10 @@ export default function DocumentView({
   };
 
   const handleGestureMove = (e) => {
+    const startedOnPage = containerRef.current?.contains(e.target) ?? false;
+    if (!startedOnPage) {
+      inkPointer.onPointerMove(e);
+    }
     if (e.pointerType !== "touch") return;
 
     if (inkPointer.shouldBlockTouch(e.timeStamp, e.pointerId)) {
@@ -986,15 +1000,14 @@ export default function DocumentView({
                     focusBoxRef.current.style.height = `${viewportRect.height}px`;
                   }
                 }
-
-                clearTimeout(wheelTimeout.current);
-                wheelTimeout.current = setTimeout(() => {
-                  if (pendingFocusBox.current) {
-                    focusBoxState.setFocusBox(pendingFocusBox.current);
-                    pendingFocusBox.current = null;
-                  }
-                }, 150);
               }
+              clearTimeout(wheelTimeout.current);
+              wheelTimeout.current = setTimeout(() => {
+                if (pendingFocusBox.current) {
+                  focusBoxState.setFocusBox(pendingFocusBox.current);
+                  pendingFocusBox.current = null;
+                }
+              }, 150);
               return newZoom;
             });
             wheelTicking = false;
@@ -1007,6 +1020,14 @@ export default function DocumentView({
   }, [focusBoxState]);
 
   const handleGestureEnd = (event) => {
+    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
+    if (!startedOnPage) {
+      if (event.type === 'pointercancel') {
+        inkPointer.onPointerCancel(event);
+      } else {
+        inkPointer.onPointerUp(event);
+      }
+    }
     if (event.pointerType !== 'touch') return;
     activePointers.current.delete(event.pointerId);
     if (gutterPanData.current?.pointerId === event.pointerId) {
