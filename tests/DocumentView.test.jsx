@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { useState } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import DocumentView from '../src/components/DocumentView';
 
@@ -512,4 +512,61 @@ test('cycles paper style on click and triggers setPaperStyle', () => {
   expect(setPaperStyle).toHaveBeenCalledWith('grid');
   expect(screen.getByTestId('paper-toast')).toBeTruthy();
   expect(screen.getByText('Papierstil: Kariert')).toBeTruthy();
+});
+
+test('scrolls one gutter touch only after more than 15 vertical pixels', () => {
+  render(<DocumentView inkController={createControllerDouble()} toolbarState={toolState()} />);
+  const scroller = screen.getByTestId('document-page').parentElement;
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 900, clientY: 215 });
+  expect(scroller.scrollTop).toBe(100);
+  fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 900, clientY: 216 });
+  expect(scroller.scrollTop).toBe(84);
+  expect(scroller.scrollLeft).toBe(0);
+});
+
+test('blocks a gutter palm while a pen stroke is active', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 });
+  expect(scroller.scrollTop).toBe(100);
+  fireEvent.pointerMove(page, { pointerId: 1, pointerType: 'pen', clientX: 110, clientY: 110 });
+  fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'pen', clientX: 110, clientY: 110 });
+  expect(controller.commitStroke).toHaveBeenCalledOnce();
+});
+
+test('keeps a gutter touch begun during the post-pen guard inert until release', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  scroller.scrollTop = 100;
+  const dispatchAt = (target, type, init, timeStamp) => {
+    const event = createEvent[type](target, init);
+    Object.defineProperty(event, 'timeStamp', { value: timeStamp });
+    fireEvent(target, event);
+  };
+  dispatchAt(page, 'pointerDown', { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 }, 1_000);
+  dispatchAt(page, 'pointerUp', { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 }, 1_100);
+  dispatchAt(scroller, 'pointerDown', { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 }, 1_200);
+  dispatchAt(scroller, 'pointerMove', { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 100 }, 2_000);
+  expect(scroller.scrollTop).toBe(100);
+  dispatchAt(scroller, 'pointerUp', { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 100 }, 2_001);
+});
+
+test('drops stale gutter pointer state when the document changes', () => {
+  const first = createControllerDouble();
+  const view = render(<DocumentView inkController={first} toolbarState={toolState()} />);
+  const scroller = screen.getByTestId('document-page').parentElement;
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 200 });
+  view.rerender(<DocumentView inkController={createControllerDouble({ document: { ...first.document, documentId: 'note-2' } })} toolbarState={toolState()} />);
+  fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 100 });
+  expect(scroller.scrollTop).toBe(100);
 });

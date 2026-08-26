@@ -740,6 +740,7 @@ export default function DocumentView({
 
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
+  const gutterPanData = useRef(null);
 
   const focusBoxRef = useRef(null);
   const focusDragRef = useRef(null);
@@ -757,7 +758,12 @@ export default function DocumentView({
     document.removeEventListener("pointercancel", drag.onPointerUp);
   };
 
-  useEffect(() => () => cancelFocusBoxDrag(), [inkDocument.documentId]);
+  useEffect(() => {
+    return () => {
+      cancelFocusBoxDrag();
+      gutterPanData.current = null;
+    };
+  }, [inkDocument.documentId]);
 
   const handleGestureStart = (event) => {
     if (event.pointerType !== 'touch') return;
@@ -766,7 +772,19 @@ export default function DocumentView({
     activePointers.current.set(event.pointerId, {
       x: event.clientX, y: event.clientY, startedOnPage,
     });
+    
+    if (activePointers.current.size === 1 && inkController?.inputMode !== "finger" && !startedOnPage) {
+      gutterPanData.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startScrollTop: scrollRef.current?.scrollTop ?? 0,
+        active: false,
+      };
+    }
+    
     if (activePointers.current.size !== 2) return;
+    gutterPanData.current = null;
+    
     const [first, second] = Array.from(activePointers.current.values());
     pinchInitialData.current = {
       distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
@@ -785,6 +803,17 @@ export default function DocumentView({
     if (activePointers.current.has(e.pointerId)) {
       const prev = activePointers.current.get(e.pointerId);
       activePointers.current.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.current.size === 1 && gutterPanData.current?.pointerId === e.pointerId) {
+      const dy = gutterPanData.current.startY - e.clientY;
+      if (!gutterPanData.current.active && Math.abs(dy) > 15) {
+        gutterPanData.current.active = true;
+      }
+      if (gutterPanData.current.active && scrollRef.current) {
+        scrollRef.current.scrollTop = gutterPanData.current.startScrollTop + dy;
+      }
+      return;
     }
 
     if (activePointers.current.size === 2 && pinchInitialData.current) {
@@ -939,6 +968,9 @@ export default function DocumentView({
   const handleGestureEnd = (event) => {
     if (event.pointerType !== 'touch') return;
     activePointers.current.delete(event.pointerId);
+    if (gutterPanData.current?.pointerId === event.pointerId) {
+      gutterPanData.current = null;
+    }
     if (activePointers.current.size < 2) {
       pinchInitialData.current = null;
       if (pendingFocusBox.current) {
