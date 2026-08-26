@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
+import { createInputState, reducePointerInput, shouldBlockTouch as policyBlocksTouch } from "../ink/inputPolicy.js";
 import { findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
 
 let nextStrokeNumber = 0;
@@ -86,6 +86,7 @@ export default function useInkPointer(options) {
       {
         pointerId: event.pointerId,
         pointerType: event.pointerType,
+        timeStamp: event.timeStamp,
         phase,
       },
       inputMode,
@@ -132,54 +133,46 @@ export default function useInkPointer(options) {
     current.commitStroke?.(draft);
   }, [releaseCapture]);
 
-  const onPointerDown = useCallback(
-    (event) => {
-      const routed = route(event, "down");
-      if (routed.intent === "cancel-draw") {
-        discardDraft();
-        return;
-      }
-      if (routed.intent !== "start-draw") return;
+  const startDraft = useCallback((event) => {
+    const current = optionsRef.current;
+    const point = mappedPoint(current.mapPoint?.(event));
+    const owner = point ? draftOwner(current.document, point.pageId) : null;
+    if (!point || !owner) return false;
 
-      const current = optionsRef.current;
-      const point = mappedPoint(current.mapPoint?.(event));
-      const owner = point ? draftOwner(current.document, point.pageId) : null;
-      if (!point || !owner) {
-        abortDraft(event);
-        return;
-      }
+    const tool = selectedTool(current.tool);
+    const style = getToolStyle(tool, current.color, current.width);
+    const draft = {
+      id: createStrokeId(),
+      pageId: point.pageId,
+      tool: style.tool,
+      color: style.color,
+      width: style.width,
+      opacity: style.opacity,
+      points: [{ x: point.x, y: point.y }],
+    };
+    draftRef.current = draft;
+    draftOwnerRef.current = owner;
+    strokeEraserRef.current = current.tool === 'stroke-eraser'
+      || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
+    setDraftStroke({ ...draft, points: [...draft.points] });
 
-      const tool = selectedTool(current.tool);
-      const style = getToolStyle(tool, current.color, current.width);
-      const draft = {
-        id: createStrokeId(),
-        pageId: point.pageId,
-        tool: style.tool,
-        color: style.color,
-        width: style.width,
-        opacity: style.opacity,
-        points: [{ x: point.x, y: point.y }],
-      };
-      draftRef.current = draft;
-      draftOwnerRef.current = owner;
-      strokeEraserRef.current =
-        current.tool === "stroke-eraser" ||
-        (tool === "pixel-eraser" && current.eraserMode === "stroke");
-      setDraftStroke({ ...draft, points: [...draft.points] });
+    if (typeof event.currentTarget?.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      captureRef.current = { target: event.currentTarget, pointerId: event.pointerId };
+    }
+    return true;
+  }, []);
 
-      if (
-        event.currentTarget &&
-        typeof event.currentTarget.setPointerCapture === "function"
-      ) {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        captureRef.current = {
-          target: event.currentTarget,
-          pointerId: event.pointerId,
-        };
-      }
-    },
-    [abortDraft, discardDraft, route],
-  );
+  const onPointerDown = useCallback((event) => {
+    const routed = route(event, 'down');
+    if (routed.intent === 'cancel-draw') return discardDraft();
+    if (routed.intent === 'replace-draw') {
+      discardDraft();
+      if (!startDraft(event)) abortDraft(event);
+      return;
+    }
+    if (routed.intent === 'start-draw' && !startDraft(event)) abortDraft(event);
+  }, [abortDraft, discardDraft, route, startDraft]);
 
   const onPointerMove = useCallback(
     (event) => {
@@ -231,11 +224,16 @@ export default function useInkPointer(options) {
     [discardDraft, route],
   );
 
+  const shouldBlockTouch = useCallback((timeStamp, pointerId) => (
+    policyBlocksTouch(inputStateRef.current, timeStamp, pointerId)
+  ), []);
+
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     onPointerCancel,
+    shouldBlockTouch,
     draftStroke,
   };
 }

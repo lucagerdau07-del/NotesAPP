@@ -2,8 +2,8 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import useInkPointer from '../src/hooks/useInkPointer.js';
 
-function pointer(pointerId, pointerType, clientX, clientY, currentTarget = undefined) {
-  return { pointerId, pointerType, clientX, clientY, currentTarget };
+function pointer(pointerId, pointerType, clientX, clientY, currentTarget = undefined, timeStamp = 0) {
+  return { pointerId, pointerType, clientX, clientY, currentTarget, timeStamp };
 }
 
 function renderInkPointer(overrides = {}) {
@@ -44,6 +44,28 @@ function renderChangingInkPointer(initialProps = {}) {
 }
 
 describe('useInkPointer', () => {
+  it('discards finger ink and starts pen ink when the pen takes priority', () => {
+    const { result, commitStroke } = renderInkPointer({ inputMode: 'finger' });
+    act(() => result.current.onPointerDown(pointer(1, 'touch', 10, 10)));
+    act(() => result.current.onPointerMove(pointer(1, 'touch', 20, 20)));
+    act(() => result.current.onPointerDown(pointer(2, 'pen', 30, 30)));
+    act(() => result.current.onPointerMove(pointer(2, 'pen', 40, 40)));
+    act(() => result.current.onPointerUp(pointer(2, 'pen', 40, 40)));
+    expect(commitStroke).toHaveBeenCalledOnce();
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      points: [{ x: 30, y: 30 }, { x: 40, y: 40 }],
+    }));
+  });
+
+  it('exposes active and recent pen blocking without mutating policy state', () => {
+    const { result } = renderInkPointer();
+    act(() => result.current.onPointerDown({ ...pointer(7, 'pen', 1, 2), timeStamp: 1_000 }));
+    expect(result.current.shouldBlockTouch(1_010, 9)).toBe(true);
+    act(() => result.current.onPointerUp({ ...pointer(7, 'pen', 1, 2), timeStamp: 1_100 }));
+    expect(result.current.shouldBlockTouch(1_399, 9)).toBe(true);
+    expect(result.current.shouldBlockTouch(1_400, 9)).toBe(false);
+  });
+
   it('commits one pen stroke and ignores palm move and up events', () => {
     const { result, commitStroke } = renderInkPointer();
 
