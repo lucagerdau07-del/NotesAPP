@@ -228,12 +228,18 @@ export default function useInkPointer(options) {
     policyBlocksTouch(inputStateRef.current, timeStamp, pointerId)
   ), []);
 
+  const abortActiveStroke = useCallback((pointerId, timeStamp) => {
+    route({ pointerId, pointerType: 'touch', timeStamp }, "abort");
+    discardDraft();
+  }, [discardDraft, route]);
+
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     onPointerCancel,
     shouldBlockTouch,
+    abortActiveStroke,
     draftStroke,
   };
 }

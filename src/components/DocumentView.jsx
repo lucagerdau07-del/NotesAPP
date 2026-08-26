@@ -555,10 +555,6 @@ export default function DocumentView({
     zoom,
     showPageBreaks: Boolean(showPageBreaks),
   };
-  const focusBoxViewport = focusRectToViewport(
-    pageLayout,
-    focusBoxState?.focusBox,
-  );
   const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
   const inkTool = isEraser
     ? inkController?.eraserMode === "stroke"
@@ -747,6 +743,15 @@ export default function DocumentView({
   const pendingFocusBox = useRef(null);
   const wheelTimeout = useRef(null);
 
+  const activeFocusBox = pinchInitialData.current && pendingFocusBox.current
+    ? pendingFocusBox.current
+    : focusBoxState?.focusBox;
+
+  const focusBoxViewport = focusRectToViewport(
+    pageLayout,
+    activeFocusBox,
+  );
+
   const cancelFocusBoxDrag = () => {
     const drag = focusDragRef.current;
     if (!drag) return;
@@ -775,7 +780,7 @@ export default function DocumentView({
     activePointers.current.set(event.pointerId, {
       x: event.clientX, y: event.clientY, startedOnPage,
     });
-    
+
     if (activePointers.current.size === 1 && !startedOnPage) {
       gutterPanData.current = {
         pointerId: event.pointerId,
@@ -784,20 +789,21 @@ export default function DocumentView({
         active: false,
       };
     }
-    
+
     if (activePointers.current.size !== 2) return;
     gutterPanData.current = null;
-    
+
     for (const pointerId of activePointers.current.keys()) {
-      inkPointer.onPointerCancel({ pointerId, pointerType: 'touch', timeStamp: event.timeStamp });
+      inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
     }
-    
+
+    const rect = scrollRef.current.getBoundingClientRect();
     const [first, second] = Array.from(activePointers.current.values());
     pinchInitialData.current = {
       distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
       zoom,
-      centerX: (first.x + second.x) / 2,
-      centerY: (first.y + second.y) / 2,
+      centerX: (first.x + second.x) / 2 - rect.left,
+      centerY: (first.y + second.y) / 2 - rect.top,
       scrollTop: scrollRef.current.scrollTop,
       scrollLeft: scrollRef.current.scrollLeft,
       focusBox: focusBoxState?.focusBox ? { ...focusBoxState.focusBox } : null,
@@ -843,12 +849,13 @@ export default function DocumentView({
           return;
         }
 
+        const rect = scrollRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
         const currentDistance = Math.hypot(
           pointers[0].x - pointers[1].x,
           pointers[0].y - pointers[1].y,
         );
-        const currentCenterX = (pointers[0].x + pointers[1].x) / 2;
-        const currentCenterY = (pointers[0].y + pointers[1].y) / 2;
+        const currentCenterX = (pointers[0].x + pointers[1].x) / 2 - rect.left;
+        const currentCenterY = (pointers[0].y + pointers[1].y) / 2 - rect.top;
 
         const {
           distance: startDist,
@@ -1516,7 +1523,7 @@ export default function DocumentView({
               data-testid="source-error"
             >
               <span style={{ marginBottom: 12 }}>Fehler beim Laden des Dokuments</span>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); retrySource?.(); }}
                 style={{
                   padding: '8px 16px',

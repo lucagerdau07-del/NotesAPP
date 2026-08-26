@@ -187,11 +187,11 @@ test('select mode draws draft focus box and updates focus box state', () => {
   render(<DocumentView focusBoxState={focusBoxState} toolbarState={toolbarState} />);
 
   const container = screen.getByTestId('document-page');
-  
+
   container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
 
   fireEvent.pointerDown(container, { clientX: 100, clientY: 100 });
-  
+
   let draftBox = screen.queryByTestId('draft-focus-box');
   expect(draftBox).toBeTruthy();
 
@@ -600,11 +600,58 @@ test('aborts an active gutter touch if a pen touches down', () => {
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
   scroller.scrollTop = 100;
-  
+
   fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
-  
+
   fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
-  
+
   fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 });
   expect(scroller.scrollTop).toBe(100);
+});
+
+test('cancels gutter touch if a third finger is added during pinch', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 100 });
+
+  fireEvent.pointerDown(scroller, { pointerId: 3, pointerType: 'touch', clientX: 950, clientY: 300 });
+
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test('aborts an active gutter pan if a pen touches down', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  scroller.scrollTop = 100;
+
+  // start gutter touch and scroll it
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 }); // 50px diff
+  expect(scroller.scrollTop).toBe(150);
+
+  // pen touches down!
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+
+  // finger moves again, should NOT scroll further
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 100 });
+  expect(scroller.scrollTop).toBe(150);
+});
+
+test('gutter touch followed by document touch correctly starts pinch and aborts nothing if no drawing', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+
+  fireEvent.pointerDown(scroller, { pointerId: 1, pointerType: 'touch', clientX: 950, clientY: 100 });
+  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 100 });
+
+  // It shouldn't crash
+  expect(controller.commitStroke).not.toHaveBeenCalled();
 });
