@@ -683,8 +683,10 @@ export default function DocumentView({
       clearAllGestures();
     }
     
-    if (!isSelectMode) {
-      inkPointer.onPointerDown(e);
+    const isBlockedTouch = e.pointerType === "touch" && inkPointer.shouldBlockTouch(e.timeStamp, e.pointerId);
+
+    if (!isSelectMode || isBlockedTouch) {
+      inkPointer.onPointerDown(e, { preventDraw: isBlockedTouch });
       return;
     }
     
@@ -697,6 +699,7 @@ export default function DocumentView({
     if (!point) return;
     setDraftFocusBox({
       pageId: point.pageId,
+      pointerId: e.pointerId,
       x: point.x,
       y: point.y,
       width: 0,
@@ -714,7 +717,7 @@ export default function DocumentView({
     
     inkPointer.onPointerMove(e);
     
-    if (!draftFocusBox) return;
+    if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
     const point = mapViewportPoint(
       pageLayout,
       relativePoint(containerRef.current, e),
@@ -740,7 +743,7 @@ export default function DocumentView({
     
     inkPointer.onPointerUp(e);
     
-    if (!draftFocusBox) return;
+    if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
         pageId: draftFocusBox.pageId,

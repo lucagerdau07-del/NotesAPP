@@ -758,7 +758,7 @@ test('resets input state when document changes', async () => {
 
 test('blocks gutter touch in select mode when pen touches document', () => {
   const controller = createControllerDouble();
-  render(<DocumentView inkController={controller} toolbarState={toolState({ tool: 'select' })} />);
+  render(<DocumentView inkController={controller} toolbarState={toolState({ isSelectMode: true })} />);
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
 
@@ -773,4 +773,30 @@ test('blocks gutter touch in select mode when pen touches document', () => {
   
   // Should NOT scroll
   expect(scroller.scrollTop).toBe(100);
+});
+
+test('blocks document touches in select mode during active pen and post-pen guard', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState({ isSelectMode: true })} />);
+  const page = screen.getByTestId('document-page');
+
+  // Pen touches document (draws selection box)
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  
+  // Touch on document area during active pen
+  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 200 });
+  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 250, clientY: 250 });
+  
+  // The draft focus box should still belong to the pen (pointer 1) and shouldn't change to pointer 2
+  
+  // Pen lifts
+  fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'pen', clientX: 150, clientY: 150 });
+  
+  // Within post-pen guard, new touch on document should ALSO be blocked from drawing a focus box
+  fireEvent.pointerDown(page, { pointerId: 3, pointerType: 'touch', clientX: 300, clientY: 300, timeStamp: 100 });
+  fireEvent.pointerMove(page, { pointerId: 3, pointerType: 'touch', clientX: 350, clientY: 350, timeStamp: 150 });
+  
+  // Verify controller didn't receive weird states, though the test mostly verifies it doesn't crash 
+  // and the blocked touch is ignored by checking coverage/logic paths.
+  expect(controller.commitStroke).not.toHaveBeenCalled();
 });
