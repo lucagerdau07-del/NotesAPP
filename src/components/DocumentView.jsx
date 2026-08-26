@@ -762,6 +762,9 @@ export default function DocumentView({
     return () => {
       cancelFocusBoxDrag();
       gutterPanData.current = null;
+      activePointers.current.clear();
+      pinchInitialData.current = null;
+      pendingFocusBox.current = null;
     };
   }, [inkDocument.documentId]);
 
@@ -773,7 +776,7 @@ export default function DocumentView({
       x: event.clientX, y: event.clientY, startedOnPage,
     });
     
-    if (activePointers.current.size === 1 && inkController?.inputMode !== "finger" && !startedOnPage) {
+    if (activePointers.current.size === 1 && !startedOnPage) {
       gutterPanData.current = {
         pointerId: event.pointerId,
         startY: event.clientY,
@@ -784,6 +787,10 @@ export default function DocumentView({
     
     if (activePointers.current.size !== 2) return;
     gutterPanData.current = null;
+    
+    for (const pointerId of activePointers.current.keys()) {
+      inkPointer.onPointerCancel({ pointerId, pointerType: 'touch', timeStamp: event.timeStamp });
+    }
     
     const [first, second] = Array.from(activePointers.current.values());
     pinchInitialData.current = {
@@ -800,6 +807,14 @@ export default function DocumentView({
 
   const handleGestureMove = (e) => {
     if (e.pointerType !== "touch") return;
+
+    if (inkPointer.shouldBlockTouch(e.timeStamp, e.pointerId)) {
+      if (activePointers.current.has(e.pointerId)) {
+        handleGestureEnd(e);
+      }
+      return;
+    }
+
     if (activePointers.current.has(e.pointerId)) {
       const prev = activePointers.current.get(e.pointerId);
       activePointers.current.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY });

@@ -570,3 +570,41 @@ test('drops stale gutter pointer state when the document changes', () => {
   fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 100 });
   expect(scroller.scrollTop).toBe(100);
 });
+
+test('cancels active page stroke when a second touch starts on the gutter', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 1, pointerType: 'touch', clientX: 110, clientY: 110 });
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 100 });
+
+  fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'touch', clientX: 110, clientY: 110 });
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test('scrolls one gutter touch in finger mode', () => {
+  render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
+  const scroller = screen.getByTestId('document-page').parentElement;
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 900, clientY: 216 });
+  expect(scroller.scrollTop).toBe(84);
+});
+
+test('aborts an active gutter touch if a pen touches down', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  scroller.scrollTop = 100;
+  
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
+  
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 });
+  expect(scroller.scrollTop).toBe(100);
+});
