@@ -730,3 +730,47 @@ test('adding third finger and removing original finger cancels pinch without jum
   // If we didn't crash and commitStroke isn't called, it's successful.
   // We cannot easily test setZoom natively here as it's mocked or state-bound without spy.
 });
+
+test('resets input state when document changes', async () => {
+  const controller = createControllerDouble();
+  let currentDoc = { documentId: 'doc-1', pages: [{ id: 'page-1' }], strokes: [] };
+  controller.document = currentDoc;
+  const { rerender } = render(<DocumentView inkDocument={currentDoc} inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+
+  // Start pen stroke
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  
+  // Switch document
+  currentDoc = { documentId: 'doc-2', pages: [{ id: 'page-2' }], strokes: [] };
+  controller.document = currentDoc;
+  rerender(<DocumentView inkDocument={currentDoc} inkController={controller} toolbarState={toolState()} />);
+  await require('@testing-library/react').act(async () => { await new Promise(r => setTimeout(r, 0)); });
+
+  const scroller = screen.getByTestId('document-page').parentElement;
+  
+  // Touch gutter in new doc, should NOT be blocked by the old pen stroke
+  scroller.scrollTop = 100;
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 });
+  expect(scroller.scrollTop).toBe(150);
+});
+
+test('blocks gutter touch in select mode when pen touches document', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState({ tool: 'select' })} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+
+  scroller.scrollTop = 100;
+  
+  // Pen touches document (draws selection box, but should still block touch)
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  
+  // Touch gutter in select mode
+  fireEvent.pointerDown(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 200 });
+  fireEvent.pointerMove(scroller, { pointerId: 2, pointerType: 'touch', clientX: 950, clientY: 150 });
+  
+  // Should NOT scroll
+  expect(scroller.scrollTop).toBe(100);
+});

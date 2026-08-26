@@ -58,6 +58,19 @@ export default function useInkPointer(options) {
   const strokeEraserRef = useRef(false);
   const captureRef = useRef(null);
   const [draftStroke, setDraftStroke] = useState(null);
+  const previousDocumentIdRef = useRef(options.document?.documentId);
+  if (previousDocumentIdRef.current !== options.document?.documentId) {
+    inputStateRef.current = createInputState();
+    previousDocumentIdRef.current = options.document?.documentId;
+    draftRef.current = null;
+    draftOwnerRef.current = null;
+    strokeEraserRef.current = false;
+    setDraftStroke(null);
+    if (captureRef.current?.target?.releasePointerCapture) {
+      captureRef.current.target.releasePointerCapture(captureRef.current.pointerId);
+    }
+    captureRef.current = null;
+  }
   optionsRef.current = options;
 
   const releaseCapture = useCallback(() => {
@@ -227,22 +240,26 @@ export default function useInkPointer(options) {
     [discardDraft, route],
   );
 
-  const shouldBlockTouch = useCallback((timeStamp, pointerId) => (
-    policyBlocksTouch(inputStateRef.current, timeStamp, pointerId)
-  ), []);
-
-  const abortActiveStroke = useCallback((pointerId, timeStamp) => {
-    route({ pointerId, pointerType: 'touch', timeStamp }, "abort");
-    discardDraft();
-  }, [discardDraft, route]);
-
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     onPointerCancel,
-    shouldBlockTouch,
-    abortActiveStroke,
+    shouldBlockTouch: (timeStamp, pointerId) =>
+      policyBlocksTouch(inputStateRef.current, timeStamp, pointerId),
+    abortActiveStroke: (pointerId, timeStamp) => {
+      const routed = reducePointerInput(
+        inputStateRef.current,
+        { pointerId, pointerType: 'touch', timeStamp, phase: 'abort' },
+        optionsRef.current.inputMode || 'stylus'
+      );
+      inputStateRef.current = routed.state;
+      if (routed.intent === 'cancel-draw') discardDraft();
+    },
+    reset: () => {
+      inputStateRef.current = createInputState();
+      discardDraft();
+    },
     draftStroke,
   };
 }

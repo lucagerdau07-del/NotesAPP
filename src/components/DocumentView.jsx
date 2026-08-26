@@ -687,6 +687,9 @@ export default function DocumentView({
       inkPointer.onPointerDown(e);
       return;
     }
+    
+    inkPointer.onPointerDown(e, { preventDraw: true });
+
     const point = mapViewportPoint(
       pageLayout,
       relativePoint(containerRef.current, e),
@@ -708,6 +711,9 @@ export default function DocumentView({
       inkPointer.onPointerMove(e);
       return;
     }
+    
+    inkPointer.onPointerMove(e);
+    
     if (!draftFocusBox) return;
     const point = mapViewportPoint(
       pageLayout,
@@ -731,6 +737,9 @@ export default function DocumentView({
       inkPointer.onPointerUp(e);
       return;
     }
+    
+    inkPointer.onPointerUp(e);
+    
     if (!draftFocusBox) return;
     if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
       focusBoxState.setFocusBox({
@@ -746,8 +755,12 @@ export default function DocumentView({
   };
 
   const handlePointerCancel = (e) => {
-    if (!isSelectMode) inkPointer.onPointerCancel(e);
-    else setDraftFocusBox(null);
+    if (!isSelectMode) {
+      inkPointer.onPointerCancel(e);
+      return;
+    }
+    inkPointer.onPointerCancel(e);
+    setDraftFocusBox(null);
   };
 
   const activePointers = useRef(new Map());
@@ -781,6 +794,7 @@ export default function DocumentView({
 
   useEffect(() => {
     return () => {
+      inkPointer.reset?.();
       cancelFocusBoxDrag();
       gutterPanData.current = null;
       activePointers.current.clear();
