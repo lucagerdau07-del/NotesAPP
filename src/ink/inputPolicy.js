@@ -1,119 +1,128 @@
+export const POST_PEN_TOUCH_GUARD_MS = 300;
+
 export function createInputState() {
   return {
     drawingPointerId: null,
     drawingPointerType: null,
     touchPointerIds: [],
+    blockedTouchPointerIds: [],
+    gestureLocked: false,
+    lastPenUpAt: Number.NEGATIVE_INFINITY,
   };
 }
 
-function updateTouches(pointerIds, event) {
-  if (event.pointerType !== "touch") return [...pointerIds];
+const addUnique = (ids, id) => ids.includes(id) ? ids : [...ids, id];
+const remove = (ids, id) => ids.filter((candidate) => candidate !== id);
+const eventTime = (event) => Number.isFinite(event.timeStamp) ? event.timeStamp : 0;
 
-  if (event.phase === "down") {
-    return pointerIds.includes(event.pointerId)
-      ? [...pointerIds]
-      : [...pointerIds, event.pointerId];
-  }
-
-  if (event.phase === "up" || event.phase === "cancel") {
-    return pointerIds.filter((pointerId) => pointerId !== event.pointerId);
-  }
-
-  return [...pointerIds];
+export function shouldBlockTouch(state, timeStamp, pointerId) {
+  if (state.drawingPointerType === 'pen' && state.drawingPointerId !== null) return true;
+  if (state.blockedTouchPointerIds.includes(pointerId)) return true;
+  return timeStamp - state.lastPenUpAt < POST_PEN_TOUCH_GUARD_MS;
 }
 
-export function reducePointerInput(state, event, inputMode = "stylus") {
+export function reducePointerInput(state, event, inputMode = 'stylus') {
+  const isTouch = event.pointerType === 'touch';
+  const isRelease = event.phase === 'up' || event.phase === 'cancel';
+  const touchPointerIds = !isTouch
+    ? state.touchPointerIds
+    : event.phase === 'down'
+      ? addUnique(state.touchPointerIds, event.pointerId)
+      : isRelease
+        ? remove(state.touchPointerIds, event.pointerId)
+        : state.touchPointerIds;
+  const blockedByPalmGuard = isTouch && shouldBlockTouch(
+    state,
+    eventTime(event),
+    event.pointerId,
+  );
+  const blockedTouchPointerIds = !isTouch
+    ? state.blockedTouchPointerIds
+    : blockedByPalmGuard && event.phase === 'down'
+      ? addUnique(state.blockedTouchPointerIds, event.pointerId)
+      : isRelease
+        ? remove(state.blockedTouchPointerIds, event.pointerId)
+        : state.blockedTouchPointerIds;
+  const gestureLocked = state.gestureLocked
+    ? touchPointerIds.length > 0
+    : touchPointerIds.length >= 2;
   const nextState = {
     ...state,
-    touchPointerIds: updateTouches(state.touchPointerIds, event),
+    touchPointerIds,
+    blockedTouchPointerIds,
+    gestureLocked,
   };
-  const ownerId = state.drawingPointerId;
-  const isOwner = ownerId !== null && event.pointerId === ownerId;
-  const canStart =
-    event.pointerType === "pen" ||
-    event.pointerType === "mouse" ||
-    (inputMode === "finger" && event.pointerType === "touch");
 
-  if (event.phase === "down") {
-    if (ownerId !== null) {
-      if (
-        state.drawingPointerType === "touch" &&
-        event.pointerType === "touch"
-      ) {
-        return {
-          state: {
-            ...nextState,
-            drawingPointerId: null,
-            drawingPointerType: null,
-          },
-          intent: "cancel-draw",
-        };
-      }
-      if (event.pointerType === "touch")
-        return { state: nextState, intent: "navigate" };
-      return { state: nextState, intent: "ignore" };
-    }
+  if (blockedByPalmGuard) return { state: nextState, intent: 'ignore' };
 
-    if (canStart) {
-      if (
-        event.pointerType === "touch" &&
-        state.touchPointerIds.some((pointerId) => pointerId !== event.pointerId)
-      ) {
-        return { state: nextState, intent: "navigate" };
-      }
+  const ownsEvent = state.drawingPointerId === event.pointerId;
+  if (event.phase === 'down' && event.pointerType === 'pen') {
+    return {
+      state: {
+        ...nextState,
+        drawingPointerId: event.pointerId,
+        drawingPointerType: 'pen',
+        blockedTouchPointerIds: [
+          ...new Set([...blockedTouchPointerIds, ...state.touchPointerIds]),
+        ],
+      },
+      intent: state.drawingPointerId === null ? 'start-draw' : 'replace-draw',
+    };
+  }
+
+  if (
+    event.phase === 'down'
+    && isTouch
+    && state.drawingPointerType === 'touch'
+  ) {
+    return {
+      state: {
+        ...nextState,
+        drawingPointerId: null,
+        drawingPointerType: null,
+        gestureLocked: true,
+      },
+      intent: 'cancel-draw',
+    };
+  }
+
+  if (event.phase === 'down' && state.drawingPointerId === null) {
+    const canDraw = event.pointerType === 'mouse'
+      || (isTouch && inputMode === 'finger' && !gestureLocked);
+    if (canDraw) {
       return {
         state: {
           ...nextState,
           drawingPointerId: event.pointerId,
           drawingPointerType: event.pointerType,
         },
-        intent: "start-draw",
+        intent: 'start-draw',
       };
     }
+    return { state: nextState, intent: isTouch ? 'navigate' : 'ignore' };
+  }
 
+  if (ownsEvent && event.phase === 'move') {
+    return { state: nextState, intent: 'continue-draw' };
+  }
+  if (ownsEvent && (event.phase === 'abort' || event.phase === 'cancel')) {
     return {
-      state: nextState,
-      intent: event.pointerType === "touch" ? "navigate" : "ignore",
+      state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
+      intent: 'cancel-draw',
     };
   }
-
-  if (isOwner) {
-    if (event.phase === "move")
-      return { state: nextState, intent: "continue-draw" };
-    if (event.phase === "abort") {
-      return {
-        state: {
-          ...nextState,
-          drawingPointerId: null,
-          drawingPointerType: null,
-        },
-        intent: "cancel-draw",
-      };
-    }
-    if (event.phase === "up") {
-      return {
-        state: {
-          ...nextState,
-          drawingPointerId: null,
-          drawingPointerType: null,
-        },
-        intent: "finish-draw",
-      };
-    }
-    if (event.phase === "cancel") {
-      return {
-        state: {
-          ...nextState,
-          drawingPointerId: null,
-          drawingPointerType: null,
-        },
-        intent: "cancel-draw",
-      };
-    }
+  if (ownsEvent && event.phase === 'up') {
+    return {
+      state: {
+        ...nextState,
+        drawingPointerId: null,
+        drawingPointerType: null,
+        lastPenUpAt: state.drawingPointerType === 'pen'
+          ? eventTime(event)
+          : state.lastPenUpAt,
+      },
+      intent: 'finish-draw',
+    };
   }
-
-  return {
-    state: nextState,
-    intent: event.pointerType === "touch" ? "navigate" : "ignore",
-  };
+  return { state: nextState, intent: isTouch ? 'navigate' : 'ignore' };
 }
