@@ -667,6 +667,18 @@ export default function DocumentView({
   }, [isFullMode]);
 
   const handlePointerDown = (e) => {
+    if (e.pointerType === "pen") {
+      activePointers.current.clear();
+      gutterPanData.current = null;
+      if (pinchInitialData.current) {
+        if (pendingFocusBox.current) {
+          focusBoxState?.setFocusBox?.(pendingFocusBox.current);
+          pendingFocusBox.current = null;
+        }
+        pinchInitialData.current = null;
+      }
+    }
+    
     if (!isSelectMode) {
       inkPointer.onPointerDown(e);
       return;
@@ -798,8 +810,12 @@ export default function DocumentView({
     }
 
     const rect = scrollRef.current.getBoundingClientRect();
-    const [first, second] = Array.from(activePointers.current.values());
+    const entries = Array.from(activePointers.current.entries());
+    const [id1, first] = entries[0];
+    const [id2, second] = entries[1];
+    
     pinchInitialData.current = {
+      pointerIds: [id1, id2],
       distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
       zoom,
       centerX: (first.x + second.x) / 2 - rect.left,
@@ -837,25 +853,28 @@ export default function DocumentView({
       return;
     }
 
-    if (activePointers.current.size === 2 && pinchInitialData.current) {
+    if (pinchInitialData.current) {
       if (pinchInitialData.current.ticking) return;
       pinchInitialData.current.ticking = true;
 
       requestAnimationFrame(() => {
         if (!pinchInitialData.current) return;
-        const pointers = Array.from(activePointers.current.values());
-        if (pointers.length < 2) {
+        const [id1, id2] = pinchInitialData.current.pointerIds;
+        const p1 = activePointers.current.get(id1);
+        const p2 = activePointers.current.get(id2);
+        
+        if (!p1 || !p2) {
           pinchInitialData.current.ticking = false;
           return;
         }
 
         const rect = scrollRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
         const currentDistance = Math.hypot(
-          pointers[0].x - pointers[1].x,
-          pointers[0].y - pointers[1].y,
+          p1.x - p2.x,
+          p1.y - p2.y,
         );
-        const currentCenterX = (pointers[0].x + pointers[1].x) / 2 - rect.left;
-        const currentCenterY = (pointers[0].y + pointers[1].y) / 2 - rect.top;
+        const currentCenterX = (p1.x + p2.x) / 2 - rect.left;
+        const currentCenterY = (p1.y + p2.y) / 2 - rect.top;
 
         const {
           distance: startDist,
@@ -993,11 +1012,15 @@ export default function DocumentView({
     if (gutterPanData.current?.pointerId === event.pointerId) {
       gutterPanData.current = null;
     }
-    if (activePointers.current.size < 2) {
-      pinchInitialData.current = null;
-      if (pendingFocusBox.current) {
-        focusBoxState?.setFocusBox?.(pendingFocusBox.current);
-        pendingFocusBox.current = null;
+    
+    if (pinchInitialData.current) {
+      const [id1, id2] = pinchInitialData.current.pointerIds;
+      if (event.pointerId === id1 || event.pointerId === id2) {
+        if (pendingFocusBox.current) {
+          focusBoxState?.setFocusBox?.(pendingFocusBox.current);
+          pendingFocusBox.current = null;
+        }
+        pinchInitialData.current = null;
       }
     }
   };
