@@ -1640,7 +1640,7 @@ export default function DocumentView({
           overflowY: "auto",
           overflowX: isFullMode ? "hidden" : "auto",
           position: "relative",
-          textAlign: isFullMode ? "left" : "center",
+          textAlign: "center",
           touchAction: "none",
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
