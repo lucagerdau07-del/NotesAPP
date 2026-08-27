@@ -48,7 +48,7 @@
 - Produces: `intent: 'start-draw' | 'replace-draw' | 'continue-draw' | 'finish-draw' | 'cancel-draw' | 'navigate' | 'ignore'`.
 - Produces: `shouldBlockTouch(state, timeStamp, pointerId): boolean`.
 
-- [ ] **Step 1: Fehlende Reducer-Verträge als fehlschlagende Tests festschreiben**
+- [x] **Step 1: Fehlende Reducer-Verträge als fehlschlagende Tests festschreiben**
 
 Passe den Event-Helper an und ersetze die alten Palm-Erwartungen (`navigate`) durch folgende Fälle:
 
@@ -103,13 +103,13 @@ it('latches a post-pen touch until that contact releases', () => {
 });
 ```
 
-- [ ] **Step 2: Test ausführen und erwartetes Rot verifizieren**
+- [x] **Step 2: Test ausführen und erwartetes Rot verifizieren**
 
 Run: `npm test -- tests/inputPolicy.test.js`
 
 Expected: FAIL wegen der noch fehlenden Felder, `replace-draw` und konsequentem `ignore`.
 
-- [ ] **Step 3: Zustand und Palm-Abfrage minimal implementieren**
+- [x] **Step 3: Zustand und Palm-Abfrage minimal implementieren**
 
 ```javascript
 export const POST_PEN_TOUCH_GUARD_MS = 300;
@@ -248,13 +248,13 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
 
 Alle bestehenden Mouse-, falsche-ID-, Abort- und Cancel-Tests bleiben zusätzlich erhalten.
 
-- [ ] **Step 4: Reducer-Suite grün ausführen**
+- [x] **Step 4: Reducer-Suite grün ausführen**
 
 Run: `npm test -- tests/inputPolicy.test.js`
 
 Expected: PASS; Pen-Owner bleibt erhalten, Release-Lock endet nur bei leerer Touch-Liste, und der 300-ms-Kontakt bleibt bis Release blockiert.
 
-- [ ] **Step 5: Git-Savestate erstellen**
+- [x] **Step 5: Git-Savestate erstellen**
 
 ```bash
 git add src/ink/inputPolicy.js tests/inputPolicy.test.js
@@ -273,7 +273,7 @@ git commit -m "feat(ink): enforce pen priority and gesture release lock"
 - Consumes: `replace-draw` und `shouldBlockTouch` aus Task 1.
 - Produces: bestehende vier Pointer-Handler plus `shouldBlockTouch(timeStamp: number, pointerId: number): boolean`.
 
-- [ ] **Step 1: Fehlschlagende Hook-Tests ergänzen**
+- [x] **Step 1: Fehlschlagende Hook-Tests ergänzen**
 
 Erweitere den Test-Event-Helper um `timeStamp` und füge hinzu:
 
@@ -301,13 +301,13 @@ it('exposes active and recent pen blocking without mutating policy state', () =>
 });
 ```
 
-- [ ] **Step 2: Hook-Test rot ausführen**
+- [x] **Step 2: Hook-Test rot ausführen**
 
 Run: `npm test -- tests/useInkPointer.test.js`
 
 Expected: FAIL, weil Pen-Übernahme keinen neuen Draft erzeugt und die Abfrage fehlt.
 
-- [ ] **Step 3: Draft-Erzeugung extrahieren und beide Start-Intents behandeln**
+- [x] **Step 3: Draft-Erzeugung extrahieren und beide Start-Intents behandeln**
 
 Importiere `shouldBlockTouch as policyBlocksTouch`. Extrahiere den bestehenden Draft-Aufbau in diese fokussierte Callback-Funktion:
 
@@ -364,13 +364,13 @@ const shouldBlockTouch = useCallback((timeStamp, pointerId) => (
 
 Gib `shouldBlockTouch` zusammen mit den vorhandenen Handlern und `draftStroke` zurück. Die Abfrage darf den Reducer nicht aufrufen.
 
-- [ ] **Step 4: Hook und Policy gemeinsam grün ausführen**
+- [x] **Step 4: Hook und Policy gemeinsam grün ausführen**
 
 Run: `npm test -- tests/inputPolicy.test.js tests/useInkPointer.test.js`
 
 Expected: PASS; Finger-Draft wird nie committed, Pen-Draft genau einmal, 299 ms blockiert und 300 ms nicht.
 
-- [ ] **Step 5: Git-Savestate erstellen**
+- [x] **Step 5: Git-Savestate erstellen**
 
 ```bash
 git add src/hooks/useInkPointer.js tests/useInkPointer.test.js
@@ -390,7 +390,7 @@ git commit -m "feat(ink): expose palm guard to document gestures"
 - Produces: `activePointers: Map<number, { x, y, startedOnPage }>` und `pinchInitialData` mit Distanz, Zoom, Centroid, Scrollstart und Focus-Box.
 - Produces: Zoom 0.5–3.0 und simultane `scrollLeft`-/`scrollTop`-Änderungen ohne Page-1-Finger-Pan.
 
-- [ ] **Step 1: Veralteten 1-Finger-Pan-Test ersetzen**
+- [x] **Step 1: Veralteten 1-Finger-Pan-Test ersetzen**
 
 ```javascript
 test.each(['stylus', 'finger'])(
@@ -419,7 +419,7 @@ test.each(['stylus', 'finger'])(
 );
 ```
 
-- [ ] **Step 2: Centroid-Anker und Full-Release testen**
+- [x] **Step 2: Centroid-Anker und Full-Release testen**
 
 ```javascript
 test('zooms and pans around the moving two-finger centroid', () => {
@@ -468,13 +468,13 @@ test('keeps the surviving finger inert until every touch is released', () => {
 });
 ```
 
-- [ ] **Step 3: Dokumentansicht-Test rot ausführen**
+- [x] **Step 3: Dokumentansicht-Test rot ausführen**
 
 Run: `npm test -- tests/DocumentView.test.jsx`
 
 Expected: FAIL wegen aktuellem `touchPanInitialData`, unvollständigem Centroid-Anker und erneuter Pan-Initialisierung nach Release.
 
-- [ ] **Step 4: Page-Touch-Tracking und Pinch-Initialisierung umstellen**
+- [x] **Step 4: Page-Touch-Tracking und Pinch-Initialisierung umstellen**
 
 Entferne `touchPanInitialData` vollständig. Setze am Scroll-Container `touchAction: 'none'`, damit Android/WebView keine konkurrierende native Geste startet. Verwende:
 
@@ -501,7 +501,7 @@ const handleGestureStart = (event) => {
 };
 ```
 
-- [ ] **Step 5: Scrollformel und Full-Release implementieren**
+- [x] **Step 5: Scrollformel und Full-Release implementieren**
 
 Behalte RAF-Drosselung, Zoom-Clamp und Focus-Box-Berechnung. Ersetze nur die Scrollformel:
 
@@ -529,13 +529,13 @@ const handleGestureEnd = (event) => {
 
 Behalte den vorhandenen Focus-Box-Seitengrenzen-Test unverändert.
 
-- [ ] **Step 6: Dokumentflächen-Suite grün ausführen**
+- [x] **Step 6: Dokumentflächen-Suite grün ausführen**
 
 Run: `npm test -- tests/DocumentView.test.jsx`
 
 Expected: PASS; kein Page-1-Finger-Pan, Centroid-Pan in X/Y, Zoom-Clamp und inerter Restfinger.
 
-- [ ] **Step 7: Git-Savestate erstellen**
+- [x] **Step 7: Git-Savestate erstellen**
 
 ```bash
 git add src/components/DocumentView.jsx tests/DocumentView.test.jsx
@@ -554,7 +554,7 @@ git commit -m "feat(document): add centroid anchored two finger navigation"
 - Consumes: `startedOnPage` aus Task 3 und `inkPointer.shouldBlockTouch` aus Task 2.
 - Produces: `gutterDrag = { pointerId, startY, startScrollTop, thresholdPassed } | null`.
 
-- [ ] **Step 1: Rand-Schwelle und aktive Pen-Sperre testen**
+- [x] **Step 1: Rand-Schwelle und aktive Pen-Sperre testen**
 
 ```javascript
 test('scrolls one gutter touch only after more than 15 vertical pixels', () => {
@@ -626,13 +626,13 @@ test('keeps a gutter touch begun during the post-pen guard inert until release',
 
 Erweitere dafür den Import am Dateikopf um `createEvent`.
 
-- [ ] **Step 2: Rand-Tests rot ausführen**
+- [x] **Step 2: Rand-Tests rot ausführen**
 
 Run: `npm test -- tests/DocumentView.test.jsx`
 
 Expected: FAIL, weil `gutterDrag` noch nicht existiert.
 
-- [ ] **Step 3: Rand-Kandidat initialisieren und bei Pinch verwerfen**
+- [x] **Step 3: Rand-Kandidat initialisieren und bei Pinch verwerfen**
 
 ```javascript
 const gutterDrag = useRef(null);
@@ -661,7 +661,7 @@ if (activePointers.current.size === 2) {
 }
 ```
 
-- [ ] **Step 4: Vertikales Scrollen strikt nach Überschreiten der Schwelle anwenden**
+- [x] **Step 4: Vertikales Scrollen strikt nach Überschreiten der Schwelle anwenden**
 
 ```javascript
 const drag = gutterDrag.current;
@@ -677,7 +677,7 @@ if (activePointers.current.size === 1 && drag?.pointerId === event.pointerId) {
 
 Lösche `gutterDrag` beim passenden `pointerup`/`pointercancel`. Die Blockade-Abfrage am Anfang von `handleGestureStart` verhindert während aktivem oder kürzlich abgesetztem Pen bereits das Anlegen von `activePointers` und `gutterDrag`.
 
-- [ ] **Step 5: Pointer-State bei Dokumentwechsel und Unmount bereinigen**
+- [x] **Step 5: Pointer-State bei Dokumentwechsel und Unmount bereinigen**
 
 ```javascript
 useEffect(() => () => {
@@ -713,13 +713,13 @@ test('drops stale gutter pointer state when the document changes', () => {
 });
 ```
 
-- [ ] **Step 6: Relevante Suites grün ausführen**
+- [x] **Step 6: Relevante Suites grün ausführen**
 
 Run: `npm test -- tests/inputPolicy.test.js tests/useInkPointer.test.js tests/DocumentView.test.jsx`
 
 Expected: PASS; Rand-Touch scrollt erst ab 16 px, horizontales Zittern scrollt nicht, Pen/Palm blockiert, 2-Finger-Pinch verdrängt Rand-Kandidaten.
 
-- [ ] **Step 7: Gesamtsuite und Produktions-Build verifizieren**
+- [x] **Step 7: Gesamtsuite und Produktions-Build verifizieren**
 
 Run: `npm test`
 
@@ -729,7 +729,7 @@ Run: `npm run build`
 
 Expected: Vite beendet den Produktions-Build mit Exit-Code 0.
 
-- [ ] **Step 8: Git-Savestate erstellen**
+- [x] **Step 8: Git-Savestate erstellen**
 
 ```bash
 git add src/components/DocumentView.jsx tests/DocumentView.test.jsx
