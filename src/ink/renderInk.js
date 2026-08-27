@@ -28,7 +28,11 @@ export function renderInkStroke(context, stroke, transform) {
   const { offsetX, offsetY, scaleX, scaleY } = strokeTransform(transform);
   context.save();
   context.globalCompositeOperation =
-    stroke.tool === "pixel-eraser" ? "destination-out" : "source-over";
+    stroke.tool === "pixel-eraser"
+      ? "destination-out"
+      : stroke.tool === "highlighter"
+        ? "multiply"
+        : "source-over";
   context.globalAlpha = stroke.opacity;
   context.strokeStyle = stroke.color;
   context.lineWidth = stroke.width * scaleX;
@@ -39,9 +43,10 @@ export function renderInkStroke(context, stroke, transform) {
     offsetX + stroke.points[0].x * scaleX,
     offsetY + stroke.points[0].y * scaleY,
   );
-  stroke.points.slice(1).forEach((point) => {
+  for (let i = 1; i < stroke.points.length; i += 1) {
+    const point = stroke.points[i];
     context.lineTo(offsetX + point.x * scaleX, offsetY + point.y * scaleY);
-  });
+  }
   context.stroke();
   context.restore();
 }

@@ -305,7 +305,9 @@ describe('full-document ink workspace', () => {
     fireEvent.click(screen.getByTitle('24px'));
     fireEvent.click(screen.getByTestId('color-slot-1'));
     fireEvent.click(screen.getByRole('button', { name: 'Fingermodus' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Radiermodus: Pixel' }));
+    fireEvent.click(screen.getByTitle('Radiergummi'));
+    fireEvent.click(screen.getByTitle('Radiergummi'));
+    fireEvent.click(screen.getByText('Strich'));
 
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem('notes-app:ink-preferences:preference-note'));

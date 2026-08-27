@@ -10,6 +10,7 @@ export default function SplitLayout({
   onBack,
   documentId: propDocumentId,
   note,
+  railSlot,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -72,6 +73,7 @@ export default function SplitLayout({
           focusBoxState={focusBoxState}
           toolbarState={toolState}
           onBack={onBack}
+          railSlot={railSlot}
         />
         {layoutMode === "split" && (
           <WritingZone

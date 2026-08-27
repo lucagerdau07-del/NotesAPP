@@ -433,8 +433,18 @@ test('toggles finger and stroke-eraser modes with accessible pressed state', () 
   fireEvent.click(fingerButton);
   expect(screen.getByRole('button', { name: 'Fingermodus' })).toHaveAttribute('aria-pressed', 'true');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Radiermodus: Pixel' }));
-  expect(screen.getByRole('button', { name: 'Radiermodus: Strich' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('opens eraser settings popover and switches to stroke mode', () => {
+  const setEraserMode = vi.fn();
+  const controller = createControllerDouble({ eraserMode: 'pixel', setEraserMode });
+  render(<DocumentView inkController={controller} toolbarState={toolState({ isEraser: true })} />);
+
+  fireEvent.click(screen.getByTitle('Radiergummi'));
+  expect(screen.getByTestId('eraser-settings-popover')).toBeTruthy();
+
+  fireEvent.click(screen.getByText('Strich'));
+  expect(setEraserMode).toHaveBeenCalledWith('stroke');
 });
 
 test('opens and interacts with pen settings popover', () => {

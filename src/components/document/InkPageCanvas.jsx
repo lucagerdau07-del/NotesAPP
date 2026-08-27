@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { renderInkStroke } from "../../ink/renderInk.js";
 
 export default function InkPageCanvas({
   page,
@@ -17,62 +18,41 @@ export default function InkPageCanvas({
     const MAX_PAGE_CANVAS_PIXELS = 16_000_000;
     let backingWidth = Math.round(logicalWidth * dpr);
     let backingHeight = Math.round(logicalHeight * dpr);
-    
+
     if (backingWidth * backingHeight > MAX_PAGE_CANVAS_PIXELS) {
       const scaleFactor = Math.sqrt(MAX_PAGE_CANVAS_PIXELS / (backingWidth * backingHeight));
       backingWidth = Math.floor(backingWidth * scaleFactor);
       backingHeight = Math.floor(backingHeight * scaleFactor);
     }
 
-    canvas.width = backingWidth;
-    canvas.height = backingHeight;
+    // Assigning width/height reallocates and clears the canvas, so only do it
+    // when the size actually changed.
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
     canvas.style.width = `${Math.round(logicalWidth)}px`;
     canvas.style.height = `${Math.round(logicalHeight)}px`;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const pageStrokes = strokes.filter((s) => s.pageId === page.id);
-    if (pageStrokes.length === 0) return;
-
-    ctx.save();
-    ctx.scale(backingWidth / page.width, backingHeight / page.height);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (const stroke of pageStrokes) {
-      if (!stroke.points || stroke.points.length === 0) continue;
-      ctx.save();
-      ctx.strokeStyle = stroke.color || "#000000";
-      ctx.lineWidth = stroke.width || 3;
-      ctx.globalAlpha = stroke.opacity ?? 1;
-      
-      if (stroke.tool === "pixel-eraser") {
-        ctx.globalCompositeOperation = "destination-out";
-      } else if (stroke.tool === "highlighter") {
-        ctx.globalCompositeOperation = "multiply";
-      } else {
-        ctx.globalCompositeOperation = "source-over";
-      }
-
-      ctx.beginPath();
-      const first = stroke.points[0];
-      ctx.moveTo(first.x, first.y);
-      for (let i = 1; i < stroke.points.length; i += 1) {
-        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
+    const transform = {
+      offsetX: 0,
+      offsetY: 0,
+      scaleX: backingWidth / page.width,
+      scaleY: backingHeight / page.height,
+    };
+    for (const stroke of strokes) {
+      if (stroke.pageId === page.id) renderInkStroke(ctx, stroke, transform);
     }
-
-    ctx.restore();
   }, [page.id, page.width, page.height, strokes, zoom, dpr]);
 
   return (
     <canvas
       ref={canvasRef}
       className="document-ink-canvas"
+      data-ink-page-id={page.id}
       style={{
         position: "absolute",
         top: 0,

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Eraser,
   Trash2,
@@ -27,7 +28,7 @@ import { HexColorPicker } from "react-colorful";
 import useLongPress from "../hooks/useLongPress";
 import useInkPointer from "../hooks/useInkPointer";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
-import { renderInkDocument, resizeInkCanvas } from "../ink/renderInk";
+import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import DocumentPage from "./document/DocumentPage";
 
@@ -177,6 +178,92 @@ function PenSettingsPopover({
             strokeLinecap="round"
           />
         </svg>
+      </div>
+    </div>
+  );
+}
+
+function EraserSettingsPopover({
+  eraserMode,
+  setEraserMode,
+  eraserWidth,
+  setEraserWidth,
+  onClose,
+}) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".eraser-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover pen-settings-popover"
+      style={{ top: 120, width: 220 }}
+      data-testid="eraser-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Eraser size={14} /> Radiergummi
+        </span>
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="tool-types-grid">
+        <button
+          className={`tool-type-btn ${eraserMode !== "stroke" ? "active" : ""}`}
+          onClick={() => setEraserMode?.("pixel")}
+        >
+          <Eraser size={15} />
+          <span>Pixel</span>
+        </button>
+        <button
+          className={`tool-type-btn ${eraserMode === "stroke" ? "active" : ""}`}
+          onClick={() => setEraserMode?.("stroke")}
+        >
+          <Eraser size={15} />
+          <span>Strich</span>
+        </button>
+      </div>
+
+      <div
+        style={{
+          font: "600 10px ui-monospace, monospace",
+          letterSpacing: ".06em",
+          color: "rgba(233,230,223,0.5)",
+          marginBottom: 6,
+        }}
+      >
+        GRÖSSE ({eraserWidth || 15}px)
+      </div>
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min="4"
+          max="60"
+          step="1"
+          value={eraserWidth || 15}
+          onChange={(e) => setEraserWidth?.(parseFloat(e.target.value))}
+          className="thickness-slider"
+        />
+        <span className="thickness-val">{eraserWidth || 15}px</span>
       </div>
     </div>
   );
@@ -423,6 +510,7 @@ export default function DocumentView({
   focusBoxState,
   toolbarState,
   onBack,
+  railSlot,
 }) {
   const {
     color,
@@ -463,6 +551,7 @@ export default function DocumentView({
   ]);
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
+  const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [paperToast, setPaperToast] = useState(null);
   const toastTimeoutRef = useRef(null);
@@ -561,6 +650,44 @@ export default function DocumentView({
       ? "stroke-eraser"
       : "pixel-eraser"
     : tool || "pen";
+  // Paint only the newly appended segment of the live stroke straight onto the
+  // canvas that already renders that page. No React render, no full redraw.
+  const drawDraftSegment = (draft, appendedFrom) => {
+    if (inkTool === "stroke-eraser") return;
+    const points = draft.points.slice(Math.max(0, appendedFrom - 1));
+    if (points.length < 2) return;
+    const segment = { ...draft, points };
+    const pageBox = documentMetrics.pageLayouts.find((p) => p.id === draft.pageId);
+    if (!pageBox) return;
+
+    if (note?.kind === "imported") {
+      const canvas = containerRef.current?.querySelector(
+        `canvas[data-ink-page-id="${draft.pageId}"]`,
+      );
+      const context = canvas?.getContext("2d");
+      if (!context) return;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      renderInkStroke(context, segment, {
+        offsetX: 0,
+        offsetY: 0,
+        scaleX: canvas.width / pageBox.width,
+        scaleY: canvas.height / pageBox.height,
+      });
+      return;
+    }
+
+    const context = inkCanvasRef.current?.getContext("2d");
+    if (!context) return;
+    const dpr = globalThis.devicePixelRatio || 1;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    renderInkStroke(context, segment, {
+      offsetX: 0,
+      offsetY: pageBox.top * zoom,
+      scaleX: zoom,
+      scaleY: zoom,
+    });
+  };
+
   const inkPointer = useInkPointer({
     inputMode: inkController?.inputMode || "stylus",
     tool: inkTool,
@@ -572,6 +699,7 @@ export default function DocumentView({
     document: inkDocument,
     commitStroke: inkController?.commitStroke,
     removeStrokes: inkController?.removeStrokes,
+    onDraftAppend: drawDraftSegment,
   });
   const redrawInkCanvasRef = useRef(null);
   redrawInkCanvasRef.current = () => {
@@ -1210,41 +1338,238 @@ export default function DocumentView({
   };
 
   const getStaticBackgroundStyles = () => {
-    const redMarginLine = `linear-gradient(to right, transparent, transparent 88px, oklch(0.62 0.09 26/.38) 88px, oklch(0.62 0.09 26/.38) 89.5px, transparent 89.5px)`;
-
     if (paperStyle === "blank") {
       return { backgroundImage: "none" };
     }
 
     if (paperStyle === "lined") {
       return {
-        backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.07) calc(100% - 1px))`,
-        backgroundSize: "100% 100%, 100% 34px",
-        backgroundPosition: "0 0, 0 92px",
-        backgroundRepeat: "no-repeat, repeat-y",
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.07) calc(100% - 1px))`,
+        backgroundSize: "100% 34px",
+        backgroundPosition: "0 92px",
+        backgroundRepeat: "repeat-y",
       };
     }
 
     if (paperStyle === "grid") {
       return {
-        backgroundImage: `${redMarginLine}, linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px))`,
-        backgroundSize: "100% 100%, 100% 24px, 24px 100%",
-        backgroundPosition: "0 0, 0 92px, 88px 0",
-        backgroundRepeat: "no-repeat, repeat-y, repeat-x",
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px))`,
+        backgroundSize: "100% 24px, 24px 100%",
+        backgroundPosition: "0 92px, 88px 0",
+        backgroundRepeat: "repeat-y, repeat-x",
       };
     }
 
     if (paperStyle === "dotted") {
       return {
-        backgroundImage: `${redMarginLine}, radial-gradient(circle, rgba(255,255,255,.18) 1.2px, transparent 1.3px)`,
-        backgroundSize: "100% 100%, 24px 24px",
-        backgroundPosition: "0 0, 16px 92px",
-        backgroundRepeat: "no-repeat, repeat",
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,.18) 1.2px, transparent 1.3px)`,
+        backgroundSize: "24px 24px",
+        backgroundPosition: "16px 92px",
+        backgroundRepeat: "repeat",
       };
     }
 
     return { backgroundImage: "none" };
   };
+
+  // Portalled into the editor shell when a slot is given, so the rail is a
+  // direct child of the Liquid Glass root and can be a glass control. Without a
+  // slot (tests, standalone use) it renders in place as before.
+  const railContent = (
+    <>
+      {onBack && (
+        <button
+          className="rail-btn active"
+          onClick={onBack}
+          title="Zurück zur Bibliothek"
+        >
+          <ArrowLeft size={19} />
+        </button>
+      )}
+      <button
+        className="rail-btn"
+        onClick={handleUndo}
+        disabled={!canUndo}
+        style={{ opacity: canUndo ? 1 : 0.35 }}
+        title="Rückgängig"
+      >
+        <Undo2 size={19} />
+      </button>
+      <button
+        className="rail-btn"
+        onClick={handleRedo}
+        disabled={!canRedo}
+        style={{ opacity: canRedo ? 1 : 0.35 }}
+        title="Wiederholen"
+      >
+        <Redo2 size={19} />
+      </button>
+      <div className="rail-divider" />
+      <button
+        className={`rail-btn pen-rail-btn ${tool !== "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
+        onClick={() => {
+          if (tool !== "highlighter" && !isEraser && !isSelectMode) {
+            setIsPenSettingsOpen((prev) => !prev);
+          } else {
+            setTool?.("pen");
+            setIsEraser?.(false);
+            setIsSelectMode?.(false);
+            setIsPenSettingsOpen(true);
+          }
+          setIsColorPickerOpen(false);
+          setIsEraserSettingsOpen(false);
+        }}
+        title="Stift & Einstellungen"
+        data-testid="pen-tool-btn"
+      >
+        <PenLine size={18} />
+      </button>
+      <button
+        className={`rail-btn ${tool === "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
+        onClick={() => {
+          setTool?.("highlighter");
+          setIsEraser?.(false);
+          setIsSelectMode?.(false);
+          setIsPenSettingsOpen(true);
+          setIsColorPickerOpen(false);
+          setIsEraserSettingsOpen(false);
+        }}
+        title="Textmarker"
+      >
+        <Highlighter size={18} />
+      </button>
+      <button
+        className={`rail-btn eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
+        onClick={() => {
+          if (isEraser && !isSelectMode) {
+            setIsEraserSettingsOpen((prev) => !prev);
+          } else {
+            setIsEraser?.(true);
+            setIsSelectMode?.(false);
+            setIsPenSettingsOpen(false);
+            setIsColorPickerOpen(false);
+          }
+        }}
+        title="Radiergummi"
+      >
+        <Eraser size={18} />
+      </button>
+      <button
+        className={`rail-btn ${inkController?.inputMode === "finger" ? "active" : ""}`}
+        onClick={() =>
+          inkController?.setInputMode?.(
+            inkController.inputMode === "finger" ? "stylus" : "finger",
+          )
+        }
+        aria-label="Fingermodus"
+        aria-pressed={inkController?.inputMode === "finger"}
+        title="Fingermodus"
+      >
+        <Pencil size={18} />
+      </button>
+      {!isFullMode && (
+        <button
+          className={`rail-btn ${isSelectMode ? "active" : ""}`}
+          onClick={() => {
+            const newMode = !isSelectMode;
+            setIsSelectMode?.(newMode);
+            setIsEraser?.(false);
+            if (newMode) {
+              focusBoxState?.setFocusBox(null);
+            }
+          }}
+          title="Fokus Box ziehen"
+          data-testid="select-mode-btn"
+        >
+          <Lasso size={18} />
+        </button>
+      )}
+      <div className="rail-divider" />
+      {customColors.map((c, index) => (
+        <ColorSlot
+          key={index}
+          index={index}
+          colorValue={c}
+          isActive={penColor === c && !isEraser && !isSelectMode}
+          isEraser={isEraser}
+          onSelect={() => {
+            if (penColor === c && !isEraser && !isSelectMode) {
+              setIsColorPickerOpen((prev) => !prev);
+              setActivePickerIndex(index);
+            } else {
+              setColor?.(c);
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+              setActivePickerIndex(index);
+            }
+            setIsPenSettingsOpen(false);
+          }}
+          onOpenPicker={() => {
+            setActivePickerIndex(index);
+            setIsColorPickerOpen(true);
+            setIsPenSettingsOpen(false);
+          }}
+        />
+      ))}
+      <div className="rail-divider" />
+      <button
+        className={`rail-btn ${paperStyle !== "blank" ? "active" : ""}`}
+        onClick={cyclePaperStyle}
+        title={`Papierstil: ${paperStyle} (Klicken zum Wechseln)`}
+        data-testid="paper-style-btn"
+      >
+        {getPaperStyleIcon()}
+      </button>
+      {note?.kind !== 'imported' && (
+        <button
+          className={`rail-btn ${showPageBreaks ? "active" : ""}`}
+          onClick={() => {
+            const next = !showPageBreaks;
+            setShowPageBreaks?.(next);
+            setPaperToast(
+              next ? "Einzelseiten aktiv" : "Unendliches Dokument aktiv",
+            );
+            setTimeout(() => setPaperToast(null), 1800);
+          }}
+          title={
+            showPageBreaks
+              ? "Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)"
+              : "Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)"
+          }
+          data-testid="page-mode-toggle-btn"
+        >
+          {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
+        </button>
+      )}
+      <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
+        <Trash2 size={18} />
+      </button>
+      <div className="rail-divider" />
+      <button
+        className={`rail-btn ${!isFullMode ? "active" : ""}`}
+        onClick={() => {
+          setIsSelectMode?.(false);
+          setLayoutMode?.(isFullMode ? "split" : "full");
+        }}
+        title={
+          isFullMode
+            ? "Geteilte Ansicht (Fokus-Box) einschalten"
+            : "Geteilte Ansicht ausschalten"
+        }
+        data-testid="layout-mode-btn"
+      >
+        <Columns2 size={18} />
+      </button>
+      <button
+        className="rail-btn"
+        style={{ marginTop: "auto" }}
+        title="Ebenen (bald verfügbar)"
+        disabled
+      >
+        <Layers size={19} />
+      </button>
+    </>
+  );
 
   return (
     <div
@@ -1262,206 +1587,13 @@ export default function DocumentView({
       data-stroke-count={inkDocument.strokes.length}
       style={{ display: "flex", height: "100%" }}
     >
-      <div className="editor-sidebar" style={{ flexShrink: 0, zIndex: 20 }}>
-        {onBack && (
-          <button
-            className="rail-btn active"
-            onClick={onBack}
-            title="Zurück zur Bibliothek"
-          >
-            <ArrowLeft size={19} />
-          </button>
-        )}
-        <button
-          className="rail-btn"
-          onClick={handleUndo}
-          disabled={!canUndo}
-          style={{ opacity: canUndo ? 1 : 0.35 }}
-          title="Rückgängig"
-        >
-          <Undo2 size={19} />
-        </button>
-        <button
-          className="rail-btn"
-          onClick={handleRedo}
-          disabled={!canRedo}
-          style={{ opacity: canRedo ? 1 : 0.35 }}
-          title="Wiederholen"
-        >
-          <Redo2 size={19} />
-        </button>
-        <div className="rail-divider" />
-        <button
-          className={`rail-btn pen-rail-btn ${tool !== "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
-          onClick={() => {
-            if (tool !== "highlighter" && !isEraser && !isSelectMode) {
-              setIsPenSettingsOpen((prev) => !prev);
-            } else {
-              setTool?.("pen");
-              setIsEraser?.(false);
-              setIsSelectMode?.(false);
-              setIsPenSettingsOpen(true);
-            }
-            setIsColorPickerOpen(false);
-          }}
-          title="Stift & Einstellungen"
-          data-testid="pen-tool-btn"
-        >
-          <PenLine size={18} />
-        </button>
-        <button
-          className={`rail-btn ${tool === "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
-          onClick={() => {
-            setTool?.("highlighter");
-            setIsEraser?.(false);
-            setIsSelectMode?.(false);
-            setIsPenSettingsOpen(true);
-            setIsColorPickerOpen(false);
-          }}
-          title="Textmarker"
-        >
-          <Highlighter size={18} />
-        </button>
-        <button
-          className={`rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
-          onClick={() => {
-            setIsEraser?.(true);
-            setIsSelectMode?.(false);
-            setIsPenSettingsOpen(false);
-            setIsColorPickerOpen(false);
-          }}
-          title="Radiergummi"
-        >
-          <Eraser size={18} />
-        </button>
-        <button
-          className={`rail-btn ${inkController?.inputMode === "finger" ? "active" : ""}`}
-          onClick={() =>
-            inkController?.setInputMode?.(
-              inkController.inputMode === "finger" ? "stylus" : "finger",
-            )
-          }
-          aria-label="Fingermodus"
-          aria-pressed={inkController?.inputMode === "finger"}
-          title="Fingermodus"
-        >
-          <Pencil size={18} />
-        </button>
-        <button
-          className={`rail-btn ${inkController?.eraserMode === "stroke" ? "active" : ""}`}
-          onClick={() =>
-            inkController?.setEraserMode?.(
-              inkController.eraserMode === "stroke" ? "pixel" : "stroke",
-            )
-          }
-          aria-label={`Radiermodus: ${inkController?.eraserMode === "stroke" ? "Strich" : "Pixel"}`}
-          aria-pressed={inkController?.eraserMode === "stroke"}
-          title={`Radiermodus: ${inkController?.eraserMode === "stroke" ? "Strich" : "Pixel"}`}
-        >
-          <Eraser size={16} />
-        </button>
-        {!isFullMode && (
-          <button
-            className={`rail-btn ${isSelectMode ? "active" : ""}`}
-            onClick={() => {
-              const newMode = !isSelectMode;
-              setIsSelectMode?.(newMode);
-              setIsEraser?.(false);
-              if (newMode) {
-                focusBoxState?.setFocusBox(null);
-              }
-            }}
-            title="Fokus Box ziehen"
-            data-testid="select-mode-btn"
-          >
-            <Lasso size={18} />
-          </button>
-        )}
-        <div className="rail-divider" />
-        {customColors.map((c, index) => (
-          <ColorSlot
-            key={index}
-            index={index}
-            colorValue={c}
-            isActive={penColor === c && !isEraser && !isSelectMode}
-            isEraser={isEraser}
-            onSelect={() => {
-              if (penColor === c && !isEraser && !isSelectMode) {
-                setIsColorPickerOpen((prev) => !prev);
-                setActivePickerIndex(index);
-              } else {
-                setColor?.(c);
-                setIsEraser?.(false);
-                setIsSelectMode?.(false);
-                setActivePickerIndex(index);
-              }
-              setIsPenSettingsOpen(false);
-            }}
-            onOpenPicker={() => {
-              setActivePickerIndex(index);
-              setIsColorPickerOpen(true);
-              setIsPenSettingsOpen(false);
-            }}
-          />
-        ))}
-        <div className="rail-divider" />
-        <button
-          className={`rail-btn ${paperStyle !== "blank" ? "active" : ""}`}
-          onClick={cyclePaperStyle}
-          title={`Papierstil: ${paperStyle} (Klicken zum Wechseln)`}
-          data-testid="paper-style-btn"
-        >
-          {getPaperStyleIcon()}
-        </button>
-        {note?.kind !== 'imported' && (
-          <button
-            className={`rail-btn ${showPageBreaks ? "active" : ""}`}
-            onClick={() => {
-              const next = !showPageBreaks;
-              setShowPageBreaks?.(next);
-              setPaperToast(
-                next ? "Einzelseiten aktiv" : "Unendliches Dokument aktiv",
-              );
-              setTimeout(() => setPaperToast(null), 1800);
-            }}
-            title={
-              showPageBreaks
-                ? "Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)"
-                : "Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)"
-            }
-            data-testid="page-mode-toggle-btn"
-          >
-            {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
-          </button>
-        )}
-        <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
-          <Trash2 size={18} />
-        </button>
-        <div className="rail-divider" />
-        <button
-          className={`rail-btn ${!isFullMode ? "active" : ""}`}
-          onClick={() => {
-            setIsSelectMode?.(false);
-            setLayoutMode?.(isFullMode ? "split" : "full");
-          }}
-          title={
-            isFullMode
-              ? "Geteilte Ansicht (Fokus-Box) einschalten"
-              : "Geteilte Ansicht ausschalten"
-          }
-          data-testid="layout-mode-btn"
-        >
-          <Columns2 size={18} />
-        </button>
-        <button
-          className="rail-btn"
-          style={{ marginTop: "auto" }}
-          title="Ebenen (bald verfügbar)"
-          disabled
-        >
-          <Layers size={19} />
-        </button>
-      </div>
+      {railSlot ? (
+        createPortal(railContent, railSlot)
+      ) : (
+        <div className="editor-sidebar">
+          {railContent}
+        </div>
+      )}
 
       {/* Floating Popovers */}
       {isPenSettingsOpen && (
@@ -1474,6 +1606,15 @@ export default function DocumentView({
           onClose={() => setIsPenSettingsOpen(false)}
           setIsEraser={setIsEraser}
           setIsSelectMode={setIsSelectMode}
+        />
+      )}
+      {isEraserSettingsOpen && (
+        <EraserSettingsPopover
+          eraserMode={inkController?.eraserMode}
+          setEraserMode={inkController?.setEraserMode}
+          eraserWidth={eraserWidth}
+          setEraserWidth={setEraserWidth}
+          onClose={() => setIsEraserSettingsOpen(false)}
         />
       )}
       {isColorPickerOpen && (
@@ -1616,11 +1757,7 @@ export default function DocumentView({
                   page={pageLayout}
                   sourceType={note.source?.type}
                   sourceHandle={sourceHandle}
-                  strokes={
-                    inkPointer.draftStroke && inkTool !== "stroke-eraser"
-                      ? [...inkDocument.strokes, inkPointer.draftStroke]
-                      : inkDocument.strokes
-                  }
+                  strokes={inkDocument.strokes}
                   zoom={zoom}
                   dpr={globalThis.devicePixelRatio || 1}
                 />

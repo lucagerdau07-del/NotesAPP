@@ -18,10 +18,6 @@ body {
   min-height: 100vh;
 }
 
-.font-serif {
-  font-family: 'Newsreader', serif;
-}
-
 .split-layout {
   display: flex;
   width: 100vw;
@@ -653,10 +649,13 @@ body::after {
   outline: 2px solid var(--subj-accent, #FFFFFF);
   outline-offset: 2px;
 }
-/* Settings topbar/sidebar have no --subj-accent (Library-only) and their own
+/* Settings/editor controls have no --subj-accent (Library-only) and their own
    buttons already show a clear active/hover state, so skip the ring here. */
 [data-liquid-glass-state="enhanced"] > .settings-topbar:focus-within,
-[data-liquid-glass-state="enhanced"] > .settings-sidebar:focus-within {
+[data-liquid-glass-state="enhanced"] > .settings-sidebar:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-title-pill:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-actions-pill:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-sidebar:focus-within {
   outline: none;
 }
 
@@ -918,6 +917,9 @@ body::after {
   padding: 16px 0;
   gap: 8px;
   overflow: hidden;
+  /* Sibling of .editor-body in the shell, so it needs the same stacking level
+     as the pills to stay clickable above the full-bleed editor body. */
+  z-index: 200;
 }
 
 /* Dezente Scrollbars (dunkles Theme) */

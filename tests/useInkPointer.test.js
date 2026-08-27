@@ -99,6 +99,27 @@ describe('useInkPointer', () => {
     }));
   });
 
+  it('appends coalesced samples and reports the appended range without re-rendering', () => {
+    const onDraftAppend = vi.fn();
+    const { result } = renderInkPointer({ onDraftAppend });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
+    const draftAfterDown = result.current.draftStroke;
+
+    const move = pointer(7, 'pen', 9, 9);
+    move.nativeEvent = {
+      getCoalescedEvents: () => [pointer(7, 'pen', 3, 4), pointer(7, 'pen', 5, 6), pointer(7, 'pen', 7, 8)],
+    };
+    act(() => result.current.onPointerMove(move));
+
+    expect(onDraftAppend).toHaveBeenCalledOnce();
+    const [draft, appendedFrom] = onDraftAppend.mock.calls[0];
+    expect(appendedFrom).toBe(1);
+    expect(draft.points).toEqual([{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }, { x: 7, y: 8 }]);
+    // Same live object, so React never re-renders mid-stroke.
+    expect(result.current.draftStroke).toBe(draftAfterDown);
+  });
+
   it.each([
     ['pen', undefined, 'pen'],
     ['highlighter', undefined, 'highlighter'],

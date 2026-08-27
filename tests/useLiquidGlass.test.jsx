@@ -3,8 +3,17 @@ import '@testing-library/jest-dom'
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { init } = vi.hoisted(() => ({ init: vi.fn() }))
-vi.mock('@ybouane/liquidglass', () => ({ LiquidGlass: { init } }))
+const { init, prewarm, prepareScene, FakeLiquidGlass } = vi.hoisted(() => {
+  const init = vi.fn()
+  const prewarm = vi.fn()
+  const prepareScene = vi.fn()
+  class FakeLiquidGlass {}
+  FakeLiquidGlass.init = init
+  FakeLiquidGlass.prototype._prewarmStaticCaptures = prewarm
+  FakeLiquidGlass.prototype._prepareSceneCanvas = prepareScene
+  return { init, prewarm, prepareScene, FakeLiquidGlass }
+})
+vi.mock('@ybouane/liquidglass', () => ({ LiquidGlass: FakeLiquidGlass }))
 
 import { collectControlGlassElements } from '../src/liquidGlass/controlGlass'
 import useLiquidGlass from '../src/hooks/useLiquidGlass'
@@ -65,6 +74,46 @@ describe('LiquidGlass control adapter', () => {
     view.rerender(<Harness invalidateKey="mathe" />)
     expect(init).toHaveBeenCalledTimes(1)
     expect(instance.markChanged).toHaveBeenCalled()
+  })
+
+  it('neutralizes the library static-capture prewarm that blocks first glass paint', async () => {
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn() })
+    render(<Harness />)
+    await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
+    const patched = FakeLiquidGlass.prototype._prewarmStaticCaptures
+    expect(patched).not.toBe(prewarm)
+    await patched()
+    expect(prewarm).not.toHaveBeenCalled()
+  })
+
+  it('repaints the scene base in the page background so an unfilled scene is not white', async () => {
+    document.body.style.backgroundColor = 'rgb(8, 8, 10)'
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn() })
+    render(<Harness />)
+    await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
+
+    const patched = FakeLiquidGlass.prototype._prepareSceneCanvas
+    expect(patched).not.toBe(prepareScene)
+
+    const sceneCtx = { fillStyle: '', fillRect: vi.fn() }
+    patched.call({ _sceneCtx: sceneCtx }, 120, 80)
+
+    expect(prepareScene).toHaveBeenCalledWith(120, 80)
+    expect(sceneCtx.fillStyle).toBe('rgb(8, 8, 10)')
+    expect(sceneCtx.fillRect).toHaveBeenCalledWith(0, 0, 120, 80)
+  })
+
+  it('holds the CSS glass fallback until the WebGL scene has captured content', async () => {
+    const capture = { onCacheUpdate: null }
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn(), capture })
+    const view = render(<Harness />)
+    await waitFor(() => expect(typeof capture.onCacheUpdate).toBe('function'))
+    expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'loading')
+
+    act(() => capture.onCacheUpdate(document.createElement('div')))
+    await waitFor(() =>
+      expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
+    )
   })
 
   it('keeps fallback state when initialization rejects', async () => {

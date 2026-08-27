@@ -167,7 +167,9 @@ export default function useInkPointer(options) {
     draftOwnerRef.current = owner;
     strokeEraserRef.current = current.tool === 'stroke-eraser'
       || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
-    setDraftStroke({ ...draft, points: [...draft.points] });
+    // The live draft object is published once. Moves mutate it in place and are
+    // painted incrementally via onDraftAppend, so no re-render per pointer move.
+    setDraftStroke(draft);
 
     if (typeof event.currentTarget?.setPointerCapture === 'function') {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -201,19 +203,32 @@ export default function useInkPointer(options) {
       const draft = draftRef.current;
       if (!draft) return;
       const current = optionsRef.current;
-      const point = mappedPoint(current.mapPoint?.(event));
       if (!ownsLivePage(draftOwnerRef.current, current.document)) {
         abortDraft(event);
         return;
       }
-      if (!point || point.pageId !== draft.pageId) {
-        route(event, "abort");
-        finalizeDraft();
-        return;
-      }
 
-      draft.points.push({ x: point.x, y: point.y });
-      setDraftStroke({ ...draft, points: [...draft.points] });
+      // Coalesced samples keep fast strokes smooth instead of polygonal.
+      const native = event.nativeEvent || event;
+      const coalesced =
+        typeof native.getCoalescedEvents === "function"
+          ? native.getCoalescedEvents()
+          : null;
+      const samples = coalesced && coalesced.length > 0 ? coalesced : [event];
+
+      const appendedFrom = draft.points.length;
+      for (const sample of samples) {
+        const point = mappedPoint(current.mapPoint?.(sample));
+        if (!point || point.pageId !== draft.pageId) {
+          if (draft.points.length > appendedFrom)
+            current.onDraftAppend?.(draft, appendedFrom);
+          route(event, "abort");
+          finalizeDraft();
+          return;
+        }
+        draft.points.push({ x: point.x, y: point.y });
+      }
+      current.onDraftAppend?.(draft, appendedFrom);
     },
     [abortDraft, discardDraft, finalizeDraft, route],
   );
