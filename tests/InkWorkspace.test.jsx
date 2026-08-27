@@ -304,7 +304,7 @@ describe('full-document ink workspace', () => {
     fireEvent.click(screen.getByTitle('Textmarker'));
     fireEvent.click(screen.getByTitle('24px'));
     fireEvent.click(screen.getByTestId('color-slot-1'));
-    fireEvent.click(screen.getByRole('button', { name: 'Fingermodus' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Eingabe: / }));
     fireEvent.click(screen.getByTitle('Radiergummi'));
     fireEvent.click(screen.getByTitle('Radiergummi'));
     fireEvent.click(screen.getByText('Strich'));

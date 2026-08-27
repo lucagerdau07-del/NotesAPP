@@ -7,6 +7,7 @@ import {
   undoInkHistory,
 } from "../ink/inkDocument.js";
 import { createInkRepository } from "../ink/inkRepository.js";
+import { INPUT_MODES } from "../ink/inputPolicy.js";
 
 const browserInkRepository = createInkRepository(globalThis.localStorage);
 const supportedTools = new Set(["pen", "fountain", "pencil", "highlighter"]);
@@ -169,7 +170,7 @@ export default function useInkDocument({
   );
   const setInputMode = useCallback(
     (inputMode) => {
-      if (inputMode !== "stylus" && inputMode !== "finger") return;
+      if (!INPUT_MODES.includes(inputMode)) return;
       updatePreference("inputMode", inputMode);
     },
     [updatePreference],

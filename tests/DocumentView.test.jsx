@@ -275,7 +275,14 @@ test('zooms and pans around the moving two-finger centroid', () => {
   fireEvent.pointerDown(page, { pointerId: 11, pointerType: 'touch', clientX: 200, clientY: 100 });
   fireEvent.pointerMove(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
   fireEvent.pointerMove(page, { pointerId: 11, pointerType: 'touch', clientX: 350, clientY: 150 });
+  // Mid-pinch the zoom is only previewed by a transform, so layout is untouched.
+  expect(page).toHaveStyle({ width: '800px' });
+  expect(page.style.transform).toBe('translate(-100px, -150px) scale(2)');
+  expect(scroller.scrollLeft).toBe(50);
+
+  fireEvent.pointerUp(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
   expect(page).toHaveStyle({ width: '1600px' });
+  expect(page.style.transform).toBe('');
   expect(scroller.scrollLeft).toBe(150);
   expect(scroller.scrollTop).toBe(250);
 });
@@ -414,25 +421,42 @@ test('keeps the surviving finger inert until every touch is released', () => {
   expect(controller.commitStroke).toHaveBeenCalledOnce();
 });
 
-test('toggles finger and stroke-eraser modes with accessible pressed state', () => {
+test('cycles the input mode through stylus, finger and move', () => {
   function StatefulDocumentView() {
     const [inputMode, setInputMode] = useState('stylus');
-    const [eraserMode, setEraserMode] = useState('pixel');
-    const controller = createControllerDouble({
-      inputMode,
-      setInputMode,
-      eraserMode,
-      setEraserMode,
-    });
+    const controller = createControllerDouble({ inputMode, setInputMode });
     return <DocumentView inkController={controller} toolbarState={toolState()} />;
   }
 
   render(<StatefulDocumentView />);
-  const fingerButton = screen.getByRole('button', { name: 'Fingermodus' });
-  expect(fingerButton).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.click(fingerButton);
-  expect(screen.getByRole('button', { name: 'Fingermodus' })).toHaveAttribute('aria-pressed', 'true');
+  const modeButton = () => screen.getByRole('button', { name: /^Eingabe: / });
+  expect(modeButton()).toHaveAccessibleName('Eingabe: Stift');
+  fireEvent.click(modeButton());
+  expect(modeButton()).toHaveAccessibleName('Eingabe: Finger');
+  fireEvent.click(modeButton());
+  expect(modeButton()).toHaveAccessibleName('Eingabe: Bewegen');
+  fireEvent.click(modeButton());
+  expect(modeButton()).toHaveAccessibleName('Eingabe: Stift');
+});
 
+test('move mode pans instead of drawing, with pen and with one finger', () => {
+  const controller = createControllerDouble({ inputMode: 'move' });
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const scroller = page.parentElement;
+  scroller.scrollTop = 100;
+
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 300, clientY: 300 });
+  fireEvent.pointerMove(page, { pointerId: 1, pointerType: 'pen', clientX: 260, clientY: 240 });
+  fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'pen', clientX: 260, clientY: 240 });
+  expect(scroller.scrollTop).toBe(160);
+  expect(scroller.scrollLeft).toBe(40);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
+
+  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 300 });
+  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 260 });
+  expect(scroller.scrollTop).toBe(200);
+  expect(controller.commitStroke).not.toHaveBeenCalled();
 });
 
 test('opens eraser settings popover and switches to stroke mode', () => {

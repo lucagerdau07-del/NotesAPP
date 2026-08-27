@@ -23,6 +23,8 @@ import {
   Infinity,
   Files,
   Plus,
+  Move,
+  Pointer,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useLongPress from "../hooks/useLongPress";
@@ -30,7 +32,19 @@ import useInkPointer from "../hooks/useInkPointer";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
 import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
+import { INPUT_MODES } from "../ink/inputPolicy";
 import DocumentPage from "./document/DocumentPage";
+
+const INPUT_MODE_LABELS = {
+  stylus: "Stift",
+  finger: "Finger",
+  move: "Bewegen",
+};
+const INPUT_MODE_ICONS = {
+  stylus: PenTool,
+  finger: Pointer,
+  move: Move,
+};
 
 function PenSettingsPopover({
   tool,
@@ -645,6 +659,11 @@ export default function DocumentView({
     showPageBreaks: Boolean(showPageBreaks),
   };
   const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
+  const inputMode = INPUT_MODES.includes(inkController?.inputMode)
+    ? inkController.inputMode
+    : "stylus";
+  const isMoveMode = inputMode === "move";
+  const InputModeIcon = INPUT_MODE_ICONS[inputMode];
   const inkTool = isEraser
     ? inkController?.eraserMode === "stroke"
       ? "stroke-eraser"
@@ -689,7 +708,7 @@ export default function DocumentView({
   };
 
   const inkPointer = useInkPointer({
-    inputMode: inkController?.inputMode || "stylus",
+    inputMode,
     tool: inkTool,
     eraserMode: inkController?.eraserMode || "pixel",
     color: penColor || "#EFECE4",
@@ -803,8 +822,11 @@ export default function DocumentView({
         pendingFocusBox.current = null;
       }
       pinchInitialData.current = null;
+      commitLivePinchRef.current?.();
     }
   };
+  // clearAllGestures runs before commitLivePinch is defined, so reach it late.
+  const commitLivePinchRef = useRef(null);
 
   const handlePointerDown = (e) => {
     if (e.pointerType === "pen") {
@@ -897,6 +919,10 @@ export default function DocumentView({
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
   const gutterPanData = useRef(null);
+  // Zoom a live pinch is previewing via transform, and where the previewed
+  // content sat on screen when it was committed (see commitLivePinch).
+  const livePinchRef = useRef(null);
+  const pinchCommitRef = useRef(null);
 
   const focusBoxRef = useRef(null);
   const focusDragRef = useRef(null);
@@ -934,6 +960,17 @@ export default function DocumentView({
     };
   }, [inkDocument.documentId]);
 
+  // Gutter drags only ever scrolled vertically; a move-mode drag pans both axes.
+  const startPan = (event) => ({
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
+    startScrollTop: scrollRef.current?.scrollTop ?? 0,
+    panX: isMoveMode,
+    active: false,
+  });
+
   const handleGestureStart = (event) => {
     if (event.pointerType === "pen") {
       clearAllGestures();
@@ -942,19 +979,20 @@ export default function DocumentView({
     if (!startedOnPage) {
       inkPointer.onPointerDown(event, { preventDraw: true });
     }
+    // Move mode drags with the pen too, which would otherwise stop at the
+    // touch-only guard below. Touch keeps flowing through so it can still pinch.
+    if (isMoveMode && event.pointerType === "pen" && activePointers.current.size === 0) {
+      gutterPanData.current = startPan(event);
+      return;
+    }
     if (event.pointerType !== 'touch') return;
     if (inkPointer.shouldBlockTouch(event.timeStamp, event.pointerId)) return;
     activePointers.current.set(event.pointerId, {
       x: event.clientX, y: event.clientY, startedOnPage,
     });
 
-    if (activePointers.current.size === 1 && !startedOnPage) {
-      gutterPanData.current = {
-        pointerId: event.pointerId,
-        startY: event.clientY,
-        startScrollTop: scrollRef.current?.scrollTop ?? 0,
-        active: false,
-      };
+    if (activePointers.current.size === 1 && (!startedOnPage || isMoveMode)) {
+      gutterPanData.current = startPan(event);
     }
 
     if (activePointers.current.size !== 2) return;
@@ -977,15 +1015,38 @@ export default function DocumentView({
       centerY: (first.y + second.y) / 2 - rect.top,
       scrollTop: scrollRef.current.scrollTop,
       scrollLeft: scrollRef.current.scrollLeft,
-      focusBox: focusBoxState?.focusBox ? { ...focusBoxState.focusBox } : null,
+      // Only a focus box that is actually on screen (split mode — see its
+      // render below) takes part in the pinch; useFocusBox hands us one in
+      // full mode too, where it is invisible.
+      focusBox:
+        !isFullMode && focusBoxState?.focusBox
+          ? { ...focusBoxState.focusBox }
+          : null,
       ticking: false,
     };
+  };
+
+  const applyPan = (e) => {
+    const pan = gutterPanData.current;
+    const dx = pan.startX - e.clientX;
+    const dy = pan.startY - e.clientY;
+    if (!pan.active && Math.abs(pan.panX ? Math.hypot(dx, dy) : dy) > 15) {
+      pan.active = true;
+    }
+    if (pan.active && scrollRef.current) {
+      scrollRef.current.scrollTop = pan.startScrollTop + dy;
+      if (pan.panX) scrollRef.current.scrollLeft = pan.startScrollLeft + dx;
+    }
   };
 
   const handleGestureMove = (e) => {
     const startedOnPage = containerRef.current?.contains(e.target) ?? false;
     if (!startedOnPage) {
       inkPointer.onPointerMove(e);
+    }
+    if (gutterPanData.current?.pointerId === e.pointerId && e.pointerType === "pen") {
+      applyPan(e);
+      return;
     }
     if (e.pointerType !== "touch") return;
 
@@ -1002,13 +1063,7 @@ export default function DocumentView({
     }
 
     if (activePointers.current.size === 1 && gutterPanData.current?.pointerId === e.pointerId) {
-      const dy = gutterPanData.current.startY - e.clientY;
-      if (!gutterPanData.current.active && Math.abs(dy) > 15) {
-        gutterPanData.current.active = true;
-      }
-      if (gutterPanData.current.active && scrollRef.current) {
-        scrollRef.current.scrollTop = gutterPanData.current.startScrollTop + dy;
-      }
+      applyPan(e);
       return;
     }
 
@@ -1049,6 +1104,32 @@ export default function DocumentView({
           0.5,
           Math.min(3, startZoom * (currentDistance / startDist)),
         );
+        const zoomRatio = newZoom / startZoom;
+
+        // Committing the zoom per frame relays out every page and forces a full
+        // ink-canvas realloc plus a redraw of every stroke — that is the pinch
+        // stutter. Preview it with a transform (content layout untouched, so the
+        // anchor stays exact) and commit the real zoom once on release.
+        // Focus-box pinches scale the box inversely to the zoom, which a plain
+        // transform cannot express, so those keep the per-frame path.
+        if (!startFb) {
+          livePinchRef.current = {
+            zoom: newZoom,
+            scrollLeft: (startScrollLeft + startX) * zoomRatio - currentCenterX,
+            scrollTop: (startScrollTop + startY) * zoomRatio - currentCenterY,
+          };
+          const content = containerRef.current;
+          if (content) {
+            const tx = currentCenterX + startScrollLeft - (startScrollLeft + startX) * zoomRatio;
+            const ty = currentCenterY + startScrollTop - (startScrollTop + startY) * zoomRatio;
+            content.style.transformOrigin = "0 0";
+            content.style.willChange = "transform";
+            content.style.transform = `translate(${tx}px, ${ty}px) scale(${zoomRatio})`;
+          }
+          pinchInitialData.current.ticking = false;
+          return;
+        }
+
         setZoom(newZoom);
 
         if (startFb) {
@@ -1084,7 +1165,6 @@ export default function DocumentView({
 
         const scrollContainer = containerRef.current?.parentElement;
         if (scrollContainer) {
-          const zoomRatio = newZoom / startZoom;
           scrollContainer.scrollLeft = (startScrollLeft + startX) * zoomRatio - currentCenterX;
           scrollContainer.scrollTop = (startScrollTop + startY) * zoomRatio - currentCenterY;
         }
@@ -1164,6 +1244,44 @@ export default function DocumentView({
     return () => scrollContainer.removeEventListener("wheel", handleWheel);
   }, [focusBoxState]);
 
+  // Hand the previewed zoom over to React. The transform stays on until the new
+  // layout exists, so the layout effect below is what drops it and applies the
+  // scroll offset the preview was standing in for.
+  const commitLivePinch = () => {
+    const pending = livePinchRef.current;
+    livePinchRef.current = null;
+    if (!pending) return;
+    pinchCommitRef.current = pending;
+    // Same zoom means no re-render, so the layout effect would never run and
+    // the transform would stick. Drop it here instead.
+    if (pending.zoom === zoom) dropPinchPreviewRef.current?.();
+    else setZoom(pending.zoom);
+  };
+  commitLivePinchRef.current = commitLivePinch;
+
+  const dropPinchPreview = () => {
+    const commit = pinchCommitRef.current;
+    if (!commit) return;
+    pinchCommitRef.current = null;
+    const content = containerRef.current;
+    if (content) {
+      content.style.transform = "";
+      content.style.transformOrigin = "";
+      content.style.willChange = "";
+    }
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    scroller.scrollLeft = commit.scrollLeft;
+    scroller.scrollTop = commit.scrollTop;
+  };
+  const dropPinchPreviewRef = useRef(null);
+  dropPinchPreviewRef.current = dropPinchPreview;
+
+  useLayoutEffect(() => {
+    if (pinchCommitRef.current?.zoom !== zoom) return;
+    dropPinchPreviewRef.current?.();
+  }, [zoom]);
+
   const handleGestureEnd = (event) => {
     const startedOnPage = containerRef.current?.contains(event.target) ?? false;
     if (!startedOnPage) {
@@ -1173,11 +1291,11 @@ export default function DocumentView({
         inkPointer.onPointerUp(event);
       }
     }
-    if (event.pointerType !== 'touch') return;
-    activePointers.current.delete(event.pointerId);
     if (gutterPanData.current?.pointerId === event.pointerId) {
       gutterPanData.current = null;
     }
+    if (event.pointerType !== 'touch') return;
+    activePointers.current.delete(event.pointerId);
     
     if (pinchInitialData.current) {
       const [id1, id2] = pinchInitialData.current.pointerIds;
@@ -1187,6 +1305,7 @@ export default function DocumentView({
           pendingFocusBox.current = null;
         }
         pinchInitialData.current = null;
+        commitLivePinch();
       }
     }
   };
@@ -1455,17 +1574,16 @@ export default function DocumentView({
         <Eraser size={18} />
       </button>
       <button
-        className={`rail-btn ${inkController?.inputMode === "finger" ? "active" : ""}`}
+        className={`rail-btn ${inputMode !== "stylus" ? "active" : ""}`}
         onClick={() =>
           inkController?.setInputMode?.(
-            inkController.inputMode === "finger" ? "stylus" : "finger",
+            INPUT_MODES[(INPUT_MODES.indexOf(inputMode) + 1) % INPUT_MODES.length],
           )
         }
-        aria-label="Fingermodus"
-        aria-pressed={inkController?.inputMode === "finger"}
-        title="Fingermodus"
+        aria-label={`Eingabe: ${INPUT_MODE_LABELS[inputMode]}`}
+        title={`Eingabe: ${INPUT_MODE_LABELS[inputMode]} (Klicken zum Wechseln)`}
       >
-        <Pencil size={18} />
+        <InputModeIcon size={18} />
       </button>
       {!isFullMode && (
         <button

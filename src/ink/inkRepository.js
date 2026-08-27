@@ -1,4 +1,5 @@
 import { isInkDocument } from "./inkDocument.js";
+import { INPUT_MODES } from "./inputPolicy.js";
 
 const historyKey = (documentId) => `notes-app:ink:${documentId}`;
 const legacyPreferencesKey = "notes-app:ink-preferences";
@@ -49,7 +50,9 @@ function normalizePreferences(value) {
       preferences.eraserWidth,
       defaultPreferences.eraserWidth,
     ),
-    inputMode: preferences.inputMode === "finger" ? "finger" : "stylus",
+    inputMode: INPUT_MODES.includes(preferences.inputMode)
+      ? preferences.inputMode
+      : defaultPreferences.inputMode,
     eraserMode: preferences.eraserMode === "stroke" ? "stroke" : "pixel",
   };
 }

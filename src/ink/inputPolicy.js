@@ -1,5 +1,9 @@
 export const POST_PEN_TOUCH_GUARD_MS = 300;
 
+// stylus: only the pen draws. finger: touch draws too. move: nothing draws,
+// every pointer is left to the pan/pinch layer.
+export const INPUT_MODES = ['stylus', 'finger', 'move'];
+
 export function createInputState() {
   return {
     drawingPointerId: null,
@@ -56,7 +60,7 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
   if (blockedByPalmGuard) return { state: nextState, intent: 'ignore' };
 
   const ownsEvent = state.drawingPointerId === event.pointerId;
-  if (event.phase === 'down' && event.pointerType === 'pen') {
+  if (event.phase === 'down' && event.pointerType === 'pen' && inputMode !== 'move') {
     return {
       state: {
         ...nextState,
@@ -87,8 +91,10 @@ export function reducePointerInput(state, event, inputMode = 'stylus') {
   }
 
   if (event.phase === 'down' && state.drawingPointerId === null) {
-    const canDraw = event.pointerType === 'mouse'
-      || (isTouch && inputMode === 'finger' && !gestureLocked);
+    const canDraw = inputMode !== 'move' && (
+      event.pointerType === 'mouse'
+      || (isTouch && inputMode === 'finger' && !gestureLocked)
+    );
     if (canDraw) {
       return {
         state: {
