@@ -229,15 +229,21 @@ andernfalls kann das Modell nicht wissen, wo der nächste Block beginnen darf.
 
 ### 4.6 Darstellung
 
-`TextBlockLayer` rendert die Blöcke einer Seite als absolut positionierte
-`div`-Elemente innerhalb von `DocumentPage`, oberhalb des Ink-Canvas. Textblöcke
-bleiben dadurch bei jedem Zoom scharf und lassen sich per `contenteditable`
-direkt bearbeiten.
+`DocumentView` rendert Tinte auf zwei Wegen: importierte Dokumente bekommen je
+Seite ein `DocumentPage` mit eigenem `InkPageCanvas`, reine Ink-Notizen ein
+einziges Master-Canvas über das ganze Dokument. `TextBlockLayer` wird deshalb
+**nicht** in `DocumentPage` eingehängt, sondern als eine Überlagerung über der
+gesamten Dokumentfläche — direkt neben dem Master-Canvas. Die Seitenpositionen
+kommen aus `calculateDocumentMetrics`, damit ein Layer beide Wege bedient.
+
+Die Blöcke sind absolut positionierte `div`-Elemente oberhalb der Tinte und
+lassen sich per `contenteditable` direkt bearbeiten. Sie bleiben bei jedem Zoom
+scharf.
 
 Skalierung: Der Layer bekommt `transform: scale(zoom)` mit
 `transform-origin: top left` und arbeitet innen in unskalierten
-Seitenkoordinaten. Damit gilt für die Textblöcke dasselbe Koordinatensystem wie
-für Striche.
+Dokumentkoordinaten. Damit gilt für die Textblöcke dasselbe Koordinatensystem
+wie für Striche.
 
 Für die Bildaufnahme (`see_page`) werden die Blöcke zusätzlich per
 `fillText` auf einen Canvas gezeichnet (Abschnitt 5.4).
@@ -364,8 +370,11 @@ Der Hugging-Face-Space `Luca448/app-backend` betreibt bereits mehrere Dienste
 hinter einem Nginx-Verteiler: `/` (Port 3000), `/gravity/` (7861), `/nourish/`
 (7862). Der Agent kommt als vierter Dienst dazu:
 
-* Verzeichnis `notes-agent-api/`, Vorlage ist `nourish-lens-api/`: reines
-  `node:http`, keine Abhängigkeiten, `"type": "module"`.
+* Der Quellcode lebt **in diesem Repository** unter `server/notes-agent-api/`
+  und wird zum Ausliefern in den Space-Checkout kopiert — dasselbe Verfahren wie
+  beim Gravity-Server. Damit bleibt der Dienst versioniert und testbar.
+* Reines `node:http`, keine Abhängigkeiten, `"type": "module"`; Vorlage ist
+  `nourish-lens-api/` im Space-Checkout.
 * Port 7863, Nginx-Route `/notes/` nach demselben Muster wie `/nourish/`.
 * Start in `start.sh` analog zu den vorhandenen Diensten.
 * Nutzt das im Space bereits gesetzte Secret `OPENROUTER_API_KEY`. **Kein neues
