@@ -620,6 +620,18 @@ body::after {
   background: radial-gradient(ellipse 58% 54% at 50% 48%, transparent 30%, rgba(0, 0, 0, 0.24) 100%);
 }
 
+/* The library injects the shader canvas as a z-index:-1 child, and a negative
+   z-index child paints *after* its parent's own background — so the canvas sits
+   on top of the CSS glass fallback, not behind it. Its first shader renders run
+   while the scene it samples is still empty, which puts a flat near-black panel
+   over the fallback: the black step between "fake" CSS glass and real glass on
+   load. Measured on reload — canvas opaque, mean RGB 10, still in "loading".
+   Keep it out of the paint until the root reports the scene captured. */
+[data-liquid-glass-state]:not([data-liquid-glass-state="enhanced"])
+  > [data-liquid-glass-control] > canvas {
+  visibility: hidden;
+}
+
 /* Enhanced state: the WebGL canvas renders the refraction, so the CSS glass
    fallback (gradient fill, blur, border, shadow) steps aside for the five
    controls. The library injects the canvas as z-index:-1 inside the control,
@@ -834,6 +846,7 @@ body::after {
 
 .editor-title-pill {
   left: 104px;
+  transition: left 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   padding: 0 18px;
   gap: 11px;
 }
@@ -850,28 +863,58 @@ body::after {
   border-radius: 17px;
 }
 
-.editor-ai-btn {
-  height: 34px;
-  border-radius: 17px;
-  padding: 0 13px;
-  border: none;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #F5F2EB;
-  cursor: pointer;
-  background: linear-gradient(140deg, #1ACEE6, #004D61);
-}
-
 .editor-title {
   font: 700 14px 'Bricolage Grotesque', sans-serif;
   letter-spacing: -.02em;
+}
+
+.editor-back-btn {
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  border: none;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #FFFFFF;
+  cursor: pointer;
+}
+
+.editor-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .editor-subject {
   font: 400 11.5px Manrope, sans-serif;
   color: rgba(233,230,223,.5);
   white-space: nowrap;
+}
+
+.editor-shell.immersive .editor-title-pill,
+.editor-shell.immersive .editor-actions-pill,
+.editor-shell.immersive .editor-sidebar {
+  display: none;
+}
+
+.immersive-exit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 300;
 }
 
 .editor-body {
@@ -898,7 +941,7 @@ body::after {
 
 .editor-sidebar {
   position: absolute;
-  left: 12px;
+  left: 8px;
   top: 12px;
   bottom: 12px;
   width: 72px;
@@ -912,14 +955,165 @@ body::after {
     inset 0 -1.5px 2px 0 rgba(0,0,0,.9),
     0 28px 60px -20px rgba(0,0,0,.98);
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Sibling of .editor-body in the shell, so it needs the same stacking level
+     as the pills to stay clickable above the full-bleed editor body. */
+  z-index: 200;
+}
+
+/* One glass control grown wider — the tool column keeps a fixed width so
+   the buttons never move, the chat fills the rest. */
+.editor-sidebar.chat-open {
+  width: 400px;
+  border-radius: 30px;
+  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rail-tools {
+  flex: 0 0 72px;
+  width: 72px;
+  display: flex;
   flex-direction: column;
   align-items: center;
   padding: 16px 0;
   gap: 8px;
+}
+
+/* The open assistant shows the note title in its own header instead — the
+   floating title pill would otherwise float disconnected next to it. */
+.editor-title-pill.chat-open {
+  display: none;
+}
+
+.rail-ai-btn {
+  color: #7FE6F2;
+}
+
+.rail-ai-btn.active {
+  background: linear-gradient(140deg, #1ACEE6, #004D61);
+  color: #F5F2EB;
+}
+
+/* Plain flex child of the single glass control — no background of its own,
+   so it reads as the same panel that grew, not an overlay on top of it. */
+.rail-chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 14px 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  color: #F1EEE7;
+  font-family: Manrope, sans-serif;
+  /* Only fades/slides in after the width transition is under way, so the
+     text doesn't visibly reflow while the panel is still narrow. */
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+}
+
+@keyframes rail-chat-fade-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.rail-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rail-chat-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rail-chat-title {
+  font: 700 14px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.rail-chat-subtitle {
+  font: 400 11.5px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.5);
+  white-space: nowrap;
   overflow: hidden;
-  /* Sibling of .editor-body in the shell, so it needs the same stacking level
-     as the pills to stay clickable above the full-bleed editor body. */
-  z-index: 200;
+  text-overflow: ellipsis;
+}
+
+.rail-chat-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+}
+
+.rail-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rail-chat-empty {
+  margin: 0;
+  color: rgba(241, 238, 231, 0.45);
+}
+
+.rail-chat-msg {
+  padding: 8px 11px;
+  border-radius: 14px;
+  max-width: 88%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rail-chat-msg.user {
+  align-self: flex-end;
+  background: linear-gradient(140deg, rgba(26, 206, 230, 0.32), rgba(0, 77, 97, 0.42));
+}
+
+.rail-chat-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.rail-chat-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: 400 13px Manrope, sans-serif;
+  outline: none;
+}
+
+.rail-chat-input button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: none;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #F5F2EB;
+  cursor: pointer;
+  background: linear-gradient(140deg, #1ACEE6, #004D61);
+}
+
+.rail-chat-input button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Dezente Scrollbars (dunkles Theme) */
@@ -1286,6 +1480,18 @@ body::after {
   box-shadow: 0 0 0 2px #1D1B21, 0 0 0 4px rgba(255, 255, 255, 0.5);
 }
 
+.color-preset-add {
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.color-preset-add:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 /* Hex input row */
 .hex-input-row {
   display: flex;
@@ -1329,6 +1535,24 @@ body::after {
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  animation: toastFade 0.2s ease-out;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.zoom-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 24, 30, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 6px 14px;
+  font: 600 12px 'Manrope', sans-serif;
+  color: #F1EEE7;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
   animation: toastFade 0.2s ease-out;
   pointer-events: none;
@@ -1698,6 +1922,25 @@ body::after {
   border: 1px solid rgba(0,0,0,0.2);
 }
 
+.settings-text-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: #FFFFFF;
+  font: 500 12.5px 'Manrope', sans-serif;
+  outline: none;
+}
+
+.settings-text-input:focus {
+  border-color: rgba(10,132,255,.6);
+}
+
+.settings-text-input::placeholder {
+  color: rgba(255,255,255,.35);
+}
+
 .settings-actions {
   display: flex;
   gap: 10px;
@@ -1926,6 +2169,120 @@ body::after {
 }
 
 /* ==========================================================================
+   WebUntis week grid (Stundenplan panel)
+   ========================================================================== */
+.untis-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.untis-grid-head {
+  display: grid;
+  grid-template-columns: 28px repeat(5, 1fr);
+  gap: 2px;
+  padding-bottom: 2px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(18,17,24,.72);
+  backdrop-filter: blur(6px);
+}
+
+.untis-time-col-head {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font: 700 8px ui-monospace, monospace;
+  color: rgba(255,255,255,.5);
+  line-height: 1.25;
+  padding-bottom: 3px;
+}
+
+.untis-day-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 2px 0;
+  border-radius: 6px;
+}
+.untis-day-head span:first-child {
+  font: 700 10px ui-monospace, monospace;
+  color: rgba(255,255,255,.6);
+  text-transform: uppercase;
+}
+.untis-day-head span:last-child {
+  font: 700 13px 'Bricolage Grotesque', sans-serif;
+  color: #FFFFFF;
+}
+.untis-day-head.is-today {
+  background: rgba(10,132,255,.16);
+}
+.untis-day-head.is-today span:last-child {
+  color: #64adff;
+}
+
+.untis-grid-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px repeat(5, 1fr);
+  gap: 2px;
+}
+
+.untis-time-axis {
+  position: relative;
+}
+
+.untis-time-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  font: 700 9px ui-monospace, monospace;
+  color: rgba(255,255,255,.5);
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 2px;
+}
+
+.untis-day-col {
+  position: relative;
+  border-left: 1px solid rgba(255,255,255,.06);
+}
+
+.untis-lesson {
+  position: absolute;
+  border-radius: 5px;
+  border: 1px solid;
+  padding: 1px 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.15;
+}
+
+.untis-lesson-subject {
+  font: 700 10px Manrope, sans-serif;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.untis-lesson-room {
+  font: 600 8px ui-monospace, monospace;
+  color: rgba(255,255,255,.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.untis-lesson.is-cancelled .untis-lesson-subject,
+.untis-lesson.is-cancelled .untis-lesson-room {
+  text-decoration: line-through;
+}
+
+/* ==========================================================================
    Thematic Subject Decor Band (top chrome reacts to selected subject)
    ========================================================================== */
 .subject-topdeco {
@@ -2116,3 +2473,98 @@ body::after {
   animation: toastFade 0.2s ease-out;
 }
 
+
+/* Text tool settings */
+.text-setting-label {
+  font: 600 10px ui-monospace, monospace;
+  letter-spacing: .06em;
+  color: rgba(233, 230, 223, 0.5);
+  margin-bottom: 6px;
+}
+
+.text-style-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.text-style-btn {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: rgba(233, 230, 223, 0.7);
+  font: 500 11.5px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-style-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #F1EEE7;
+}
+
+.text-style-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #F1EEE7;
+}
+
+.text-color-btn {
+  flex: 1;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.text-color-btn.active {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+.text-snap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  color: rgba(233, 230, 223, 0.7);
+  font: 500 11.5px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-snap-toggle.active {
+  background: rgba(62, 123, 216, 0.22);
+  border-color: rgba(62, 123, 216, 0.55);
+  color: #F1EEE7;
+}
+
+.text-insert-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px;
+  color: #F1EEE7;
+  font: 600 12px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-insert-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -11,6 +11,17 @@ import {
   Check,
 } from "lucide-react";
 import useLiquidGlass from "../hooks/useLiquidGlass";
+import {
+  loadPalmProfile,
+  palmGuardFromProfile,
+  PALM_PROFILE_DEFAULTS,
+  savePalmProfile,
+} from "../ink/palmSettings.js";
+import {
+  loadUntisCredentials,
+  saveUntisCredentials,
+} from "../ink/untisSettings.js";
+import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
 
 /* The settings top bar is a floating control bar, same family as the Library's
    pills — the content boxes below it stay CSS glass. */
@@ -24,10 +35,32 @@ export default function Settings({ onBack }) {
   const [autoImprove, setAutoImprove] = useState(true);
   const [safetyMode, setSafetyMode] = useState(false);
 
-  // Advanced sliders
-  const [detectionStrength, setDetectionStrength] = useState(56);
-  const [smallContacts, setSmallContacts] = useState(56);
-  const [contactWindow, setContactWindow] = useState(56);
+  // Advanced sliders — these are the palm guard's calibration knobs, not
+  // cosmetics: contact geometry is reported in CSS px and differs per panel.
+  const storedProfile = useRef(loadPalmProfile()).current;
+  const [detectionStrength, setDetectionStrength] = useState(storedProfile.detectionStrength);
+  const [smallContacts, setSmallContacts] = useState(storedProfile.smallContacts);
+  const [contactWindow, setContactWindow] = useState(storedProfile.contactWindow);
+
+  useEffect(() => {
+    savePalmProfile({ detectionStrength, smallContacts, contactWindow });
+  }, [detectionStrength, smallContacts, contactWindow]);
+
+  // WebUntis credentials — stored locally, sent to the proxy backend per request.
+  const storedUntis = useRef(loadUntisCredentials()).current;
+  const [untisSchool, setUntisSchool] = useState(storedUntis?.school || "");
+  const [untisServer, setUntisServer] = useState(storedUntis?.server || "");
+  const [untisUsername, setUntisUsername] = useState(storedUntis?.username || "");
+  const [untisPassword, setUntisPassword] = useState(storedUntis?.password || "");
+
+  useEffect(() => {
+    saveUntisCredentials({
+      school: untisSchool,
+      server: untisServer,
+      username: untisUsername,
+      password: untisPassword,
+    });
+  }, [untisSchool, untisServer, untisUsername, untisPassword]);
 
   // Modals & Overlays
   const [isCalibrating, setIsCalibrating] = useState(false);
@@ -36,7 +69,7 @@ export default function Settings({ onBack }) {
   const [toastMsg, setToastMsg] = useState(null);
 
   const testCanvasRef = useRef(null);
-  const isDrawingRef = useRef(false);
+  const testInputRef = useRef(createInputState());
 
   useLiquidGlass(glassRootRef, `${activeNav}:${isAdvanced}`);
 
@@ -46,40 +79,81 @@ export default function Settings({ onBack }) {
   };
 
   const handleResetProfile = () => {
-    setDetectionStrength(50);
-    setSmallContacts(50);
-    setContactWindow(50);
+    setDetectionStrength(PALM_PROFILE_DEFAULTS.detectionStrength);
+    setSmallContacts(PALM_PROFILE_DEFAULTS.smallContacts);
+    setContactWindow(PALM_PROFILE_DEFAULTS.contactWindow);
     setAutoImprove(true);
     setSafetyMode(false);
     showToast("Profil auf Standardwerte zurückgesetzt");
   };
 
-  // Test Canvas Handlers
-  const handlePointerDown = (e) => {
+  // Test Canvas Handlers — routed through the real guard with the live slider
+  // values, so this surface answers the question it is labelled with instead of
+  // drawing whatever touches it.
+  const testContext = (event) => {
     const canvas = testCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    isDrawingRef.current = true;
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+    return {
+      ctx: canvas.getContext("2d"),
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+      scale: scaleX,
+    };
+  };
+
+  const routeTestPointer = (event, phase) => {
+    const routed = reducePointerInput(
+      testInputRef.current,
+      {
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        timeStamp: event.timeStamp,
+        width: event.width,
+        height: event.height,
+        phase,
+      },
+      "stylus",
+      palmGuardFromProfile({ detectionStrength, smallContacts, contactWindow }),
+    );
+    testInputRef.current = routed.state;
+    return routed.intent;
+  };
+
+  const handlePointerDown = (e) => {
+    const target = testContext(e);
+    if (!target) return;
+    const intent = routeTestPointer(e, "down");
+    if (intent !== "start-draw" && intent !== "replace-draw") {
+      // Mark what was rejected: a guard that works otherwise looks like a dead
+      // canvas, and there would be nothing to calibrate against.
+      const radius = Math.max(8, ((e.width || 0) * target.scale) / 2);
+      target.ctx.beginPath();
+      target.ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+      target.ctx.strokeStyle = "rgba(255,69,58,.85)";
+      target.ctx.lineWidth = 1.5;
+      target.ctx.stroke();
+      return;
+    }
+    target.ctx.beginPath();
+    target.ctx.moveTo(target.x, target.y);
   };
 
   const handlePointerMove = (e) => {
-    if (!isDrawingRef.current) return;
-    const canvas = testCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-    ctx.strokeStyle = "#0a84ff";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
+    if (routeTestPointer(e, "move") !== "continue-draw") return;
+    const target = testContext(e);
+    if (!target) return;
+    target.ctx.strokeStyle = "#0a84ff";
+    target.ctx.lineWidth = 3;
+    target.ctx.lineCap = "round";
+    target.ctx.lineTo(target.x, target.y);
+    target.ctx.stroke();
   };
 
-  const handlePointerUp = () => {
-    isDrawingRef.current = false;
+  const handlePointerUp = (e) => {
+    routeTestPointer(e, e.type === "pointercancel" ? "cancel" : "up");
   };
 
   const clearTestCanvas = () => {
@@ -355,8 +429,8 @@ export default function Settings({ onBack }) {
                         Kontakt-Zeitfenster
                       </div>
                       <div className="settings-control-copy">
-                        {Math.round(contactWindow * 2.4)} ms für Auflegen und
-                        Bewegungswechsel
+                        {Math.round(contactWindow * 6)} ms Sperre nach dem
+                        Absetzen des Stifts
                       </div>
                     </div>
                     <div className="settings-slider-container">
@@ -492,6 +566,73 @@ export default function Settings({ onBack }) {
                   </div>
                 </div>
                 <div className="settings-switch on" />
+              </div>
+            </div>
+
+            <div className="settings-section-caption" style={{ marginTop: 20 }}>
+              WEBUNTIS
+            </div>
+            <p className="settings-detail-copy" style={{ marginBottom: 12 }}>
+              Zugangsdaten für den Stundenplan in der Bibliothek.
+            </p>
+            <div className="settings-group">
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Schule</div>
+                  <div className="settings-control-copy">
+                    Schulname wie in der WebUntis-App
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  className="settings-text-input"
+                  value={untisSchool}
+                  onChange={(e) => setUntisSchool(e.target.value)}
+                  placeholder="z. B. meine-schule"
+                  data-testid="untis-school-input"
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Server</div>
+                  <div className="settings-control-copy">
+                    z. B. neilo.webuntis.com
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  className="settings-text-input"
+                  value={untisServer}
+                  onChange={(e) => setUntisServer(e.target.value)}
+                  placeholder="server.webuntis.com"
+                  data-testid="untis-server-input"
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Benutzername</div>
+                </div>
+                <input
+                  type="text"
+                  className="settings-text-input"
+                  value={untisUsername}
+                  onChange={(e) => setUntisUsername(e.target.value)}
+                  autoComplete="username"
+                  data-testid="untis-username-input"
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Passwort</div>
+                </div>
+                <input
+                  type="password"
+                  className="settings-text-input"
+                  value={untisPassword}
+                  onChange={(e) => setUntisPassword(e.target.value)}
+                  autoComplete="current-password"
+                  data-testid="untis-password-input"
+                />
               </div>
             </div>
           </div>

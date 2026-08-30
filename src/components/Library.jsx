@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   LayoutGrid,
   Rows3,
@@ -37,6 +37,7 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
    matches the Ask AI pill's geometry rather than the panel's. */
@@ -2578,6 +2579,168 @@ function RecentListRow({ n, onOpen }) {
   );
 }
 
+const UNTIS_SUBJECT_PALETTE = [
+  { border: "#5ec8c0", bg: "rgba(94,200,192,.14)" },
+  { border: "#8f8fe8", bg: "rgba(143,143,232,.14)" },
+  { border: "#e8a15e", bg: "rgba(232,161,94,.14)" },
+  { border: "#e85e9e", bg: "rgba(232,94,158,.14)" },
+  { border: "#5e9ee8", bg: "rgba(94,158,232,.14)" },
+  { border: "#9ee85e", bg: "rgba(158,232,94,.14)" },
+];
+const UNTIS_WEEKDAYS_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const UNTIS_MONTHS_SHORT = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
+const UNTIS_PX_PER_MINUTE = 1.05;
+
+function untisSubjectColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return UNTIS_SUBJECT_PALETTE[hash % UNTIS_SUBJECT_PALETTE.length];
+}
+
+function untisISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function untisDateKey(date) {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function untisMinutes(hhmm) {
+  return Math.floor(hhmm / 100) * 60 + (hhmm % 100);
+}
+
+// Real WebUntis-style grid: time axis on the left, Mo–Fr columns, lessons
+// positioned by minute so overlapping courses (Kurse) can sit side by side.
+function UntisWeekGrid({ lessons }) {
+  const monday = new Date();
+  const dow = monday.getDay();
+  monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
+  monday.setHours(0, 0, 0, 0);
+
+  const days = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const todayKey = untisDateKey(new Date());
+
+  const lessonsByDay = days.map((d) => {
+    const key = untisDateKey(d);
+    return lessons.filter((l) => String(l.date) === key).sort((a, b) => a.startTime - b.startTime);
+  });
+  const allLessons = lessonsByDay.flat();
+
+  if (allLessons.length === 0) {
+    return (
+      <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
+        Diese Woche keine Stunden.
+      </div>
+    );
+  }
+
+  const minStart = Math.min(...allLessons.map((l) => untisMinutes(l.startTime)));
+  const maxEnd = Math.max(...allLessons.map((l) => untisMinutes(l.endTime)));
+  const gridHeight = (maxEnd - minStart) * UNTIS_PX_PER_MINUTE;
+  const axisTimes = [...new Set(allLessons.flatMap((l) => [l.startTime, l.endTime]))].sort((a, b) => a - b);
+
+  // Cluster mutually overlapping lessons per day so parallel courses split the column width.
+  const clusteredByDay = lessonsByDay.map((dayLessons) => {
+    const clusters = [];
+    let current = [];
+    let currentEnd = -Infinity;
+    for (const lesson of dayLessons) {
+      const start = untisMinutes(lesson.startTime);
+      if (current.length && start >= currentEnd) {
+        clusters.push(current);
+        current = [];
+        currentEnd = -Infinity;
+      }
+      current.push(lesson);
+      currentEnd = Math.max(currentEnd, untisMinutes(lesson.endTime));
+    }
+    if (current.length) clusters.push(current);
+    return clusters;
+  });
+
+  return (
+    <div className="untis-grid">
+      <div className="untis-grid-head">
+        <div className="untis-time-col-head">
+          <span>KW {untisISOWeek(monday)}</span>
+          <span>{UNTIS_MONTHS_SHORT[monday.getMonth()]}</span>
+        </div>
+        {days.map((d) => (
+          <div
+            key={untisDateKey(d)}
+            className={`untis-day-head ${untisDateKey(d) === todayKey ? "is-today" : ""}`}
+          >
+            <span>{UNTIS_WEEKDAYS_SHORT[d.getDay()]}</span>
+            <span>{d.getDate()}</span>
+          </div>
+        ))}
+      </div>
+      <div className="untis-grid-body" style={{ height: gridHeight }}>
+        <div className="untis-time-axis">
+          {axisTimes.map((t) => {
+            const top = (untisMinutes(t) - minStart) * UNTIS_PX_PER_MINUTE;
+            const label = String(t).padStart(4, "0");
+            return (
+              <div key={t} className="untis-time-mark" style={{ top }}>
+                {label.slice(0, 2)}:{label.slice(2)}
+              </div>
+            );
+          })}
+        </div>
+        {clusteredByDay.map((clusters, dayIndex) => (
+          <div key={dayIndex} className="untis-day-col">
+            {clusters.map((cluster) =>
+              cluster.map((lesson, slotIndex) => {
+                const start = untisMinutes(lesson.startTime);
+                const end = untisMinutes(lesson.endTime);
+                const top = (start - minStart) * UNTIS_PX_PER_MINUTE;
+                const height = Math.max(18, (end - start) * UNTIS_PX_PER_MINUTE - 2);
+                const width = 100 / cluster.length;
+                const left = slotIndex * width;
+                const subject = lesson.su?.[0]?.longname || lesson.su?.[0]?.name || "—";
+                const room = lesson.ro?.[0]?.name || "";
+                const cancelled = lesson.code === "cancelled";
+                const irregular = lesson.code === "irregular";
+                const color = cancelled
+                  ? { border: "#ff453a", bg: "rgba(255,69,58,.12)" }
+                  : irregular
+                  ? { border: "#ffb340", bg: "rgba(255,179,64,.12)" }
+                  : untisSubjectColor(subject);
+                return (
+                  <div
+                    key={lesson.id}
+                    className={`untis-lesson ${cancelled ? "is-cancelled" : ""}`}
+                    style={{
+                      top,
+                      height,
+                      left: `${left}%`,
+                      width: `calc(${width}% - 3px)`,
+                      borderColor: color.border,
+                      background: color.bg,
+                    }}
+                    title={`${subject}${room ? " · " + room : ""}`}
+                  >
+                    <span className="untis-lesson-subject">{subject}</span>
+                    {room && <span className="untis-lesson-room">{room}</span>}
+                  </div>
+                );
+              }),
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Library({
   onOpenNote,
   onOpenSettings,
@@ -2606,6 +2769,36 @@ export default function Library({
   const [agentTasks, setAgentTasks] = useState([]);
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
+
+  const [untisStatus, setUntisStatus] = useState("idle"); // idle|missing|loading|ready|error
+  const [untisLessons, setUntisLessons] = useState([]);
+  const [untisError, setUntisError] = useState("");
+
+  useEffect(() => {
+    const creds = loadUntisCredentials();
+    if (!creds?.school || !creds?.server || !creds?.username || !creds?.password) {
+      setUntisStatus("missing");
+      return;
+    }
+    setUntisStatus("loading");
+    fetch(UNTIS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(creds),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) throw new Error(data.error || "Stundenplan konnte nicht geladen werden.");
+        setUntisLessons(
+          [...(data.timetable || [])].sort((a, b) => a.startTime - b.startTime),
+        );
+        setUntisStatus("ready");
+      })
+      .catch((err) => {
+        setUntisError(err.message || "Stundenplan konnte nicht geladen werden.");
+        setUntisStatus("error");
+      });
+  }, []);
 
   useLiquidGlass(liquidGlassRootRef, selectedSubject?.id || "all");
 
@@ -2993,26 +3186,6 @@ export default function Library({
         </button>
       </div>
 
-      {/* Standalone Liquid Glass Circle Button (Image 1 Close / Reset Pod) */}
-      <button
-        className="liquid-glass-circle liquid-control liquid-control-reset"
-        data-liquid-glass-control="reset"
-        data-config={JSON.stringify({
-          cornerRadius: 26,
-          zRadius: 26,
-          button: true,
-        })}
-        onClick={() => {
-          setSearchQuery("");
-          if (selectedSubject) setSelectedSubject(null);
-          showToast("Filter & Suche zurückgesetzt");
-        }}
-        title="Schließen / Filter leeren"
-        style={{ position: "absolute", left: 556, top: 20, zIndex: 30 }}
-      >
-        <X size={19} strokeWidth={2.4} />
-      </button>
-
       {/* view toggle + new note (right aligned) */}
       <div
         className="liquid-glass-pill liquid-control liquid-control-view-sort"
@@ -3271,7 +3444,7 @@ export default function Library({
         className="lib-scroll"
         style={{
           position: "absolute",
-          left: agentOpen ? 570 : 96,
+          left: 570,
           top: 82,
           right: 0,
           bottom: 20,
@@ -3385,6 +3558,54 @@ export default function Library({
             ))}
           </div>
         )}
+      </div>
+
+      {/* left overview: shown in the space the agent panel occupies once it's collapsed */}
+      <div
+        className="agent-panel"
+        data-open={!agentOpen}
+        data-testid="left-overview-panel"
+        style={{ top: 82, bottom: 20 }}
+      >
+        <div className="lib-glass agent-panel-card" style={{ flex: "0 0 68%" }}>
+          <div className="agent-panel-head">
+            <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
+              Stundenplan
+            </span>
+            <span className="agent-badge">WEBUNTIS</span>
+          </div>
+          <div className="agent-panel-body">
+            {untisStatus === "missing" && (
+              <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
+                WebUntis-Zugangsdaten fehlen. In den Einstellungen unter „KI & Netzwerk“ eintragen.
+              </div>
+            )}
+            {untisStatus === "loading" && (
+              <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
+                Stundenplan wird geladen…
+              </div>
+            )}
+            {untisStatus === "error" && (
+              <div className="agent-card" style={{ color: "rgba(255,69,58,.85)", font: "500 12.5px Manrope,sans-serif" }}>
+                {untisError}
+              </div>
+            )}
+            {untisStatus === "ready" && <UntisWeekGrid lessons={untisLessons} />}
+          </div>
+        </div>
+        <div className="lib-glass agent-panel-card">
+          <div className="agent-panel-head">
+            <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
+              Neuigkeiten
+            </span>
+          </div>
+          <div className="agent-panel-body">
+            {/* ponytail: placeholder, add real feed later */}
+            <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
+              Noch keine Neuigkeiten.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* agent panel */}
