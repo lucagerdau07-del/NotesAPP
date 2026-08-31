@@ -295,7 +295,14 @@ function appendBoundedPast(past, present, limit) {
 }
 
 export function executeInkCommand(history, command) {
-  const next = applyInkCommand(history.present, command);
+  return executeInkCommands(history, [command]);
+}
+
+// One history entry for a whole batch: an agent's single tool call can emit
+// dozens of strokes, and undo should take back the paragraph, not one stroke.
+export function executeInkCommands(history, commands) {
+  const list = Array.isArray(commands) ? commands : [];
+  const next = list.reduce(applyInkCommand, history.present);
   if (next === history.present) return history;
   return {
     past: appendBoundedPast(history.past, history.present, history.limit),

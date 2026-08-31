@@ -18,6 +18,7 @@ function Editor({ activeNote, onBack }) {
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [isImmersive, setIsImmersive] = useState(false);
+  const inkControllerRef = useRef(null);
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
 
@@ -114,6 +115,9 @@ function Editor({ activeNote, onBack }) {
           <AiChatPanel
             onClose={() => setChatOpen(false)}
             noteTitle={activeNote?.title}
+            subject={activeNote?.subject}
+            documentId={String(activeNote?.id ?? "default")}
+            inkControllerRef={inkControllerRef}
           />
         )}
       </div>
@@ -127,6 +131,7 @@ function Editor({ activeNote, onBack }) {
           onPageCountChange={setPageCount}
           onCurrentPageChange={setCurrentPage}
           isImmersive={isImmersive}
+          inkControllerRef={inkControllerRef}
         />
       </div>
     </div>

@@ -21,6 +21,7 @@ import {
   loadUntisCredentials,
   saveUntisCredentials,
 } from "../ink/untisSettings.js";
+import { loadAgentConfig, saveAgentConfig } from "../agent/agentSettings.js";
 import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
 
 /* The settings top bar is a floating control bar, same family as the Library's
@@ -45,6 +46,16 @@ export default function Settings({ onBack }) {
   useEffect(() => {
     savePalmProfile({ detectionStrength, smallContacts, contactWindow });
   }, [detectionStrength, smallContacts, contactWindow]);
+
+  // Agent backend — the OpenRouter key stays in the Hugging Face Space secret,
+  // so only the proxy address and its optional access key live here.
+  const storedAgent = useRef(loadAgentConfig()).current;
+  const [agentUrl, setAgentUrl] = useState(storedAgent.baseUrl);
+  const [agentKey, setAgentKey] = useState(storedAgent.accessKey);
+
+  useEffect(() => {
+    saveAgentConfig({ baseUrl: agentUrl, accessKey: agentKey });
+  }, [agentUrl, agentKey]);
 
   // WebUntis credentials — stored locally, sent to the proxy backend per request.
   const storedUntis = useRef(loadUntisCredentials()).current;
@@ -566,6 +577,47 @@ export default function Settings({ onBack }) {
                   </div>
                 </div>
                 <div className="settings-switch on" />
+              </div>
+            </div>
+
+            <div className="settings-section-caption" style={{ marginTop: 20 }}>
+              KI-BACKEND
+            </div>
+            <p className="settings-detail-copy" style={{ marginBottom: 12 }}>
+              Chat und Agent laufen über den eigenen Server. Der OpenRouter-Schlüssel
+              liegt dort als Secret und nie auf dem Tablet.
+            </p>
+            <div className="settings-group">
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Adresse</div>
+                  <div className="settings-control-copy">
+                    z. B. https://luca448-app-backend.hf.space/notes
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  className="settings-text-input"
+                  value={agentUrl}
+                  onChange={(e) => setAgentUrl(e.target.value)}
+                  placeholder="https://…/notes"
+                  data-testid="agent-url-input"
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Zugriffsschlüssel</div>
+                  <div className="settings-control-copy">
+                    Nur nötig, wenn der Server NOTES_ACCESS_TOKEN gesetzt hat
+                  </div>
+                </div>
+                <input
+                  type="password"
+                  className="settings-text-input"
+                  value={agentKey}
+                  onChange={(e) => setAgentKey(e.target.value)}
+                  data-testid="agent-key-input"
+                />
               </div>
             </div>
 

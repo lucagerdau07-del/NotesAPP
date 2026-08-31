@@ -14,6 +14,7 @@ export default function SplitLayout({
   onPageCountChange,
   onCurrentPageChange,
   isImmersive,
+  inkControllerRef,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -32,6 +33,12 @@ export default function SplitLayout({
     error: sourceError,
     retry: retrySource,
   } = useDocumentSource({ note });
+
+  // The chat panel lives up in App (it is a child of the glass rail), but its
+  // agent tools write to this document. A ref rather than a state callback:
+  // the controller object is new on every render, so lifting it as state would
+  // re-render this tree on every render of it.
+  if (inkControllerRef) inkControllerRef.current = inkController;
 
   const toolState = {
     color: inkController.color,

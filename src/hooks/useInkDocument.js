@@ -3,6 +3,7 @@ import {
   createInkDocument,
   createInkHistory,
   executeInkCommand,
+  executeInkCommands,
   redoInkHistory,
   undoInkHistory,
 } from "../ink/inkDocument.js";
@@ -80,6 +81,26 @@ export default function useInkDocument({
   if (preferences.documentId !== activeDocumentId) {
     setPreferences(loadPreferences(repository, activeDocumentId));
   }
+
+  // The agent needs the document *after* its own commands land, within the same
+  // tick — React state hasn't flushed yet at that point, so the ref is the
+  // source of truth for batched writes and every one of them chains off it.
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  const applyCommands = useCallback((commands) => {
+    const documentId = documentIdRef.current;
+    const base =
+      historyRef.current.present.documentId === documentId
+        ? historyRef.current
+        : createHistoryForDocument(repositoryRef.current, documentId);
+    const next = executeInkCommands(base, commands);
+    historyRef.current = next;
+    setHistory(next);
+    return next.present;
+  }, []);
+
+  const getDocument = useCallback(() => historyRef.current.present, []);
 
   const applyCommand = useCallback((command) => {
     setHistory((current) => {
@@ -226,6 +247,8 @@ export default function useInkDocument({
 
   return {
     document: history.present,
+    applyCommands,
+    getDocument,
     commitStroke,
     removeStrokes,
     clearDocument,

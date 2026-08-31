@@ -68,6 +68,7 @@ export default function WritingZone({
     document: inkDocument,
     commitStroke: inkController?.commitStroke,
     removeStrokes: inkController?.removeStrokes,
+    onDraftAppend: () => redrawInkCanvasRef.current?.(),
   });
 
   redrawInkCanvasRef.current = () => {
