@@ -1,3 +1,9 @@
+import {
+  createPageObject,
+  isPageObject,
+  pageObjectsOf,
+} from "./pageObjects.js";
+
 export const INK_SCHEMA_VERSION = 1;
 
 function normalizePageIds(documentId, pages) {
@@ -19,6 +25,7 @@ export function createInkDocument(documentId, pages = 1) {
     documentId: id,
     pages: normalizePageIds(id, pages).map((pageId) => ({ id: pageId })),
     strokes: [],
+    objects: [],
     updatedAt: 0,
   };
 }
@@ -124,6 +131,10 @@ export function isInkDocument(value) {
     ) &&
     Array.isArray(value.strokes) &&
     value.strokes.every(isStroke) &&
+    // Documents saved before page objects existed simply have no field; that
+    // reads as "no objects" rather than as a broken document.
+    (value.objects === undefined ||
+      (Array.isArray(value.objects) && value.objects.every(isPageObject))) &&
     Number.isFinite(value.updatedAt)
   );
 }
@@ -177,9 +188,87 @@ function applyInkCommand(document, command) {
         : withUpdatedAt(document, { strokes });
     }
     case "clear-document":
-      return document.strokes.length === 0
+      return document.strokes.length === 0 && pageObjectsOf(document).length === 0
         ? document
-        : withUpdatedAt(document, { strokes: [] });
+        : withUpdatedAt(document, { strokes: [], objects: [] });
+    case "add-object": {
+      const object = createPageObject(command.object);
+      if (!isPageObject(object)) return document;
+      return withUpdatedAt(document, {
+        objects: [...pageObjectsOf(document), object],
+      });
+    }
+    case "update-object": {
+      const objects = pageObjectsOf(document);
+      const index = objects.findIndex((item) => item.id === command.objectId);
+      if (index < 0 || !command.changes) return document;
+      const next = createPageObject({
+        ...objects[index],
+        ...command.changes,
+        id: objects[index].id,
+      });
+      return withUpdatedAt(document, {
+        objects: objects.map((item, i) => (i === index ? next : item)),
+      });
+    }
+    case "remove-objects": {
+      const ids = Array.isArray(command.objectIds)
+        ? new Set(command.objectIds)
+        : new Set();
+      if (ids.size === 0) return document;
+      const objects = pageObjectsOf(document).filter((item) => !ids.has(item.id));
+      return objects.length === pageObjectsOf(document).length
+        ? document
+        : withUpdatedAt(document, { objects });
+    }
+    case "transform-selection": {
+      const strokeIds = Array.isArray(command.strokeIds)
+        ? new Set(command.strokeIds)
+        : new Set();
+      const objectIds = Array.isArray(command.objectIds)
+        ? new Set(command.objectIds)
+        : new Set();
+      if (strokeIds.size === 0 && objectIds.size === 0) return document;
+      const dx = Number.isFinite(command.dx) ? command.dx : 0;
+      const dy = Number.isFinite(command.dy) ? command.dy : 0;
+      const scaleX = Number.isFinite(command.scaleX) ? command.scaleX : 1;
+      const scaleY = Number.isFinite(command.scaleY) ? command.scaleY : 1;
+      const originX = Number.isFinite(command.originX) ? command.originX : 0;
+      const originY = Number.isFinite(command.originY) ? command.originY : 0;
+      // Moving the origin along with every point means a plain move (scale 1)
+      // is just the dx/dy translation, and a corner-drag resize is the same
+      // formula with dx/dy at 0 — one mapping covers both gestures.
+      const mapPoint = (x, y) => ({
+        x: originX + (x - originX) * scaleX + dx,
+        y: originY + (y - originY) * scaleY + dy,
+      });
+      const scale = (Math.abs(scaleX) + Math.abs(scaleY)) / 2;
+      let changed = false;
+      const strokes = document.strokes.map((stroke) => {
+        if (!strokeIds.has(stroke.id)) return stroke;
+        changed = true;
+        return {
+          ...stroke,
+          points: stroke.points.map((point) => mapPoint(point.x, point.y)),
+          width: Math.max(0.5, stroke.width * scale),
+        };
+      });
+      const objects = pageObjectsOf(document).map((object) => {
+        if (!objectIds.has(object.id)) return object;
+        changed = true;
+        const topLeft = mapPoint(object.x, object.y);
+        return createPageObject({
+          ...object,
+          x: topLeft.x,
+          y: topLeft.y,
+          width: object.width * scaleX,
+          height: object.height * scaleY,
+          strokeWidth: object.strokeWidth * scale,
+          fontSize: object.fontSize * scale,
+        });
+      });
+      return changed ? withUpdatedAt(document, { strokes, objects }) : document;
+    }
     case "add-page": {
       const page = createNextPage(document, command.page);
       return page === null

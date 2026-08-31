@@ -108,9 +108,35 @@ export default function useInkDocument({
   const clearDocument = useCallback(() => {
     applyCommand({ type: "clear-document" });
   }, [applyCommand]);
+  const addObject = useCallback(
+    (object) => {
+      applyCommand({ type: "add-object", object });
+    },
+    [applyCommand],
+  );
+  const updateObject = useCallback(
+    (objectId, changes) => {
+      applyCommand({ type: "update-object", objectId, changes });
+    },
+    [applyCommand],
+  );
+  const removeObjects = useCallback(
+    (objectIds) => {
+      applyCommand({ type: "remove-objects", objectIds });
+    },
+    [applyCommand],
+  );
   const addPage = useCallback(
     (page) => {
       applyCommand({ type: "add-page", page });
+    },
+    [applyCommand],
+  );
+  // One command for the whole lasso selection (strokes + objects together),
+  // so a single drag is a single undo step no matter how many items moved.
+  const transformSelection = useCallback(
+    (strokeIds, objectIds, transform) => {
+      applyCommand({ type: "transform-selection", strokeIds, objectIds, ...transform });
     },
     [applyCommand],
   );
@@ -203,7 +229,11 @@ export default function useInkDocument({
     commitStroke,
     removeStrokes,
     clearDocument,
+    addObject,
+    updateObject,
+    removeObjects,
     addPage,
+    transformSelection,
     undo,
     redo,
     canUndo: history.past.length > 0,

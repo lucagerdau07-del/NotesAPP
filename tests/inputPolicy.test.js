@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createInputState, reducePointerInput } from '../src/ink/inputPolicy.js';
+import {
+  createInputState,
+  PALM_GUARD_DEFAULTS,
+  reducePointerInput,
+} from '../src/ink/inputPolicy.js';
 
-const event = (phase, pointerId, pointerType, timeStamp = 1_000) => ({
+const event = (phase, pointerId, pointerType, timeStamp = 1_000, size) => ({
   phase, pointerId, pointerType, timeStamp,
+  ...(size === undefined ? {} : { width: size, height: size }),
 });
+const FINGER_PX = 20;
+const PALM_PX = PALM_GUARD_DEFAULTS.palmContactPx + 10;
 
 describe('pointer admission and ownership policy', () => {
   it('ignores every touch phase while a pen owns the stroke', () => {
@@ -103,5 +110,61 @@ describe('pointer admission and ownership policy', () => {
     result = reducePointerInput(result.state, event('down', 2, 'touch'), 'finger');
     expect(result.intent).toBe('navigate');
     expect(result.state.drawingPointerId).toBeNull();
+  });
+
+  it('rejects a wide contact patch and admits a fingertip-sized one', () => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'finger');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, FINGER_PX), 'finger');
+    expect(result.intent).toBe('start-draw');
+  });
+
+  it('treats a missing contact patch as unknown rather than as a palm', () => {
+    // Panels without touch-major report 1x1 for everything; sizing must abstain.
+    const result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, 1), 'finger');
+    expect(result.intent).toBe('start-draw');
+  });
+
+  it('blocks a palm that lands before the pen tip, via hover proximity', () => {
+    // Hover moves arrive while the pen is still off the glass and the hand is
+    // already down — the pen-ownership guard alone would be too late here.
+    let result = reducePointerInput(createInputState(), event('move', 7, 'pen', 1_000), 'stylus');
+    expect(result.state.drawingPointerId).toBeNull();
+    result = reducePointerInput(result.state, event('down', 9, 'touch', 1_100, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(result.state, event('up', 9, 'touch', 1_150, FINGER_PX), 'stylus');
+    result = reducePointerInput(result.state, event('down', 10, 'touch', 1_700, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('navigate');
+  });
+
+  it('blocks the pinky riding next to a rejected palm in stylus mode', () => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(result.state, event('down', 2, 'touch', 1_020, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('ignore');
+  });
+
+  it('keeps blocking briefly after the palm lifts, then releases the surface', () => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
+    result = reducePointerInput(result.state, event('up', 1, 'touch', 1_100, PALM_PX), 'stylus');
+    result = reducePointerInput(result.state, event('down', 2, 'touch', 1_200, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(result.state, event('up', 2, 'touch', 1_250, FINGER_PX), 'stylus');
+    result = reducePointerInput(result.state, event('down', 3, 'touch', 1_600, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('navigate');
+  });
+
+  it('keeps touch usable right after a pen pan in move mode', () => {
+    // The pen pans there instead of writing, so its guards would only cost gestures.
+    let result = reducePointerInput(createInputState(), event('up', 7, 'pen', 1_000), 'move');
+    result = reducePointerInput(result.state, event('down', 9, 'touch', 1_005, FINGER_PX), 'move');
+    expect(result.intent).toBe('navigate');
+  });
+
+  it('does not let one rejected palm lock out the writing finger in finger mode', () => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'finger');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(result.state, event('down', 2, 'touch', 1_020, FINGER_PX), 'finger');
+    expect(result.intent).toBe('start-draw');
   });
 });

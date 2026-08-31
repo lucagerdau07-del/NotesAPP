@@ -12,6 +12,7 @@ describe('ink document schema', () => {
       documentId: 'note-7',
       pages: [{ id: 'note-7-page-1' }, { id: 'note-7-page-2' }],
       strokes: [],
+      objects: [],
       updatedAt: 0
     });
   });
@@ -139,5 +140,36 @@ describe('ink command history', () => {
       strokes: [stroke('line', 'note-page-1', [{ x: 0, y: 10 }, { x: 100, y: 10 }])]
     };
     expect(findIntersectingStrokeIds(document, 'note-page-1', [{ x: 50, y: 13 }], 4)).toEqual(['line']);
+  });
+
+  it('moves a lasso selection of strokes and objects as one undo step', () => {
+    let history = createInkHistory(createInkDocument('note'));
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a', 'note-page-1', [{ x: 10, y: 10 }, { x: 20, y: 20 }]) });
+    history = executeInkCommand(history, { type: 'add-object', object: { id: 'o1', pageId: 'note-page-1', type: 'rect', x: 5, y: 5, width: 10, height: 10 } });
+    const beforeMove = history.present;
+    history = executeInkCommand(history, {
+      type: 'transform-selection', strokeIds: ['a'], objectIds: ['o1'], dx: 100, dy: 50,
+    });
+    expect(history.present.strokes[0].points).toEqual([{ x: 110, y: 60 }, { x: 120, y: 70 }]);
+    expect(history.present.objects[0]).toMatchObject({ x: 105, y: 55 });
+    expect(beforeMove.strokes[0].points).toEqual([{ x: 10, y: 10 }, { x: 20, y: 20 }]);
+    history = undoInkHistory(history);
+    expect(history.present.strokes[0].points).toEqual([{ x: 10, y: 10 }, { x: 20, y: 20 }]);
+  });
+
+  it('scales a lasso selection around the drag origin', () => {
+    let history = createInkHistory(createInkDocument('note'));
+    history = executeInkCommand(history, { type: 'commit-stroke', stroke: stroke('a', 'note-page-1', [{ x: 0, y: 0 }, { x: 10, y: 10 }]) });
+    history = executeInkCommand(history, {
+      type: 'transform-selection', strokeIds: ['a'], objectIds: [], scaleX: 2, scaleY: 2, originX: 0, originY: 0,
+    });
+    expect(history.present.strokes[0].points).toEqual([{ x: 0, y: 0 }, { x: 20, y: 20 }]);
+    expect(history.present.strokes[0].width).toBe(6);
+  });
+
+  it('ignores a transform-selection command that names no strokes or objects', () => {
+    const history = createInkHistory(createInkDocument('note'));
+    const next = executeInkCommand(history, { type: 'transform-selection', strokeIds: [], objectIds: [], dx: 5 });
+    expect(next).toBe(history);
   });
 });

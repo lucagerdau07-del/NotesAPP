@@ -60,10 +60,12 @@ describe('useInkPointer', () => {
   it('exposes active and recent pen blocking without mutating policy state', () => {
     const { result } = renderInkPointer();
     act(() => result.current.onPointerDown({ ...pointer(7, 'pen', 1, 2), timeStamp: 1_000 }));
-    expect(result.current.shouldBlockTouch(1_010, 9)).toBe(true);
+    const touch = (timeStamp) => ({ pointerId: 9, pointerType: 'touch', timeStamp });
+    expect(result.current.shouldBlockTouch(touch(1_010))).toBe(true);
     act(() => result.current.onPointerUp({ ...pointer(7, 'pen', 1, 2), timeStamp: 1_100 }));
-    expect(result.current.shouldBlockTouch(1_399, 9)).toBe(true);
-    expect(result.current.shouldBlockTouch(1_400, 9)).toBe(false);
+    // The pen was last seen at 1_100, so the hover guard outlasts the pen-up guard.
+    expect(result.current.shouldBlockTouch(touch(1_699))).toBe(true);
+    expect(result.current.shouldBlockTouch(touch(1_700))).toBe(false);
   });
 
   it('commits one pen stroke and ignores palm move and up events', () => {

@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState } from "react";
-import { createInputState, reducePointerInput, shouldBlockTouch as policyBlocksTouch } from "../ink/inputPolicy.js";
+import {
+  createInputState,
+  PALM_GUARD_DEFAULTS,
+  reducePointerInput,
+  shouldBlockTouch as policyBlocksTouch,
+} from "../ink/inputPolicy.js";
 import { findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
 
 let nextStrokeNumber = 0;
@@ -49,6 +54,9 @@ function ownsLivePage(owner, document) {
     document.pages.some((page) => page?.id === owner.pageId)
   );
 }
+
+const palmGuard = (options) =>
+  options.palmGuard ? { ...PALM_GUARD_DEFAULTS, ...options.palmGuard } : PALM_GUARD_DEFAULTS;
 
 export default function useInkPointer(options) {
   const optionsRef = useRef(options);
@@ -100,9 +108,14 @@ export default function useInkPointer(options) {
         pointerId: event.pointerId,
         pointerType: event.pointerType,
         timeStamp: event.timeStamp,
+        // Contact geometry is what separates a fingertip from a palm; without
+        // it the guard is blind to a hand that lands before the pen does.
+        width: event.width,
+        height: event.height,
         phase,
       },
       inputMode,
+      palmGuard(optionsRef.current),
     );
     inputStateRef.current = routed.state;
     return routed;
@@ -260,13 +273,19 @@ export default function useInkPointer(options) {
     onPointerMove,
     onPointerUp,
     onPointerCancel,
-    shouldBlockTouch: (timeStamp, pointerId) =>
-      policyBlocksTouch(inputStateRef.current, timeStamp, pointerId),
+    shouldBlockTouch: (event) =>
+      policyBlocksTouch(
+        inputStateRef.current,
+        event,
+        palmGuard(optionsRef.current),
+        optionsRef.current.inputMode || "stylus",
+      ),
     abortActiveStroke: (pointerId, timeStamp) => {
       const routed = reducePointerInput(
         inputStateRef.current,
         { pointerId, pointerType: 'touch', timeStamp, phase: 'abort' },
-        optionsRef.current.inputMode || 'stylus'
+        optionsRef.current.inputMode || 'stylus',
+        palmGuard(optionsRef.current),
       );
       inputStateRef.current = routed.state;
       if (routed.intent === 'cancel-draw') discardDraft();

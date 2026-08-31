@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Eraser,
@@ -6,6 +6,7 @@ import {
   Undo2,
   Redo2,
   Lasso,
+  LassoSelect,
   Highlighter,
   PenLine,
   Layers,
@@ -13,7 +14,6 @@ import {
   File,
   Grid,
   Columns2,
-  ArrowLeft,
   X,
   Palette,
   Sliders,
@@ -25,15 +25,38 @@ import {
   Plus,
   Move,
   Pointer,
+  ArrowUpRight,
+  Minus,
+  Square,
+  Circle,
+  Type,
+  Image as ImageIcon,
+  Link2,
+  Shapes,
+  PaintBucket,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Bold,
+  Italic,
+  Baseline,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useLongPress from "../hooks/useLongPress";
 import useInkPointer from "../hooks/useInkPointer";
+import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
 import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { INPUT_MODES } from "../ink/inputPolicy";
 import DocumentPage from "./document/DocumentPage";
+import PageObjectLayer from "./document/PageObjectLayer";
+import LassoSelectionLayer from "./document/LassoSelectionLayer";
+import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
+import { readImageObjectSource } from "../ink/imageObject";
+import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
+import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
+import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso";
 
 const INPUT_MODE_LABELS = {
   stylus: "Stift",
@@ -45,6 +68,257 @@ const INPUT_MODE_ICONS = {
   finger: Pointer,
   move: Move,
 };
+
+// Default footprint per type, in page units. Inserts land centered on the
+// visible area, so these only decide how big the thing starts out.
+const DESIGN_TOOLS = [
+  { id: "arrow", name: "Pfeil", icon: <ArrowUpRight size={15} />, width: 180, height: 90 },
+  { id: "line", name: "Linie", icon: <Minus size={15} />, width: 200, height: 0 },
+  { id: "rect", name: "Rahmen", icon: <Square size={15} />, width: 200, height: 130 },
+  { id: "ellipse", name: "Kreis", icon: <Circle size={15} />, width: 170, height: 170 },
+  { id: "image", name: "Bild", icon: <ImageIcon size={15} />, width: 260, height: 180 },
+  { id: "link", name: "Link", icon: <Link2 size={15} />, width: 230, height: 30 },
+];
+
+// The text tool is armed from its own rail button, not from the shapes
+// popover, so it keeps its settings visible while placing.
+// A plain click starts this small and grows to fit as you type — no reason
+// to seed it with a wide placeholder box first. A dragged box keeps whatever
+// size the drag defined instead (see draftPlacement handling below).
+const TEXT_TOOL = {
+  id: "text",
+  name: "Text",
+  icon: <Type size={15} />,
+  width: 24,
+  height: 34,
+};
+
+const TEXT_SIZE_PRESETS = [14, 18, 24, 32, 48];
+
+// Rail button icon mirrors whichever pen type is currently picked, so the
+// standalone marker button (now folded into the pen popover) isn't missed.
+const PEN_TOOL_ICONS = {
+  pen: PenLine,
+  fountain: PenTool,
+  highlighter: Highlighter,
+  pencil: Pencil,
+};
+
+function DesignToolsPopover({ onInsert, onClose }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".design-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover design-tools-popover"
+      style={{ top: 120, width: 250 }}
+      data-testid="design-tools-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Shapes size={14} /> Einfügen
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="tool-types-grid">
+        {DESIGN_TOOLS.map((item) => (
+          <button
+            key={item.id}
+            className="tool-type-btn"
+            data-testid={`insert-${item.id}`}
+            onClick={() => onInsert(item)}
+          >
+            {item.icon}
+            <span>{item.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TEXT_COLORS = ["#EFECE4", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#141418"];
+
+// Edits the selected text object when there is one, otherwise the defaults the
+// next insert will use — same controls either way.
+function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".text-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  const alignments = [
+    { id: "left", icon: <AlignLeft size={14} /> },
+    { id: "center", icon: <AlignCenter size={14} /> },
+    { id: "right", icon: <AlignRight size={14} /> },
+  ];
+  const snapHint = { lined: "Linien", grid: "Karo", dotted: "Punktraster" }[paperStyle] ||
+    "unsichtbarem Raster";
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover text-settings-popover"
+      style={{ top: 120, width: 250 }}
+      data-testid="text-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Type size={14} /> {hasSelection ? "Text bearbeiten" : "Text-Einstellungen"}
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="tool-types-grid">
+        {FONT_STACKS.map((font) => (
+          <button
+            key={font.id}
+            className={`tool-type-btn ${style.fontFamily === font.id ? "active" : ""}`}
+            data-testid={`text-font-${font.id}`}
+            onClick={() => onStyleChange({ fontFamily: font.id })}
+          >
+            <span style={{ fontFamily: font.stack, fontSize: 15 }}>Ag</span>
+            <span>{font.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="text-setting-label">
+        SCHRIFTGRÖSSE ({style.snapToLines ? "vom Raster" : `${style.fontSize}px`})
+      </div>
+      <div className="thickness-presets">
+        {TEXT_SIZE_PRESETS.map((size) => (
+          <button
+            key={size}
+            className={`thickness-preset-btn ${style.fontSize === size ? "active" : ""}`}
+            disabled={style.snapToLines}
+            onClick={() => onStyleChange({ fontSize: size })}
+            title={`${size}px`}
+          >
+            <span style={{ fontSize: Math.min(18, size * 0.42), lineHeight: 1 }}>A</span>
+          </button>
+        ))}
+      </div>
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min="8"
+          max="96"
+          step="1"
+          value={style.fontSize}
+          disabled={style.snapToLines}
+          onChange={(e) => onStyleChange({ fontSize: parseInt(e.target.value, 10) })}
+          className="thickness-slider"
+          data-testid="text-size-slider"
+        />
+        <span className="thickness-val">{style.fontSize}px</span>
+      </div>
+
+      <div className="text-setting-label">AUSRICHTUNG & STIL</div>
+      <div className="text-style-row">
+        {alignments.map((item) => (
+          <button
+            key={item.id}
+            className={`text-style-btn ${style.textAlign === item.id ? "active" : ""}`}
+            data-testid={`text-align-${item.id}`}
+            onClick={() => onStyleChange({ textAlign: item.id })}
+          >
+            {item.icon}
+          </button>
+        ))}
+        <button
+          className={`text-style-btn ${style.bold ? "active" : ""}`}
+          data-testid="text-bold"
+          onClick={() => onStyleChange({ bold: !style.bold })}
+        >
+          <Bold size={14} />
+        </button>
+        <button
+          className={`text-style-btn ${style.italic ? "active" : ""}`}
+          data-testid="text-italic"
+          onClick={() => onStyleChange({ italic: !style.italic })}
+        >
+          <Italic size={14} />
+        </button>
+      </div>
+
+      <div className="text-setting-label">FARBE</div>
+      <div className="text-style-row">
+        {TEXT_COLORS.map((swatch) => (
+          <button
+            key={swatch}
+            className={`text-color-btn ${
+              style.color?.toLowerCase() === swatch.toLowerCase() ? "active" : ""
+            }`}
+            style={{ background: swatch }}
+            title={swatch}
+            onClick={() => onStyleChange({ color: swatch })}
+          />
+        ))}
+      </div>
+
+      <div className="text-setting-label">AUF LINIEN SCHREIBEN</div>
+      <button
+        className={`text-snap-toggle ${style.snapToLines ? "active" : ""}`}
+        data-testid="text-snap-toggle"
+        onClick={() => onStyleChange({ snapToLines: !style.snapToLines })}
+      >
+        <Baseline size={14} />
+        <span>{style.snapToLines ? `Rastet auf ${snapHint}` : "Frei platzieren"}</span>
+      </button>
+      {style.snapToLines && (
+        <div className="text-style-row" style={{ marginTop: 6 }}>
+          {[1, 2].map((step) => (
+            <button
+              key={step}
+              className={`text-style-btn ${style.lineStep === step ? "active" : ""}`}
+              data-testid={`text-line-step-${step}`}
+              onClick={() => onStyleChange({ lineStep: step })}
+              style={{ flex: 1 }}
+            >
+              {step === 1 ? "1 Zeile" : "2 Zeilen"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!hasSelection && (
+        <button className="text-insert-btn" data-testid="text-insert-btn" onClick={onInsert}>
+          <Plus size={14} /> Text einfügen
+        </button>
+      )}
+    </div>
+  );
+}
 
 function PenSettingsPopover({
   tool,
@@ -283,6 +557,45 @@ function EraserSettingsPopover({
   );
 }
 
+function PresetSwatch({ color, isActive, onSelect, onDelete }) {
+  const isLongPressRef = useRef(false);
+  const timerRef = useRef(null);
+
+  const handlePointerDown = () => {
+    isLongPressRef.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onDelete();
+    }, 450);
+  };
+
+  const cancelPress = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  return (
+    <button
+      className={`color-preset-btn ${isActive ? "active" : ""}`}
+      style={{ backgroundColor: color }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={cancelPress}
+      onPointerLeave={cancelPress}
+      onPointerCancel={cancelPress}
+      onClick={() => {
+        if (isLongPressRef.current) {
+          isLongPressRef.current = false;
+          return;
+        }
+        onSelect();
+      }}
+      title={`${color} (gedrückt halten zum Löschen)`}
+    />
+  );
+}
+
 function ColorWheelPopover({
   customColors,
   activePickerIndex,
@@ -293,6 +606,21 @@ function ColorWheelPopover({
   const popoverRef = useRef(null);
   const curColor = customColors[activePickerIndex] || "#EFECE4";
   const [hexInputValue, setHexInputValue] = useState(curColor);
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [savedColors, setSavedColors] = useState([
+    "#EFECE4",
+    "#A09D95",
+    "#484441",
+    "#3E7BD8",
+    "#2AA9DF",
+    "#4FA66B",
+    "#84CC16",
+    "#D4A937",
+    "#E87A38",
+    "#D8615B",
+    "#E05285",
+    "#9353D3",
+  ]);
 
   useEffect(() => {
     setHexInputValue(curColor);
@@ -312,25 +640,11 @@ function ColorWheelPopover({
     return () => document.removeEventListener("pointerdown", handleDown);
   }, [onClose]);
 
-  const presetPalette = [
-    "#EFECE4",
-    "#A09D95",
-    "#484441",
-    "#3E7BD8",
-    "#2AA9DF",
-    "#4FA66B",
-    "#84CC16",
-    "#D4A937",
-    "#E87A38",
-    "#D8615B",
-    "#E05285",
-    "#9353D3",
-  ];
-
   const handleHexSubmit = (val) => {
     setHexInputValue(val);
     if (/^#[0-9A-F]{6}$/i.test(val)) {
       onColorChange(activePickerIndex, val);
+      setSelectedPreset(null);
     }
   };
 
@@ -361,7 +675,10 @@ function ColorWheelPopover({
             key={idx}
             className={`slot-circle ${activePickerIndex === idx ? "active" : ""}`}
             style={{ backgroundColor: col }}
-            onClick={() => setActivePickerIndex(idx)}
+            onClick={() => {
+              setActivePickerIndex(idx);
+              setSelectedPreset(null);
+            }}
             title={`Slot ${idx + 1} anpassen`}
           />
         ))}
@@ -373,23 +690,40 @@ function ColorWheelPopover({
         onChange={(newColor) => {
           onColorChange(activePickerIndex, newColor);
           setHexInputValue(newColor.toUpperCase());
+          setSelectedPreset(null);
         }}
       />
 
       {/* Color Presets Palette */}
       <div className="color-presets-grid">
-        {presetPalette.map((pCol) => (
-          <button
+        {savedColors.map((pCol) => (
+          <PresetSwatch
             key={pCol}
-            className={`color-preset-btn ${curColor.toLowerCase() === pCol.toLowerCase() ? "active" : ""}`}
-            style={{ backgroundColor: pCol }}
-            onClick={() => {
+            color={pCol}
+            isActive={selectedPreset?.toLowerCase() === pCol.toLowerCase()}
+            onSelect={() => {
               onColorChange(activePickerIndex, pCol);
               setHexInputValue(pCol);
+              setSelectedPreset(pCol);
             }}
-            title={pCol}
+            onDelete={() =>
+              setSavedColors((prev) => prev.filter((c) => c !== pCol))
+            }
           />
         ))}
+        <button
+          className="color-preset-btn color-preset-add"
+          onClick={() =>
+            setSavedColors((prev) =>
+              prev.some((c) => c.toLowerCase() === curColor.toLowerCase())
+                ? prev
+                : [...prev, curColor],
+            )
+          }
+          title="Aktuelle Farbe speichern"
+        >
+          <Plus size={12} />
+        </button>
       </div>
 
       {/* Hex Code Input */}
@@ -525,6 +859,8 @@ export default function DocumentView({
   toolbarState,
   onBack,
   railSlot,
+  onCurrentPageChange,
+  isImmersive,
 }) {
   const {
     color,
@@ -550,6 +886,7 @@ export default function DocumentView({
   } = toolbarState || {};
   const showPageBreaks = note?.kind === 'imported' ? true : rawShowPageBreaks;
   const inkDocument = inkController?.document || emptyDocument;
+  const pageObjects = pageObjectsOf(inkDocument);
   const pageIds = inkDocument.pages.map((page) => page.id);
   const pagesCount = pageIds.length;
   const canUndo = inkController?.canUndo;
@@ -560,13 +897,44 @@ export default function DocumentView({
     "#EFECE4",
     "#3E7BD8",
     "#D8615B",
-    "#4FA66B",
-    "#D4A937",
   ]);
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
+  const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
+  // Defaults for the next text insert. Editing a selected text writes to the
+  // object instead, so the popover always shows what the next edit affects.
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 20,
+    fontFamily: "sans",
+    textAlign: "left",
+    bold: false,
+    italic: false,
+    snapToLines: true,
+    lineStep: 1,
+    color: "#EFECE4",
+  });
+  const [selectedObjectId, setSelectedObjectId] = useState(null);
+  // A text object placed by a plain click (not dragged into size) enters edit
+  // mode immediately, so the keyboard opens with the caret already blinking
+  // where the user tapped instead of requiring a separate double-click.
+  const [editingObjectId, setEditingObjectId] = useState(null);
+  // Set while a design-tool button is armed: the next drag on the page draws
+  // that object instead of an ink stroke. draftPlacement tracks that drag.
+  const [placingTool, setPlacingTool] = useState(null);
+  const [draftPlacement, setDraftPlacement] = useState(null);
+  // A pen of its own: stays on until another tool is picked, fills whatever
+  // ink/shape outlines enclose the next click.
+  const [isBucketMode, setIsBucketMode] = useState(false);
+  // Lasso: lassoDraft is the loop being dragged right now; lassoSelection is
+  // what it resolved to (strokes + objects), kept until the next lasso, a
+  // delete, or another tool takes over.
+  const [isLassoMode, setIsLassoMode] = useState(false);
+  const [lassoDraft, setLassoDraft] = useState(null);
+  const [lassoSelection, setLassoSelection] = useState(null);
+  const imageInputRef = useRef(null);
   const [paperToast, setPaperToast] = useState(null);
   const toastTimeoutRef = useRef(null);
 
@@ -575,6 +943,19 @@ export default function DocumentView({
   useEffect(() => {
     pagesCountRef.current = pagesCount;
   }, [pagesCount]);
+
+  const [zoomToast, setZoomToast] = useState(null);
+  const zoomToastTimeoutRef = useRef(null);
+  const zoomMountedRef = useRef(false);
+  useEffect(() => {
+    if (!zoomMountedRef.current) {
+      zoomMountedRef.current = true;
+      return;
+    }
+    setZoomToast(Math.round(zoom * 100));
+    clearTimeout(zoomToastTimeoutRef.current);
+    zoomToastTimeoutRef.current = setTimeout(() => setZoomToast(null), 1200);
+  }, [zoom]);
 
   const handleColorChange = (index, newColor) => {
     const newColors = [...customColors];
@@ -659,6 +1040,39 @@ export default function DocumentView({
     showPageBreaks: Boolean(showPageBreaks),
   };
   const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
+  const normalizedDraftPlacement = draftPlacement
+    ? {
+        pageId: draftPlacement.pageId,
+        x: Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width),
+        y: Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height),
+        width: Math.abs(draftPlacement.width),
+        height: Math.abs(draftPlacement.height),
+      }
+    : null;
+  const draftPlacementViewport = focusRectToViewport(pageLayout, normalizedDraftPlacement);
+  const lassoDraftViewportPoints = lassoDraft
+    ? lassoDraft.points
+        .map((point) => pagePointToViewport(pageLayout, lassoDraft.pageId, point))
+        .filter(Boolean)
+    : null;
+  const lassoSelectionBox = lassoSelection
+    ? (() => {
+        const bounds = selectionBounds(
+          inkDocument.strokes,
+          pageObjects,
+          lassoSelection.strokeIds,
+          lassoSelection.objectIds,
+        );
+        return bounds ? { ...bounds, pageId: lassoSelection.pageId } : null;
+      })()
+    : null;
+  // Reicht das Papier über die ganze Fensterbreite, verliert der eingerückte
+  // Rahmen seinen Sinn: die Seite läuft randlos unter Rail und Pills durch.
+  const isFullBleed =
+    isImmersive ||
+    (isFullMode && baseWidth * zoom >= (globalThis.innerWidth ?? Infinity));
+  const isFullBleedRef = useRef(false);
+  isFullBleedRef.current = isFullBleed;
   const inputMode = INPUT_MODES.includes(inkController?.inputMode)
     ? inkController.inputMode
     : "stylus";
@@ -707,8 +1121,216 @@ export default function DocumentView({
     });
   };
 
+  // Contact geometry is reported in CSS px, so the palm threshold is panel
+  // specific; the settings profile is the calibration knob for it. Settings
+  // unmounts the document, so reading it once per mount is enough.
+  const palmGuard = useMemo(() => palmGuardFromProfile(loadPalmProfile()), []);
+
+  // A snapped text box may not land wherever the drag left it: re-snap on every
+  // geometry change so moving and resizing keep the lines aligned.
+  const handleObjectChange = (objectId, changes) => {
+    const target = pageObjects.find((o) => o.id === objectId);
+    const next =
+      target?.type === "text" && (target.snapToLines || changes.snapToLines)
+        ? { ...changes, ...snapTextToGrid({ ...target, ...changes }, paperStyle) }
+        : changes;
+    inkController?.updateObject?.(objectId, next);
+  };
+
+  const selectedTextObject =
+    pageObjects.find((o) => o.id === selectedObjectId && o.type === "text") || null;
+
+  const handleTextStyleChange = (patch) => {
+    setTextStyle((prev) => ({ ...prev, ...patch }));
+    if (selectedTextObject) handleObjectChange(selectedTextObject.id, patch);
+  };
+  const handleObjectDelete = (objectId) => {
+    setSelectedObjectId(null);
+    setEditingObjectId((prev) => (prev === objectId ? null : prev));
+    inkController?.removeObjects?.([objectId]);
+  };
+
+  const handleLassoCommit = (transform) => {
+    if (!lassoSelection) return;
+    inkController?.transformSelection?.(
+      lassoSelection.strokeIds,
+      lassoSelection.objectIds,
+      transform,
+    );
+  };
+  const handleLassoDelete = () => {
+    if (!lassoSelection) return;
+    if (lassoSelection.strokeIds.length > 0)
+      inkController?.removeStrokes?.(lassoSelection.strokeIds);
+    if (lassoSelection.objectIds.length > 0)
+      inkController?.removeObjects?.(lassoSelection.objectIds);
+    setLassoSelection(null);
+  };
+
+  // Bluetooth/USB keyboard shortcuts. Skipped while a text object is being
+  // edited so Delete/Backspace/Escape keep editing the text instead of
+  // deleting the selection or leaving the tool.
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (editingObjectId) return;
+      const target = event.target;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable)
+        return;
+
+      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedo =
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "z") ||
+        ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y");
+      if (isUndo) {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (isRedo) {
+        event.preventDefault();
+        handleRedo();
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && lassoSelection) {
+        event.preventDefault();
+        handleLassoDelete();
+        return;
+      }
+      if (event.key === "Escape") {
+        if (lassoSelection) setLassoSelection(null);
+        else if (isLassoMode) setIsLassoMode(false);
+        else if (placingTool) setPlacingTool(null);
+        else if (selectedObjectId) setSelectedObjectId(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingObjectId, lassoSelection, isLassoMode, placingTool, selectedObjectId]);
+
+  // New objects land in the middle of what the user is currently looking at,
+  // not at the top of the document they may have scrolled far past.
+  const viewportCenterOnPage = () => {
+    const content = containerRef.current;
+    if (!content) return null;
+    const contentRect = content.getBoundingClientRect();
+    const viewRect = scrollRef.current?.getBoundingClientRect() || contentRect;
+    return mapViewportPoint(pageLayout, {
+      x: viewRect.left + viewRect.width / 2 - contentRect.left,
+      y: viewRect.top + viewRect.height / 2 - contentRect.top,
+    });
+  };
+
+  const insertObject = (type, size, extra = {}) => {
+    const anchor = viewportCenterOnPage();
+    if (!anchor) return null;
+    const object = {
+      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+      type,
+      pageId: anchor.pageId,
+      x: anchor.x - size.width / 2,
+      y: anchor.y - size.height / 2,
+      width: size.width,
+      height: size.height,
+      color: penColor || "#3E7BD8",
+      strokeWidth: rawLineWidth ?? lineWidth ?? 3,
+      ...extra,
+    };
+    inkController?.addObject?.(object);
+    setSelectedObjectId(object.id);
+    return object;
+  };
+
+  // Rasterizes this page's ink + shape outlines as walls, floods out from the
+  // click, and drops the cropped result in as a "fill" object sized to match.
+  const handleBucketFill = (point) => {
+    if (!point) return;
+
+    // Clicking inside a drawn rect/ellipse recolors that one object instead —
+    // stroke and fill are then the same shape, so they always move, resize
+    // and delete together rather than drifting apart as two separate things.
+    const target = [...pageObjects]
+      .reverse()
+      .find(
+        (object) =>
+          object.pageId === point.pageId &&
+          (object.type === "rect" || object.type === "ellipse") &&
+          isPointInsideObject(object, point.x, point.y),
+      );
+    if (target) {
+      inkController?.updateObject?.(target.id, { fillColor: penColor || "#3E7BD8" });
+      return;
+    }
+
+    const width = Math.round(baseWidth);
+    const height = Math.round(pageHeight);
+    const canvas = document.createElement("canvas");
+    const wallData = rasterizePageWalls(canvas, {
+      strokes: inkDocument.strokes,
+      objects: pageObjects,
+      pageId: point.pageId,
+      width,
+      height,
+    });
+    const result = floodFill(wallData, width, height, Math.round(point.x), Math.round(point.y));
+    if (!result) return;
+    const { dataUrl, x, y, width: w, height: h } = fillResultToDataUrl(
+      result,
+      width,
+      hexToRgb(penColor || "#3E7BD8"),
+    );
+    inkController?.addObject?.({
+      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+      type: "fill",
+      pageId: point.pageId,
+      x,
+      y,
+      width: w,
+      height: h,
+      color: penColor || "#3E7BD8",
+      strokeWidth: 1,
+      src: dataUrl,
+    });
+  };
+
+  const handleInsertTool = (item) => {
+    if (item.id === "image") {
+      imageInputRef.current?.click();
+      setIsDesignToolsOpen(false);
+      return;
+    }
+    if (item.id === "link") {
+      const href = globalThis.prompt?.("Link-Adresse (URL)")?.trim();
+      if (!href) return;
+      const label = globalThis.prompt?.("Beschriftung", href)?.trim();
+      const url = /^[a-z][\w+.-]*:/i.test(href) ? href : `https://${href}`;
+      insertObject("link", item, { href: url, text: label || url });
+      setIsDesignToolsOpen(false);
+      return;
+    }
+    // Arrows, lines and shapes land where the user drags on the page; a plain
+    // click (no drag) falls back to the tool's default size, centered there.
+    setPlacingTool(item);
+    setIsDesignToolsOpen(false);
+  };
+
+  const handleImageFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const { src, width, height } = await readImageObjectSource(file);
+      const maxWidth = Math.min(baseWidth * 0.8, width);
+      const scale = maxWidth / width;
+      insertObject("image", { width: maxWidth, height: height * scale }, { src });
+      setIsDesignToolsOpen(false);
+    } catch {
+      // A file the browser cannot decode simply inserts nothing.
+    }
+  };
+
   const inkPointer = useInkPointer({
     inputMode,
+    palmGuard,
     tool: inkTool,
     eraserMode: inkController?.eraserMode || "pixel",
     color: penColor || "#EFECE4",
@@ -800,12 +1422,26 @@ export default function DocumentView({
   }, []);
 
   // Im Vollmodus füllt das Papier immer die Breite; gescrollt wird vertikal.
+  const lastFitWidthRef = useRef(null);
   useEffect(() => {
     if (!isFullMode) return;
     const el = scrollRef.current;
     if (!el) return;
+    lastFitWidthRef.current = null;
     const fit = () => {
-      if (el.clientWidth > 0) setZoom(el.clientWidth / baseWidth);
+      // Randlos zoomt der Nutzer bewusst über die Passbreite hinaus, und das
+      // Wegfallen der Ränder verbreitert den Container — ohne diese Sperre
+      // würde das Auto-Fit den Zoom sofort wieder einfangen.
+      if (isFullBleedRef.current) return;
+      const width = el.clientWidth;
+      if (width <= 0) return;
+      // Zooming out past a certain point can make the scrollbar disappear,
+      // which nudges clientWidth by ~15-20px and fires this observer — without
+      // filtering that noise the "fit" below snaps the zoom straight back in.
+      const prevWidth = lastFitWidthRef.current;
+      lastFitWidthRef.current = width;
+      if (prevWidth !== null && Math.abs(width - prevWidth) < 40) return;
+      setZoom(width / baseWidth);
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -832,8 +1468,60 @@ export default function DocumentView({
     if (e.pointerType === "pen") {
       clearAllGestures();
     }
-    
-    const isBlockedTouch = e.pointerType === "touch" && inkPointer.shouldBlockTouch(e.timeStamp, e.pointerId);
+
+    // A click never starts on an object — those stop propagation before it
+    // reaches here — so any page pointerdown means "away", clearing selection.
+    setSelectedObjectId(null);
+
+    if (isBucketMode) {
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      handleBucketFill(point);
+      return;
+    }
+
+    // The selection box (if any) lives above this and stops its own
+    // pointerdowns, so getting here means the click landed on open page —
+    // start a fresh loop and drop whatever was selected before.
+    if (isLassoMode) {
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point) return;
+      setLassoSelection(null);
+      setLassoDraft({
+        pageId: point.pageId,
+        pointerId: e.pointerId,
+        points: [{ x: point.x, y: point.y }],
+      });
+      return;
+    }
+
+    if (placingTool) {
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point) return;
+      setDraftPlacement({
+        type: placingTool.id,
+        pageId: point.pageId,
+        pointerId: e.pointerId,
+        startX: point.x,
+        startY: point.y,
+        width: 0,
+        height: 0,
+      });
+      return;
+    }
+
+    const isBlockedTouch = e.pointerType === "touch" && inkPointer.shouldBlockTouch(e);
 
     if (!isSelectMode || isBlockedTouch) {
       inkPointer.onPointerDown(e, { preventDraw: isBlockedTouch });
@@ -860,11 +1548,42 @@ export default function DocumentView({
   };
 
   const handlePointerMove = (e) => {
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerMove(e);
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point || point.pageId !== lassoDraft.pageId) return;
+      setLassoDraft((prev) => ({
+        ...prev,
+        points: [...prev.points, { x: point.x, y: point.y }],
+      }));
+      return;
+    }
+
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerMove(e);
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point || point.pageId !== draftPlacement.pageId) return;
+      setDraftPlacement((prev) => ({
+        ...prev,
+        // Signed on purpose: arrows and lines read the sign to know which way
+        // they point, and objectBounds() already normalizes it for display.
+        width: point.x - prev.startX,
+        height: point.y - prev.startY,
+      }));
+      return;
+    }
+
     if (!isSelectMode) {
       inkPointer.onPointerMove(e);
       return;
     }
-    
+
     inkPointer.onPointerMove(e);
     
     if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
@@ -886,11 +1605,66 @@ export default function DocumentView({
   };
 
   const handlePointerUp = (e) => {
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerUp(e);
+      const polygon = lassoDraft.points;
+      if (polygon.length >= 3) {
+        const strokeIds = strokesInLasso(inkDocument.strokes, lassoDraft.pageId, polygon);
+        const objectIds = objectsInLasso(pageObjects, lassoDraft.pageId, polygon);
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setLassoSelection({ pageId: lassoDraft.pageId, strokeIds, objectIds });
+        }
+      }
+      setLassoDraft(null);
+      return;
+    }
+
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerUp(e);
+      const tool = placingTool;
+      const dragged =
+        Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
+      const object = {
+        id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+        type: draftPlacement.type,
+        pageId: draftPlacement.pageId,
+        // A plain click (no drag) falls back to the tool's default size,
+        // centered on where the user tapped — except text, which starts AT the tap:
+        // the caret should appear right under the finger/pen, not to its left.
+        x:
+          dragged || tool.id === "text"
+            ? draftPlacement.startX
+            : draftPlacement.startX - tool.width / 2,
+        // Text also skips the vertical centering: snapTextToGrid re-derives y
+        // from the raw tap anyway, and centering first shifted its rounding by
+        // half a row, so the snapped box always landed one line too high.
+        y:
+          dragged || tool.id === "text"
+            ? draftPlacement.startY
+            : draftPlacement.startY - tool.height / 2,
+        width: dragged ? draftPlacement.width : tool.width,
+        height: dragged ? draftPlacement.height : tool.height,
+        color: penColor || "#3E7BD8",
+        strokeWidth: rawLineWidth ?? lineWidth ?? 3,
+        // A dragged box gets a "Text" placeholder so its size stays visible;
+        // a plain click starts empty since the caret appears there right away.
+        ...(draftPlacement.type === "text" ? { text: dragged ? "Text" : "", ...textStyle } : {}),
+      };
+      if (object.type === "text" && object.snapToLines)
+        Object.assign(object, snapTextToGrid(object, paperStyle));
+      inkController?.addObject?.(object);
+      setSelectedObjectId(object.id);
+      if (object.type === "text" && !dragged) setEditingObjectId(object.id);
+      setDraftPlacement(null);
+      setPlacingTool(null);
+      return;
+    }
+
     if (!isSelectMode) {
       inkPointer.onPointerUp(e);
       return;
     }
-    
+
     inkPointer.onPointerUp(e);
     
     if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
@@ -908,6 +1682,16 @@ export default function DocumentView({
   };
 
   const handlePointerCancel = (e) => {
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerCancel(e);
+      setLassoDraft(null);
+      return;
+    }
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerCancel(e);
+      setDraftPlacement(null);
+      return;
+    }
     if (!isSelectMode) {
       inkPointer.onPointerCancel(e);
       return;
@@ -960,6 +1744,13 @@ export default function DocumentView({
     };
   }, [inkDocument.documentId]);
 
+  // A lasso selection names specific stroke/object ids — meaningless (and
+  // stale) the moment the user opens a different note.
+  useEffect(() => {
+    setLassoSelection(null);
+    setLassoDraft(null);
+  }, [inkDocument.documentId]);
+
   // Gutter drags only ever scrolled vertically; a move-mode drag pans both axes.
   const startPan = (event) => ({
     pointerId: event.pointerId,
@@ -981,17 +1772,19 @@ export default function DocumentView({
     }
     // Move mode drags with the pen too, which would otherwise stop at the
     // touch-only guard below. Touch keeps flowing through so it can still pinch.
-    if (isMoveMode && event.pointerType === "pen" && activePointers.current.size === 0) {
+    // An armed placement tool (text, shapes, …) owns this drag instead — left
+    // over move-mode panning would otherwise fight it for the same gesture.
+    if (isMoveMode && !placingTool && event.pointerType === "pen" && activePointers.current.size === 0) {
       gutterPanData.current = startPan(event);
       return;
     }
     if (event.pointerType !== 'touch') return;
-    if (inkPointer.shouldBlockTouch(event.timeStamp, event.pointerId)) return;
+    if (inkPointer.shouldBlockTouch(event)) return;
     activePointers.current.set(event.pointerId, {
       x: event.clientX, y: event.clientY, startedOnPage,
     });
 
-    if (activePointers.current.size === 1 && (!startedOnPage || isMoveMode)) {
+    if (activePointers.current.size === 1 && (!startedOnPage || (isMoveMode && !placingTool))) {
       gutterPanData.current = startPan(event);
     }
 
@@ -1050,7 +1843,7 @@ export default function DocumentView({
     }
     if (e.pointerType !== "touch") return;
 
-    if (inkPointer.shouldBlockTouch(e.timeStamp, e.pointerId)) {
+    if (inkPointer.shouldBlockTouch(e)) {
       if (activePointers.current.has(e.pointerId)) {
         handleGestureEnd(e);
       }
@@ -1187,9 +1980,15 @@ export default function DocumentView({
           wheelTicking = true;
           requestAnimationFrame(() => {
             setZoom((prev) => {
+              // Normalize to pixels first: a physical mouse wheel reports
+              // deltaMode 1 (lines, deltaY ~3) while a trackpad reports mode 0
+              // (pixels, deltaY ~100+) — without this the same factor makes
+              // wheel zoom jump in huge steps while trackpad zoom stays fine.
+              const normalizedDeltaY =
+                e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
               const newZoom = Math.max(
                 0.5,
-                Math.min(3, prev - e.deltaY * 0.01),
+                Math.min(3, prev - normalizedDeltaY * 0.0015),
               );
               if (focusBoxState?.focusBox && newZoom !== prev) {
                 const ratio = prev / newZoom;
@@ -1496,15 +2295,6 @@ export default function DocumentView({
   // slot (tests, standalone use) it renders in place as before.
   const railContent = (
     <>
-      {onBack && (
-        <button
-          className="rail-btn active"
-          onClick={onBack}
-          title="Zurück zur Bibliothek"
-        >
-          <ArrowLeft size={19} />
-        </button>
-      )}
       <button
         className="rail-btn"
         onClick={handleUndo}
@@ -1524,39 +2314,34 @@ export default function DocumentView({
         <Redo2 size={19} />
       </button>
       <div className="rail-divider" />
-      <button
-        className={`rail-btn pen-rail-btn ${tool !== "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
-        onClick={() => {
-          if (tool !== "highlighter" && !isEraser && !isSelectMode) {
-            setIsPenSettingsOpen((prev) => !prev);
-          } else {
-            setTool?.("pen");
-            setIsEraser?.(false);
-            setIsSelectMode?.(false);
-            setIsPenSettingsOpen(true);
-          }
-          setIsColorPickerOpen(false);
-          setIsEraserSettingsOpen(false);
-        }}
-        title="Stift & Einstellungen"
-        data-testid="pen-tool-btn"
-      >
-        <PenLine size={18} />
-      </button>
-      <button
-        className={`rail-btn ${tool === "highlighter" && !isEraser && !isSelectMode ? "active" : ""}`}
-        onClick={() => {
-          setTool?.("highlighter");
-          setIsEraser?.(false);
-          setIsSelectMode?.(false);
-          setIsPenSettingsOpen(true);
-          setIsColorPickerOpen(false);
-          setIsEraserSettingsOpen(false);
-        }}
-        title="Textmarker"
-      >
-        <Highlighter size={18} />
-      </button>
+      {(() => {
+        const isPenActive = Boolean(PEN_TOOL_ICONS[tool]) && !isEraser && !isSelectMode;
+        const PenIcon = PEN_TOOL_ICONS[tool] || PenLine;
+        return (
+          <button
+            className={`rail-btn pen-rail-btn ${isPenActive ? "active" : ""}`}
+            onClick={() => {
+              if (isPenActive) {
+                setIsPenSettingsOpen((prev) => !prev);
+              } else {
+                setTool?.(PEN_TOOL_ICONS[tool] ? tool : "pen");
+                setIsEraser?.(false);
+                setIsSelectMode?.(false);
+                setIsPenSettingsOpen(true);
+              }
+              setIsBucketMode(false);
+              setIsLassoMode(false);
+              setLassoSelection(null);
+              setIsColorPickerOpen(false);
+              setIsEraserSettingsOpen(false);
+            }}
+            title="Stift & Einstellungen"
+            data-testid="pen-tool-btn"
+          >
+            <PenIcon size={18} />
+          </button>
+        );
+      })()}
       <button
         className={`rail-btn eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
         onClick={() => {
@@ -1568,10 +2353,101 @@ export default function DocumentView({
             setIsPenSettingsOpen(false);
             setIsColorPickerOpen(false);
           }
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
         }}
         title="Radiergummi"
       >
         <Eraser size={18} />
+      </button>
+      <button
+        className={`rail-btn ${isBucketMode ? "active" : ""}`}
+        onClick={() => {
+          setIsBucketMode((prev) => !prev);
+          setPlacingTool(null);
+          setIsEraser?.(false);
+          setIsSelectMode?.(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title="Eimer (Fläche füllen)"
+        data-testid="bucket-tool-btn"
+      >
+        <PaintBucket size={18} />
+      </button>
+      <button
+        className={`rail-btn ${isLassoMode ? "active" : ""}`}
+        onClick={() => {
+          const next = !isLassoMode;
+          setIsLassoMode(next);
+          if (!next) setLassoSelection(null);
+          setPlacingTool(null);
+          setIsBucketMode(false);
+          setIsEraser?.(false);
+          setIsSelectMode?.(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+        }}
+        title="Lasso (markieren, verschieben, vergrößern)"
+        data-testid="lasso-tool-btn"
+      >
+        <LassoSelect size={18} />
+      </button>
+      <button
+        className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}
+        onClick={() => {
+          if (placingTool) {
+            setPlacingTool(null);
+            return;
+          }
+          setIsDesignToolsOpen((prev) => !prev);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title={
+          placingTool
+            ? `${placingTool.name} ziehen zum Platzieren (Klick zum Abbrechen)`
+            : "Pfeile, Formen, Bilder & Links einfügen"
+        }
+        data-testid="design-tools-btn"
+      >
+        {placingTool ? placingTool.icon : <Shapes size={18} />}
+      </button>
+      <button
+        className={`rail-btn text-rail-btn ${
+          isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
+        }`}
+        onClick={() => {
+          if (placingTool?.id === "text") {
+            setPlacingTool(null);
+            return;
+          }
+          setIsTextSettingsOpen((prev) => !prev);
+          setIsDesignToolsOpen(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title={
+          placingTool?.id === "text"
+            ? "Text ziehen zum Platzieren (Klick zum Abbrechen)"
+            : "Text: Schrift, Größe, Farbe & Linien-Modus"
+        }
+        data-testid="text-tool-btn"
+      >
+        <Type size={18} />
       </button>
       <button
         className={`rail-btn ${inputMode !== "stylus" ? "active" : ""}`}
@@ -1592,6 +2468,9 @@ export default function DocumentView({
             const newMode = !isSelectMode;
             setIsSelectMode?.(newMode);
             setIsEraser?.(false);
+            setIsBucketMode(false);
+            setIsLassoMode(false);
+            setLassoSelection(null);
             if (newMode) {
               focusBoxState?.setFocusBox(null);
             }
@@ -1692,6 +2571,7 @@ export default function DocumentView({
   return (
     <div
       className={`document-view paper-style-${paperStyle}`}
+      data-full-bleed={isFullBleed ? "true" : undefined}
       data-testid="document-view"
       data-document-id={inkController?.document?.documentId}
       data-document-kind={note?.kind || "blank"}
@@ -1735,6 +2615,33 @@ export default function DocumentView({
           onClose={() => setIsEraserSettingsOpen(false)}
         />
       )}
+      {isDesignToolsOpen && (
+        <DesignToolsPopover
+          onInsert={handleInsertTool}
+          onClose={() => setIsDesignToolsOpen(false)}
+        />
+      )}
+      {isTextSettingsOpen && (
+        <TextSettingsPopover
+          style={selectedTextObject || textStyle}
+          onStyleChange={handleTextStyleChange}
+          paperStyle={paperStyle}
+          hasSelection={Boolean(selectedTextObject)}
+          onInsert={() => {
+            setPlacingTool(TEXT_TOOL);
+            setIsTextSettingsOpen(false);
+          }}
+          onClose={() => setIsTextSettingsOpen(false)}
+        />
+      )}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageFile}
+        data-testid="object-image-input"
+        style={{ display: "none" }}
+      />
       {isColorPickerOpen && (
         <ColorWheelPopover
           customColors={customColors}
@@ -1750,6 +2657,11 @@ export default function DocumentView({
           <span>Papierstil: {paperToast}</span>
         </div>
       )}
+      {zoomToast !== null && (
+        <div className="zoom-toast" data-testid="zoom-toast">
+          <span>{zoomToast}%</span>
+        </div>
+      )}
 
       <div
         ref={scrollRef}
@@ -1762,7 +2674,11 @@ export default function DocumentView({
           touchAction: "none",
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
-          margin: isFullMode ? "78px 26px 0 104px" : "78px 12px 0 104px",
+          margin: isFullBleed
+            ? 0
+            : isFullMode
+              ? "4px 4px 0 88px"
+              : "78px 12px 0 104px",
           background: "transparent",
           color: "#FFFFFF",
         }}
@@ -1771,9 +2687,9 @@ export default function DocumentView({
         onPointerUp={handleGestureEnd}
         onPointerCancel={handleGestureEnd}
         onScroll={(e) => {
+          const { scrollTop, scrollHeight, clientHeight } = e.target;
           // Notes-App: am unteren Ende wächst das Papier NUR im unendlichen Modus nach.
           if (!showPageBreaks && note?.kind !== 'imported') {
-            const { scrollTop, scrollHeight, clientHeight } = e.target;
             if (
               scrollHeight - scrollTop - clientHeight < 200 &&
               pagesCount < maxPages
@@ -1781,6 +2697,12 @@ export default function DocumentView({
               inkController?.addPage?.();
             }
           }
+          const unit = showPageBreaks
+            ? pageHeight * zoom + PAGE_GAP
+            : pageHeight * zoom;
+          const currentPage =
+            Math.min(pagesCount - 1, Math.max(0, Math.round(scrollTop / unit))) + 1;
+          onCurrentPageChange?.(currentPage);
         }}
       >
         <div
@@ -1794,7 +2716,10 @@ export default function DocumentView({
             backgroundColor: "transparent",
             boxShadow: "none",
             margin: isFullMode ? 0 : "96px 0 24px 0",
-            touchAction: isSelectMode || isFullMode ? "none" : "auto",
+            touchAction:
+              isSelectMode || isFullMode || placingTool || isBucketMode || isLassoMode
+                ? "none"
+                : "auto",
           }}
           ref={containerRef}
           onPointerDown={handlePointerDown}
@@ -1889,7 +2814,7 @@ export default function DocumentView({
                 left: 0,
                 width: "100%",
                 height: `${documentHeight * zoom}px`,
-                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+                borderRadius: isFullBleed ? 0 : isFullMode ? "22px 22px 0 0" : "20px",
                 background:
                   "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
                 boxShadow:
@@ -1925,7 +2850,7 @@ export default function DocumentView({
                     left: 0,
                     width: "100%",
                     height: `${pageHeight * zoom}px`,
-                    borderRadius: "20px",
+                    borderRadius: isFullBleed ? 0 : "20px",
                     background:
                       "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
                     boxShadow:
@@ -1947,28 +2872,21 @@ export default function DocumentView({
                       pointerEvents: "none",
                     }}
                   />
-                  <span
-                    style={{
-                      position: "absolute",
-                      right: 18,
-                      top: 16,
-                      font: "600 10.5px ui-monospace, monospace",
-                      letterSpacing: ".08em",
-                      color: "rgba(255,255,255,0.45)",
-                      background: "rgba(255,255,255,0.06)",
-                      padding: "3px 10px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.09)",
-                      backdropFilter: "blur(10px)",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    SEITE {i + 1} / {pagesCount}
-                  </span>
                 </div>
               );
             })
           )}
+          {/* Bucket fills sit behind the ink canvas so hand-drawn outlines
+              stay on top of the color wash; every other object type is
+              layered above it as before. */}
+          <PageObjectLayer
+            objects={pageObjects.filter((o) => o.type === "fill")}
+            pageLayout={pageLayout}
+            selectedId={selectedObjectId}
+            onSelect={setSelectedObjectId}
+            onChange={handleObjectChange}
+            onDelete={handleObjectDelete}
+          />
           {note?.kind !== 'imported' && (
             <canvas
               ref={inkCanvasRef}
@@ -1983,6 +2901,39 @@ export default function DocumentView({
                 touchAction: "none",
                 pointerEvents: "none",
               }}
+            />
+          )}
+          <PageObjectLayer
+            objects={pageObjects.filter((o) => o.type !== "fill")}
+            pageLayout={pageLayout}
+            selectedId={selectedObjectId}
+            paperStyle={paperStyle}
+            editingId={editingObjectId}
+            onEditingChange={setEditingObjectId}
+            onSelect={setSelectedObjectId}
+            onChange={handleObjectChange}
+            onDelete={handleObjectDelete}
+          />
+          {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
+            <svg
+              data-testid="lasso-draft-path"
+              style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}
+            >
+              <polyline
+                points={lassoDraftViewportPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="rgba(62,123,216,0.12)"
+                stroke="#3E7BD8"
+                strokeWidth="1.5"
+                strokeDasharray="5 4"
+              />
+            </svg>
+          )}
+          {isLassoMode && lassoSelectionBox && (
+            <LassoSelectionLayer
+              bounds={lassoSelectionBox}
+              pageLayout={pageLayout}
+              onCommit={handleLassoCommit}
+              onDelete={handleLassoDelete}
             />
           )}
           {!isFullMode && focusBoxState?.focusBox && focusBoxViewport && (
@@ -2008,6 +2959,58 @@ export default function DocumentView({
               onPointerDown={handleFocusBoxDragStart}
               onKeyDown={handleFocusBoxKeyDown}
             />
+          )}
+          {draftPlacement && draftPlacementViewport && (
+            <div
+              data-testid="draft-placement-box"
+              style={{
+                position: "absolute",
+                pointerEvents: "none",
+                left: draftPlacementViewport.x,
+                top: draftPlacementViewport.y,
+                width: draftPlacementViewport.width,
+                height: draftPlacementViewport.height,
+                zIndex: 1000,
+              }}
+            >
+              {draftPlacement.type === "line" || draftPlacement.type === "arrow" ? (
+                <svg width="100%" height="100%" style={{ overflow: "visible" }}>
+                  <line
+                    x1={draftPlacement.width < 0 ? draftPlacementViewport.width : 0}
+                    y1={draftPlacement.height < 0 ? draftPlacementViewport.height : 0}
+                    x2={draftPlacement.width < 0 ? 0 : draftPlacementViewport.width}
+                    y2={draftPlacement.height < 0 ? 0 : draftPlacementViewport.height}
+                    stroke="#3E7BD8"
+                    strokeWidth={2}
+                    strokeDasharray="6 5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              ) : draftPlacement.type === "ellipse" ? (
+                <svg width="100%" height="100%" style={{ overflow: "visible" }}>
+                  <ellipse
+                    cx="50%"
+                    cy="50%"
+                    rx={draftPlacementViewport.width / 2}
+                    ry={draftPlacementViewport.height / 2}
+                    fill="rgba(62, 123, 216, 0.12)"
+                    stroke="#3E7BD8"
+                    strokeWidth={2}
+                    strokeDasharray="6 5"
+                  />
+                </svg>
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "2px dashed #3E7BD8",
+                    backgroundColor: "rgba(62, 123, 216, 0.12)",
+                    borderRadius: draftPlacement.type === "rect" ? 6 : 4,
+                  }}
+                />
+              )}
+            </div>
           )}
           {draftFocusBox && draftFocusBoxViewport && (
             <div
@@ -2053,8 +3056,9 @@ export default function DocumentView({
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 8,
-                padding: "10px 22px",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
                 borderRadius: 9999,
                 background:
                   "linear-gradient(180deg, rgba(42, 42, 48, 0.78) 0%, rgba(18, 18, 22, 0.9) 100%)",
@@ -2064,17 +3068,13 @@ export default function DocumentView({
                 boxShadow:
                   "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.85), 0 16px 36px -12px rgba(0, 0, 0, 0.9)",
                 color: "#FFFFFF",
-                font: "600 13px Manrope, sans-serif",
                 cursor: "pointer",
                 transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
               title="Neue Seite hinzufügen"
               data-testid="add-page-btn"
             >
-              <Plus size={16} strokeWidth={2.4} />
-              <span>
-                Neue Seite hinzufügen ({pagesCount + 1}/{maxPages})
-              </span>
+              <Plus size={18} strokeWidth={2.4} />
             </button>
           </div>
         )}

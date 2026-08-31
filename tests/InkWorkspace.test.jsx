@@ -301,7 +301,8 @@ describe('full-document ink workspace', () => {
   it('persists toolbar changes and restores them after an editor reload', async () => {
     const view = render(<SplitLayout activeTab="smartCanvas" documentId="preference-note" />);
 
-    fireEvent.click(screen.getByTitle('Textmarker'));
+    fireEvent.click(screen.getByTitle('Stift & Einstellungen'));
+    fireEvent.click(screen.getByText('Marker'));
     fireEvent.click(screen.getByTitle('24px'));
     fireEvent.click(screen.getByTestId('color-slot-1'));
     fireEvent.click(screen.getByRole('button', { name: /^Eingabe: / }));

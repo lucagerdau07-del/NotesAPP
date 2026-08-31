@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DocumentView from "./DocumentView";
 import WritingZone from "./WritingZone";
 import useInkDocument from "../hooks/useInkDocument";
@@ -11,6 +11,9 @@ export default function SplitLayout({
   documentId: propDocumentId,
   note,
   railSlot,
+  onPageCountChange,
+  onCurrentPageChange,
+  isImmersive,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -57,6 +60,11 @@ export default function SplitLayout({
     inkController.document.pages.map((page) => page.id),
   );
 
+  const pagesCount = inkController.document.pages.length;
+  useEffect(() => {
+    onPageCountChange?.(pagesCount);
+  }, [pagesCount, onPageCountChange]);
+
   if (activeTab === "smartCanvas") {
     return (
       <div
@@ -74,6 +82,8 @@ export default function SplitLayout({
           toolbarState={toolState}
           onBack={onBack}
           railSlot={railSlot}
+          onCurrentPageChange={onCurrentPageChange}
+          isImmersive={isImmersive}
         />
         {layoutMode === "split" && (
           <WritingZone

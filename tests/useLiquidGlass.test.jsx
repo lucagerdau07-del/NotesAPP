@@ -3,15 +3,19 @@ import '@testing-library/jest-dom'
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { init, prewarm, prepareScene, FakeLiquidGlass } = vi.hoisted(() => {
+const { init, prewarm, prepareScene, checkSizes, captureContent, FakeLiquidGlass } = vi.hoisted(() => {
   const init = vi.fn()
   const prewarm = vi.fn()
   const prepareScene = vi.fn()
+  const checkSizes = vi.fn()
+  const captureContent = vi.fn()
   class FakeLiquidGlass {}
   FakeLiquidGlass.init = init
   FakeLiquidGlass.prototype._prewarmStaticCaptures = prewarm
   FakeLiquidGlass.prototype._prepareSceneCanvas = prepareScene
-  return { init, prewarm, prepareScene, FakeLiquidGlass }
+  FakeLiquidGlass.prototype._checkGlassSizeChanges = checkSizes
+  FakeLiquidGlass.prototype._captureGlassContent = captureContent
+  return { init, prewarm, prepareScene, checkSizes, captureContent, FakeLiquidGlass }
 })
 vi.mock('@ybouane/liquidglass', () => ({ LiquidGlass: FakeLiquidGlass }))
 
@@ -103,16 +107,76 @@ describe('LiquidGlass control adapter', () => {
     expect(sceneCtx.fillRect).toHaveBeenCalledWith(0, 0, 120, 80)
   })
 
-  it('holds the CSS glass fallback until the WebGL scene has captured content', async () => {
-    const capture = { onCacheUpdate: null }
+  it('repaints a resized control and postpones its content re-capture', async () => {
+    captureContent.mockClear()
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn() })
+    render(<Harness />)
+    await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
+
+    const patchedCheck = FakeLiquidGlass.prototype._checkGlassSizeChanges
+    const patchedCapture = FakeLiquidGlass.prototype._captureGlassContent
+    const rail = document.createElement('div')
+    const instance = { _glassContentDirty: new Set(), _globalDirty: false }
+
+    // Mid-transition. Resizing a control's canvas clears it, so the frame that
+    // resized it has to be marked dirty or the panel is left blank; and the
+    // content re-capture is postponed, staying queued for a later frame.
+    checkSizes.mockReturnValue(true)
+    patchedCheck.call(instance)
+    expect(instance._globalDirty).toBe(true)
+    await patchedCapture.call(instance, new Set([rail]))
+    expect(captureContent).not.toHaveBeenCalled()
+    expect(instance._glassContentDirty.has(rail)).toBe(true)
+
+    // Transition finished: no forced repaint, and the queued capture runs.
+    instance._globalDirty = false
+    checkSizes.mockReturnValue(false)
+    patchedCheck.call(instance)
+    expect(instance._globalDirty).toBe(false)
+    await patchedCapture.call(instance, new Set([rail]))
+    expect(captureContent).toHaveBeenCalledTimes(1)
+
+    // The init/resize pass over every control is never postponed.
+    checkSizes.mockReturnValue(true)
+    patchedCheck.call(instance)
+    await patchedCapture.call(instance)
+    expect(captureContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('holds the CSS glass fallback until the scene capture pipeline goes idle', async () => {
+    // One capture lands, a second starts a few frames later: the old
+    // quiet-timer readiness flipped in that gap and showed the empty scene.
+    const inFlight = new Set(['first'])
+    const capture = { _capturing: inFlight, cache: new Map() }
     init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn(), capture })
     const view = render(<Harness />)
-    await waitFor(() => expect(typeof capture.onCacheUpdate).toBe('function'))
-    expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'loading')
+    const root = view.getByTestId('root')
 
-    act(() => capture.onCacheUpdate(document.createElement('div')))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 60)) })
+    expect(root).toHaveAttribute('data-liquid-glass-state', 'loading')
+
+    await act(async () => {
+      inFlight.clear()
+      capture.cache.set('a', 1)
+      await new Promise(resolve => setTimeout(resolve, 30))
+      inFlight.add('second')
+      await new Promise(resolve => setTimeout(resolve, 60))
+    })
+    expect(root).toHaveAttribute('data-liquid-glass-state', 'loading')
+
+    await act(async () => { inFlight.clear() })
     await waitFor(() =>
-      expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
+      expect(root).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
+    )
+  })
+
+  it('stops waiting when no capture is ever queued', async () => {
+    const capture = { _capturing: new Set(), cache: new Map() }
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn(), capture })
+    const view = render(<Harness />)
+    await waitFor(
+      () => expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
+      { timeout: 4000 },
     )
   })
 
