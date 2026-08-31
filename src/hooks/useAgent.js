@@ -103,6 +103,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         getDocument: () => inkControllerRef.current.getDocument(),
         apply: (commands) => inkControllerRef.current.applyCommands(commands),
         getColor: () => inkControllerRef.current.color,
+        getPaperStyle: () => inkControllerRef.current.paperStyle,
       };
 
       let conversation = [

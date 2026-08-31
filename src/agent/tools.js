@@ -1,6 +1,6 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
-import { FONT_STACKS } from "../ink/textStyle.js";
+import { FONT_STACKS, snapBaselineToRule } from "../ink/textStyle.js";
 
 // Page geometry mirrors DocumentView's baseWidth/pageHeight. Coordinates are
 // page-local: origin top left of the addressed page, unit = page pixel.
@@ -31,12 +31,12 @@ function newId(prefix) {
 // in the DOM, so this is a deliberate estimate.
 // ponytail: 0.52em average glyph width; swap for a canvas measureText pass if
 // the agent's stacking ever drifts visibly.
-export function estimateTextHeight(text, width, fontSize) {
+export function estimateTextHeight(text, width, fontSize, lineHeight) {
   const perLine = Math.max(1, Math.floor(width / (fontSize * 0.52)));
   const lines = String(text)
     .split("\n")
     .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / perLine)), 0);
-  return Math.round(lines * fontSize * 1.4);
+  return Math.round(lines * (lineHeight || fontSize * 1.4));
 }
 
 export const AGENT_TOOLS = [
@@ -67,6 +67,7 @@ export const AGENT_TOOLS = [
           color: { type: "string", description: "#rrggbb" },
           bold: { type: "boolean" },
           italic: { type: "boolean" },
+          underline: { type: "boolean" },
           align: { type: "string", enum: ["left", "center", "right"] },
           font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
         },
@@ -91,6 +92,7 @@ export const AGENT_TOOLS = [
           color: { type: "string" },
           bold: { type: "boolean" },
           italic: { type: "boolean" },
+          underline: { type: "boolean" },
           align: { type: "string", enum: ["left", "center", "right"] },
           font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
         },
@@ -233,6 +235,7 @@ function textPatch(args, existing, defaultColor) {
   if (args.color !== undefined) patch.color = color(args.color, defaultColor);
   if (args.bold !== undefined) patch.bold = args.bold === true;
   if (args.italic !== undefined) patch.italic = args.italic === true;
+  if (args.underline !== undefined) patch.underline = args.underline === true;
   if (["left", "center", "right"].includes(args.align)) patch.textAlign = args.align;
   if (FONT_STACKS.some((font) => font.id === args.font)) patch.fontFamily = args.font;
   return patch;
@@ -278,15 +281,23 @@ export function executeTool(name, rawArgs, api) {
       if (!text.trim()) return "Fehler: text ist leer.";
       const width = patch.width ?? 400;
       const fontSize = patch.fontSize ?? 18;
-      const height = estimateTextHeight(text, width, fontSize);
+      const { y, lineHeight } = snapBaselineToRule(
+        patch.y ?? 64,
+        fontSize,
+        api.getPaperStyle?.(),
+        patch.fontFamily,
+        patch.bold,
+      );
+      const height = estimateTextHeight(text, width, fontSize, lineHeight);
       const object = createPageObject({
         id: newId("text"),
         pageId: args.pageId,
         type: "text",
         x: 64,
-        y: 64,
         color: inkColor,
         ...patch,
+        y,
+        lineHeight,
         width,
         height,
       });
@@ -301,11 +312,22 @@ export function executeTool(name, rawArgs, api) {
       const text = patch.text ?? existing.text;
       const width = patch.width ?? existing.width;
       const fontSize = patch.fontSize ?? existing.fontSize;
-      const height = estimateTextHeight(text, width, fontSize);
+      const { y, lineHeight } = snapBaselineToRule(
+        patch.y ?? existing.y,
+        fontSize,
+        api.getPaperStyle?.(),
+        patch.fontFamily ?? existing.fontFamily,
+        patch.bold ?? existing.bold,
+      );
+      const height = estimateTextHeight(text, width, fontSize, lineHeight);
       api.apply([
-        { type: "update-object", objectId: existing.id, changes: { ...patch, height } },
+        {
+          type: "update-object",
+          objectId: existing.id,
+          changes: { ...patch, y, lineHeight, height },
+        },
       ]);
-      return { id: existing.id, height, bottom: (patch.y ?? existing.y) + height };
+      return { id: existing.id, height, bottom: y + height };
     }
 
     case "delete_objects": {

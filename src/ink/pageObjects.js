@@ -51,6 +51,9 @@ export function createPageObject(input = {}) {
     href: text(source.href),
     src: text(source.src),
     fontSize: Math.max(6, finite(source.fontSize, 16)),
+    // 0 = derive from fontSize at render time. Set to a rule multiple for text
+    // that must advance line by line along the paper's ruling.
+    lineHeight: Math.max(0, finite(source.lineHeight, 0)),
     // Text typography. fontFamily is a FONT_STACKS id, not a CSS stack, so a
     // stored document never pins down the actual fonts a device has.
     fontFamily: text(source.fontFamily, "sans"),
@@ -59,6 +62,7 @@ export function createPageObject(input = {}) {
       : "left",
     bold: source.bold === true,
     italic: source.italic === true,
+    underline: source.underline === true,
     // Locks the box onto the paper's ruling: see snapTextToGrid.
     snapToLines: source.snapToLines === true,
     lineStep: Math.max(1, Math.round(finite(source.lineStep, 1))),

@@ -11,6 +11,10 @@ const PAGE_EDGE_MARGIN = 16;
 
 // Measures how wide a text box would need to be to hold its content on one
 // line, and how tall it ends up once that's capped to maxWidth and the rest
+// innerText keeps the line breaks Enter inserts; textContent flattens them
+// away. The fallback is for jsdom, which does not implement innerText.
+const readText = (node) => node.innerText ?? node.textContent;
+
 // wraps — via an offscreen clone, so the real field never flickers or loses
 // its caret while this runs on every keystroke.
 function measureTextBox(node, maxWidth) {
@@ -26,7 +30,9 @@ function measureTextBox(node, maxWidth) {
   clone.style.padding = computed.padding;
   clone.style.whiteSpace = "pre";
   clone.style.width = "auto";
-  clone.textContent = node.textContent || " ";
+  // Must keep the breaks, or the clone measures one long line and the box
+  // never grows for the row Enter just added.
+  clone.textContent = readText(node) || " ";
   document.body.appendChild(clone);
   const width = Math.max(
     MIN_TEXT_WIDTH,
@@ -221,7 +227,9 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
 
   const snapped = object.snapToLines ? snapTextToGrid(object, paperStyle) : null;
   const fontSize = snapped ? snapped.fontSize : object.fontSize;
-  const lineHeight = snapped ? snapped.lineHeight : Math.round(object.fontSize * 1.35);
+  const lineHeight = snapped
+    ? snapped.lineHeight
+    : object.lineHeight || Math.round(object.fontSize * 1.35);
   // Snapped text is positioned by its baseline, not its box top: push the
   // first line down so its baseline lands on the rule at the box bottom.
   // snapTextToGrid already bakes this into the box's stored height — reusing
@@ -265,7 +273,7 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
     if (Math.abs(nextHeight - bounds.height) > 0.5) patch.height = nextHeight;
     if (Math.abs(width - bounds.width) > 0.5) patch.width = width;
     if (Object.keys(patch).length > 0)
-      onResize?.(object.id, { ...patch, text: node.textContent });
+      onResize?.(object.id, { ...patch, text: readText(node) });
   };
 
   return (
@@ -274,7 +282,7 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
       contentEditable={editable}
       suppressContentEditableWarning
       onInput={handleInput}
-      onBlur={(event) => onCommitText(object.id, event.currentTarget.textContent)}
+      onBlur={(event) => onCommitText(object.id, readText(event.currentTarget))}
       style={{
         width: "100%",
         height: "100%",
@@ -285,7 +293,20 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
         fontFamily: fontStackOf(object.fontFamily),
         fontWeight: object.bold ? 700 : 400,
         fontStyle: object.italic ? "italic" : "normal",
+        // currentColor + a thickness/offset tied to fontSize: the line always
+        // matches the text's own (theme-aware) color and sits close under the
+        // glyphs, instead of a hand-drawn shape guessing both.
+        textDecorationLine: object.underline ? "underline" : "none",
+        textDecorationColor: "currentColor",
+        textDecorationThickness: Math.max(1.5, fontSize * 0.06),
+        // Just enough clearance for descenders (g, y, p) to stay clear of the
+        // line — any more and the line reads as detached from the word above it.
+        textUnderlineOffset: Math.max(1, fontSize * 0.04),
         textAlign: object.textAlign || "left",
+        // Renders stored newlines as real breaks (and still wraps long lines),
+        // so a hard break advances exactly one line-height — which is a whole
+        // rule, keeping the next line on the ruling.
+        whiteSpace: "pre-wrap",
         outline: "none",
         overflow: "hidden",
         cursor: editable ? "text" : "inherit",

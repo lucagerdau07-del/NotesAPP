@@ -38,7 +38,9 @@ export default function SplitLayout({
   // agent tools write to this document. A ref rather than a state callback:
   // the controller object is new on every render, so lifting it as state would
   // re-render this tree on every render of it.
-  if (inkControllerRef) inkControllerRef.current = inkController;
+  // paperStyle isn't part of inkController (it's local UI state, not document
+  // state), but the agent's tools need it to snap text onto the page's ruling.
+  if (inkControllerRef) inkControllerRef.current = { ...inkController, paperStyle };
 
   const toolState = {
     color: inkController.color,

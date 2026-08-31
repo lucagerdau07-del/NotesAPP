@@ -4,6 +4,7 @@ import {
   baselineOffset,
   fontStackOf,
   rhythmOf,
+  snapBaselineToRule,
   snapFontSize,
   snapTextToGrid,
 } from '../src/ink/textStyle';
@@ -25,9 +26,10 @@ describe('text styling', () => {
     for (const style of ['lined', 'grid', 'dotted', 'blank']) {
       const { spacing, offset } = rhythmOf(style);
       const snapped = snapTextToGrid({ y: offset + spacing * 3 + 5, height: spacing }, style);
-      // The box's bottom (not its line-height alone — see topPadding) is what
-      // lands on a rule.
-      expect((snapped.y + snapped.height - offset) % spacing).toBeCloseTo(0, 9);
+      // The BASELINE lands on a rule — the box's bottom sits a descender's
+      // worth (topPadding) below it, so it is deliberately not rule-aligned.
+      const baseline = snapped.y + snapped.height - snapped.topPadding;
+      expect((baseline - offset) % spacing).toBeCloseTo(0, 9);
       expect(snapped.lineHeight).toBe(spacing);
       expect(snapped.fontSize).toBe(snapFontSize(spacing));
     }
@@ -69,6 +71,30 @@ describe('text styling', () => {
     const start = snapTextToGrid({ y: 150, height: 34 }, 'lined');
     const draggedDown = snapTextToGrid({ y: start.y + 20, height: start.height }, 'lined');
     expect(draggedDown.y).toBeCloseTo(start.y + 34, 9);
+  });
+
+  it('advances agent text by whole rules so every line sits on one, not just the first', () => {
+    // The regression this guards: line-height was fontSize * 1.35 (24px for
+    // 18px text) against a 34px ruling, so only the first line could land on a
+    // rule and each line below drifted another 10px off it.
+    for (const fontSize of [18, 22, 28]) {
+      const { spacing } = rhythmOf('lined');
+      const { lineHeight } = snapBaselineToRule(200, fontSize, 'lined');
+      expect(lineHeight % spacing).toBe(0);
+    }
+  });
+
+  it('lands the first baseline on a rule, keeping the requested font size', () => {
+    const { spacing, offset } = rhythmOf('lined');
+    for (const fontSize of [18, 22, 28]) {
+      const { y, lineHeight } = snapBaselineToRule(207, fontSize, 'lined');
+      const baseline = y + baselineOffset(fontSize, lineHeight);
+      expect((baseline - offset) % spacing).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('leaves blank paper alone: no rules to sit on', () => {
+    expect(snapBaselineToRule(207, 18, 'blank').y).toBe(207);
   });
 
   it('keeps the top edge fixed when the box grows to a second row', () => {
