@@ -1,10 +1,11 @@
 // Agent/chat backend configuration. The OpenRouter key lives in the Hugging
 // Face Space secret, never on the device — the app only knows the proxy URL and
-// an optional access token for it (see server/notes-agent-api/DEPLOY.md).
+// an optional access token for it. Proxy route: POST {baseUrl}/chat/completions,
+// added directly to the existing SchoolMind server (app-backend Space, server.js).
 const STORAGE_KEY = "notes.agentConfig";
 
 export const AGENT_DEFAULTS = {
-  baseUrl: "https://luca448-app-backend.hf.space/notes",
+  baseUrl: "https://luca448-app-backend.hf.space/api/notes",
   accessKey: "",
 };
 

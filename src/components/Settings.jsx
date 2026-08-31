@@ -592,7 +592,7 @@ export default function Settings({ onBack }) {
                 <div>
                   <div className="settings-control-title">Adresse</div>
                   <div className="settings-control-copy">
-                    z. B. https://luca448-app-backend.hf.space/notes
+                    z. B. https://luca448-app-backend.hf.space/api/notes
                   </div>
                 </div>
                 <input
@@ -600,7 +600,7 @@ export default function Settings({ onBack }) {
                   className="settings-text-input"
                   value={agentUrl}
                   onChange={(e) => setAgentUrl(e.target.value)}
-                  placeholder="https://…/notes"
+                  placeholder="https://…/api/notes"
                   data-testid="agent-url-input"
                 />
               </div>

@@ -1,6 +1,0 @@
-{
-  "name": "notes-agent-api",
-  "private": true,
-  "type": "module",
-  "scripts": { "start": "node src/index.js" }
-}
