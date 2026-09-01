@@ -23,6 +23,7 @@ import {
 } from "../ink/untisSettings.js";
 import { loadAgentConfig, saveAgentConfig } from "../agent/agentSettings.js";
 import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
+import { createProbe, recordSample, summarizeSamples } from "../ink/pointerProbe.js";
 
 /* The settings top bar is a floating control bar, same family as the Library's
    pills — the content boxes below it stay CSS glass. */
@@ -46,6 +47,36 @@ export default function Settings({ onBack }) {
   useEffect(() => {
     savePalmProfile({ detectionStrength, smallContacts, contactWindow });
   }, [detectionStrength, smallContacts, contactWindow]);
+
+  // Diagnose — beantwortet auf dem Gerät, welche Pointer-Felder das Panel
+  // überhaupt variiert. Ohne diese Messung ist jede Schwelle geraten.
+  const probeRef = useRef(createProbe());
+  const [probeSummary, setProbeSummary] = useState(null);
+
+  const recordProbe = (event, phase) => {
+    recordSample(
+      probeRef.current,
+      {
+        phase,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        timeStamp: event.timeStamp,
+        width: event.width,
+        height: event.height,
+        pressure: event.pressure,
+        tiltX: event.tiltX,
+        tiltY: event.tiltY,
+        twist: event.twist,
+      },
+      "diagnose",
+    );
+    setProbeSummary(summarizeSamples(probeRef.current, "diagnose"));
+  };
+
+  const resetProbe = () => {
+    probeRef.current = createProbe();
+    setProbeSummary(null);
+  };
 
   // Agent backend — the OpenRouter key stays in the Hugging Face Space secret,
   // so only the proxy address and its optional access key live here.
@@ -239,6 +270,15 @@ export default function Settings({ onBack }) {
         >
           <ShieldCheck size={15} />
           <span>Palm-Schutz</span>
+        </button>
+        <button
+          className={`settings-nav-item ${activeNav === "diagnose" ? "active" : ""}`}
+          onClick={() => {
+            setActiveNav("diagnose");
+          }}
+        >
+          <ShieldCheck size={15} />
+          <span>Diagnose</span>
         </button>
         <button
           className={`settings-nav-item ${activeNav === "files" ? "active" : ""}`}
@@ -480,6 +520,47 @@ export default function Settings({ onBack }) {
               </div>
             )}
           </>
+        )}
+
+        {activeNav === "diagnose" && (
+          <div className="settings-detail">
+            <h2 className="settings-detail-title">Signal-Diagnose</h2>
+            <p style={{ color: "#FFFFFF", fontSize: 12, margin: "0 0 10px" }}>
+              Tippe, schreibe und lege die Hand auf. Die Tabelle zeigt, welche
+              Felder dieses Display tatsächlich liefert.
+            </p>
+            <div
+              style={{
+                height: 180,
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: "#08080A",
+                touchAction: "none",
+              }}
+              onPointerDown={(event) => recordProbe(event, "down")}
+              onPointerMove={(event) => recordProbe(event, "move")}
+              onPointerUp={(event) => recordProbe(event, "up")}
+              onPointerCancel={(event) => recordProbe(event, "cancel")}
+            />
+            <pre
+              data-testid="probe-summary"
+              style={{ color: "#FFFFFF", fontSize: 11, whiteSpace: "pre-wrap" }}
+            >
+              {probeSummary
+                ? [
+                    `Samples: ${probeSummary.count}`,
+                    `pointerType: ${probeSummary.pointerTypes.join(", ") || "-"}`,
+                    `Größe min/p10/p50/p90/max: ${probeSummary.sizeMin} / ${probeSummary.sizeP10} / ${probeSummary.sizeP50} / ${probeSummary.sizeP90} / ${probeSummary.sizeMax}`,
+                    `Größe variiert: ${probeSummary.sizeVaries ? "ja" : "nein"}`,
+                    `Druck p10/p50/p90: ${probeSummary.pressureP10} / ${probeSummary.pressureP50} / ${probeSummary.pressureP90}`,
+                    `Druck variiert: ${probeSummary.pressureVaries ? "ja" : "nein"}`,
+                  ].join("\n")
+                : "Noch keine Daten."}
+            </pre>
+            <button className="settings-action-btn" onClick={resetProbe}>
+              Messung zurücksetzen
+            </button>
+          </div>
         )}
 
         {activeNav === "general" && (
