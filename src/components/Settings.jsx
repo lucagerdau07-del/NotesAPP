@@ -23,7 +23,12 @@ import {
 } from "../ink/untisSettings.js";
 import { loadAgentConfig, saveAgentConfig } from "../agent/agentSettings.js";
 import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
-import { createProbe, recordSample, summarizeSamples } from "../ink/pointerProbe.js";
+import {
+  createProbe,
+  deriveProfileFromCalibration,
+  recordSample,
+  summarizeSamples,
+} from "../ink/pointerProbe.js";
 
 /* The settings top bar is a floating control bar, same family as the Library's
    pills — the content boxes below it stay CSS glass. */
@@ -112,8 +117,45 @@ export default function Settings({ onBack }) {
   // Modals & Overlays
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationStep, setCalibrationStep] = useState(1);
+  const [calibrationResult, setCalibrationResult] = useState(null);
+  const penProbeRef = useRef(createProbe());
+  const palmProbeRef = useRef(createProbe());
   const [isTestAreaOpen, setIsTestAreaOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
+
+  const startCalibration = () => {
+    penProbeRef.current = createProbe();
+    palmProbeRef.current = createProbe();
+    setCalibrationResult(null);
+    setCalibrationStep(1);
+    setIsCalibrating(true);
+  };
+
+  const recordCalibration = (event, phase) => {
+    const probe = calibrationStep === 1 ? penProbeRef.current : palmProbeRef.current;
+    recordSample(
+      probe,
+      {
+        phase,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        timeStamp: event.timeStamp,
+        width: event.width,
+        height: event.height,
+        pressure: event.pressure,
+      },
+      calibrationStep === 1 ? 'pen' : 'palm',
+    );
+  };
+
+  const finishCalibration = () => {
+    const measured = deriveProfileFromCalibration(
+      summarizeSamples(penProbeRef.current, 'pen'),
+      summarizeSamples(palmProbeRef.current, 'palm'),
+    );
+    savePalmProfile({ ...loadPalmProfile(), measured });
+    setCalibrationResult(measured);
+  };
 
   const testCanvasRef = useRef(null);
   const testInputRef = useRef(createInputState());
@@ -342,10 +384,7 @@ export default function Settings({ onBack }) {
                     </div>
                     <button
                       className="settings-action-btn"
-                      onClick={() => {
-                        setIsCalibrating(true);
-                        setCalibrationStep(1);
-                      }}
+                      onClick={startCalibration}
                       data-testid="recalibrate-btn"
                     >
                       Starten
@@ -782,7 +821,7 @@ export default function Settings({ onBack }) {
       {/* Calibration Modal */}
       {isCalibrating && (
         <div className="settings-modal-overlay">
-          <div className="settings-modal-card">
+          <div className="settings-modal-card" style={{ width: 440 }}>
             <div
               style={{
                 display: "flex",
@@ -812,73 +851,51 @@ export default function Settings({ onBack }) {
                 <X size={18} />
               </button>
             </div>
-
-            {calibrationStep === 1 && (
-              <div>
-                <p style={{ color: "#FFFFFF", fontSize: 13, lineHeight: 1.5 }}>
-                  <strong>Schritt 1:</strong> Lege deinen Handballen in deiner
-                  gewohnten Schreibhaltung auf das Display.
-                </p>
-                <div
-                  style={{
-                    height: 110,
-                    borderRadius: 12,
-                    background: "#121118",
-                    border: "1px dashed rgba(255,255,255,.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#FFFFFF",
-                    fontSize: 12,
-                    margin: "14px 0",
-                  }}
-                >
-                  Handballen hier auflegen...
-                </div>
-                <button
-                  className="settings-action-btn"
-                  style={{ width: "100%", padding: "10px 0", fontSize: 13 }}
-                  onClick={() => setCalibrationStep(2)}
-                >
-                  Weiter zu Schritt 2
-                </button>
-              </div>
+            <p style={{ color: "#FFFFFF", fontSize: 12 }}>
+              {calibrationStep === 1
+                ? "Schritt 1 von 2: Schreibe mit dem Stylus, halte die Hand dabei in der Luft."
+                : "Schritt 2 von 2: Lege die Schreibhand flach auf, ohne zu schreiben."}
+            </p>
+            <div
+              data-testid="calibration-surface"
+              style={{
+                height: 200,
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: "#08080A",
+                touchAction: "none",
+              }}
+              onPointerDown={(event) => recordCalibration(event, "down")}
+              onPointerMove={(event) => recordCalibration(event, "move")}
+              onPointerUp={(event) => recordCalibration(event, "up")}
+            />
+            {calibrationResult && (
+              <p data-testid="calibration-result" style={{ color: "#FFFFFF", fontSize: 12 }}>
+                {calibrationResult.geometryUsable
+                  ? `Getrennt bei ${calibrationResult.palmContactPx} px (Kanal: ${calibrationResult.sizeChannel}).`
+                  : "Dieses Display meldet für Stift und Handballen dieselben Werte. Die Größenerkennung wird deshalb nicht verwendet; der Schutz läuft über Bewegung und rückwirkende Korrektur."}
+              </p>
             )}
-
-            {calibrationStep === 2 && (
-              <div>
-                <p style={{ color: "#FFFFFF", fontSize: 13, lineHeight: 1.5 }}>
-                  <strong>Schritt 2:</strong> Schreibe oder zeichne ein
-                  beliebiges Muster mit dem Stift.
-                </p>
-                <div
-                  style={{
-                    height: 110,
-                    borderRadius: 12,
-                    background: "#121118",
-                    border: "1px dashed rgba(10,132,255,.5)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#8ac0ff",
-                    fontSize: 12,
-                    margin: "14px 0",
-                  }}
-                >
-                  Stiftbewegungen erfassen...
-                </div>
-                <button
-                  className="settings-action-btn"
-                  style={{ width: "100%", padding: "10px 0", fontSize: 13 }}
-                  onClick={() => {
-                    setIsCalibrating(false);
-                    showToast("Kalibrierung erfolgreich abgeschlossen!");
-                  }}
-                >
-                  Kalibrierung abschließen
-                </button>
-              </div>
+            {calibrationStep === 1 ? (
+              <button
+                data-testid="calibration-next"
+                className="settings-action-btn"
+                onClick={() => setCalibrationStep(2)}
+              >
+                Weiter
+              </button>
+            ) : (
+              <button
+                data-testid="calibration-finish"
+                className="settings-action-btn"
+                onClick={finishCalibration}
+              >
+                Kalibrierung abschließen
+              </button>
             )}
+            <button className="settings-action-btn" onClick={() => setIsCalibrating(false)}>
+              Schließen
+            </button>
           </div>
         </div>
       )}
