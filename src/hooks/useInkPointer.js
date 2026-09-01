@@ -63,16 +63,28 @@ export default function useInkPointer(options) {
   const inputStateRef = useRef(createInputState());
   const draftRef = useRef(null);
   const draftOwnerRef = useRef(null);
+  const draftPointerIdRef = useRef(null);
+  const draftPointerTypeRef = useRef(null);
   const strokeEraserRef = useRef(false);
   const captureRef = useRef(null);
+  // Committed touch strokes stay revocable for a moment: on a device with no
+  // digitizer we only learn that a contact was a palm after the tip arrives,
+  // which is after that palm's stroke has already been written down. Timed
+  // off each event's own timeStamp, same as the rest of the policy — never
+  // off the wall clock, or the window would depend on how fast tests run.
+  const recentTouchStrokesRef = useRef([]);
+  const lastEventTimeRef = useRef(0);
   const [draftStroke, setDraftStroke] = useState(null);
   const previousDocumentIdRef = useRef(options.document?.documentId);
   if (previousDocumentIdRef.current !== options.document?.documentId) {
-    inputStateRef.current = createInputState();
+    inputStateRef.current = createInputState({ sawPenPointer: inputStateRef.current.sawPenPointer });
     previousDocumentIdRef.current = options.document?.documentId;
     draftRef.current = null;
     draftOwnerRef.current = null;
+    draftPointerIdRef.current = null;
+    draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
+    recentTouchStrokesRef.current = [];
     setDraftStroke(null);
     if (captureRef.current?.target?.releasePointerCapture) {
       captureRef.current.target.releasePointerCapture(captureRef.current.pointerId);
@@ -95,19 +107,37 @@ export default function useInkPointer(options) {
   const discardDraft = useCallback(() => {
     draftRef.current = null;
     draftOwnerRef.current = null;
+    draftPointerIdRef.current = null;
+    draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
     setDraftStroke(null);
     releaseCapture();
   }, [releaseCapture]);
 
+  const revokeCommitted = useCallback((pointerIds, at) => {
+    const window = palmGuard(optionsRef.current).retroWindowMs;
+    const buffer = recentTouchStrokesRef.current;
+    const doomed = buffer.filter(
+      (entry) => pointerIds.includes(entry.pointerId) && at - entry.committedAt <= window,
+    );
+    recentTouchStrokesRef.current = buffer.filter(
+      (entry) => at - entry.committedAt <= window && !doomed.includes(entry),
+    );
+    if (doomed.length > 0) {
+      optionsRef.current.removeStrokes?.(doomed.map((entry) => entry.strokeId));
+    }
+  }, []);
+
   const route = useCallback((event, phase) => {
     const { inputMode = "stylus" } = optionsRef.current;
+    const timeStamp = Number.isFinite(event.timeStamp) ? event.timeStamp : lastEventTimeRef.current;
+    lastEventTimeRef.current = timeStamp;
     const routed = reducePointerInput(
       inputStateRef.current,
       {
         pointerId: event.pointerId,
         pointerType: event.pointerType,
-        timeStamp: event.timeStamp,
+        timeStamp,
         // Contact geometry is what separates a fingertip from a palm; without
         // it the guard is blind to a hand that lands before the pen does.
         width: event.width,
@@ -122,8 +152,11 @@ export default function useInkPointer(options) {
       palmGuard(optionsRef.current),
     );
     inputStateRef.current = routed.state;
+    if (routed.state.retroBlockedPointerIds.length > 0) {
+      revokeCommitted(routed.state.retroBlockedPointerIds, timeStamp);
+    }
     return routed;
-  }, []);
+  }, [revokeCommitted]);
 
   const abortDraft = useCallback(
     (event) => {
@@ -137,8 +170,12 @@ export default function useInkPointer(options) {
     const draft = draftRef.current;
     const owner = draftOwnerRef.current;
     const isStrokeEraser = strokeEraserRef.current;
+    const pointerId = draftPointerIdRef.current;
+    const pointerType = draftPointerTypeRef.current;
     draftRef.current = null;
     draftOwnerRef.current = null;
+    draftPointerIdRef.current = null;
+    draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
     setDraftStroke(null);
     releaseCapture();
@@ -161,6 +198,13 @@ export default function useInkPointer(options) {
       return;
     }
     current.commitStroke?.(draft);
+    if (pointerType === 'touch' && pointerId !== null) {
+      recentTouchStrokesRef.current.push({
+        strokeId: draft.id,
+        pointerId,
+        committedAt: lastEventTimeRef.current,
+      });
+    }
   }, [releaseCapture]);
 
   const startDraft = useCallback((event) => {
@@ -182,6 +226,8 @@ export default function useInkPointer(options) {
     };
     draftRef.current = draft;
     draftOwnerRef.current = owner;
+    draftPointerIdRef.current = event.pointerId;
+    draftPointerTypeRef.current = event.pointerType;
     strokeEraserRef.current = current.tool === 'stroke-eraser'
       || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
     // The live draft object is published once. Moves mutate it in place and are
@@ -294,8 +340,20 @@ export default function useInkPointer(options) {
       inputStateRef.current = routed.state;
       if (routed.intent === 'cancel-draw') discardDraft();
     },
+    markPalm: (pointerId, timeStamp) => {
+      const routed = reducePointerInput(
+        inputStateRef.current,
+        { pointerId, pointerType: 'touch', timeStamp, phase: 'cancel' },
+        optionsRef.current.inputMode || 'stylus',
+        palmGuard(optionsRef.current),
+      );
+      inputStateRef.current = routed.state;
+      if (draftPointerIdRef.current === pointerId) discardDraft();
+      revokeCommitted([pointerId], timeStamp);
+    },
     reset: () => {
       inputStateRef.current = createInputState();
+      recentTouchStrokesRef.current = [];
       discardDraft();
     },
     draftStroke,

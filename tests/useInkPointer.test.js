@@ -458,3 +458,38 @@ describe('useInkPointer', () => {
     expect(commitStroke).toHaveBeenCalledOnce();
   });
 });
+
+describe('retroactive palm removal', () => {
+  it('removes a committed touch stroke once its contact turns out to be a palm', () => {
+    const { result, commitStroke, removeStrokes } = renderInkPointer();
+
+    act(() => {
+      result.current.onPointerDown(pointer(1, 'touch', 10, 10, undefined, 1_000));
+      result.current.onPointerMove(pointer(1, 'touch', 40, 40, undefined, 1_020));
+      result.current.onPointerUp(pointer(1, 'touch', 40, 40, undefined, 1_040));
+    });
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+    const strokeId = commitStroke.mock.calls[0][0].id;
+
+    act(() => {
+      result.current.markPalm(1, 1_100);
+    });
+    expect(removeStrokes).toHaveBeenCalledWith([strokeId]);
+  });
+
+  it('does not remove a touch stroke older than the retroactive window', () => {
+    const { result, commitStroke, removeStrokes } = renderInkPointer({ inputMode: 'finger' });
+
+    act(() => {
+      result.current.onPointerDown(pointer(1, 'touch', 10, 10, undefined, 1_000));
+      result.current.onPointerMove(pointer(1, 'touch', 40, 40, undefined, 1_020));
+      result.current.onPointerUp(pointer(1, 'touch', 40, 40, undefined, 1_040));
+    });
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.markPalm(1, 1_040 + 5_000);
+    });
+    expect(removeStrokes).not.toHaveBeenCalled();
+  });
+});
