@@ -6,6 +6,12 @@ export const PALM_PROFILE_DEFAULTS = {
   detectionStrength: 56,
   smallContacts: 56,
   contactWindow: 56,
+  passiveStylus: true,
+  // Written once by the calibration wizard; null means "never measured".
+  measured: null,
+  // Persisted so a tablet that does have a digitizer never falls back to the
+  // passive-stylus path just because no pen has touched down yet this session.
+  sawPenPointer: false,
 };
 
 const clamp = (value, fallback) =>
@@ -20,13 +26,32 @@ export function palmGuardFromProfile(profile) {
   const smallContacts = clamp(profile?.smallContacts, PALM_PROFILE_DEFAULTS.smallContacts);
   const contactWindow = clamp(profile?.contactWindow, PALM_PROFILE_DEFAULTS.contactWindow);
   const postPenGuardMs = Math.round(contactWindow * 6);
+  const measured = profile?.measured ?? null;
+  // A measured threshold beats a formula; the slider then trims it by a
+  // quarter either way, because the hand that was calibrated is not always the
+  // grip that is writing.
+  const scale = 1.25 - strength * 0.005;
+  const measuredOrDefault = (key, fallback) =>
+    Number.isFinite(measured?.[key]) ? Math.round(measured[key] * scale) : fallback;
   return {
     ...PALM_GUARD_DEFAULTS,
-    palmContactPx: Math.round(80 - strength * 0.62),
+    palmContactPx: measuredOrDefault('palmContactPx', Math.round(80 - strength * 0.62)),
+    penMaxPx: measuredOrDefault('penMaxPx', PALM_GUARD_DEFAULTS.penMaxPx),
     palmLatchMs: Math.round(smallContacts * 4),
     postPenGuardMs,
     penProximityMs: postPenGuardMs * 2,
+    geometryUsable: measured ? measured.geometryUsable !== false : PALM_GUARD_DEFAULTS.geometryUsable,
+    sizeChannel: measured?.sizeChannel ?? PALM_GUARD_DEFAULTS.sizeChannel,
+    passiveStylus: profile?.passiveStylus !== false,
   };
+}
+
+export function markPenSeen(storage = globalThis.localStorage) {
+  const profile = loadPalmProfile(storage);
+  if (profile.sawPenPointer) return profile;
+  const next = { ...profile, sawPenPointer: true };
+  savePalmProfile(next, storage);
+  return next;
 }
 
 export function loadPalmProfile(storage = globalThis.localStorage) {

@@ -45,7 +45,12 @@ export default function Settings({ onBack }) {
   const [contactWindow, setContactWindow] = useState(storedProfile.contactWindow);
 
   useEffect(() => {
-    savePalmProfile({ detectionStrength, smallContacts, contactWindow });
+    savePalmProfile({
+      ...loadPalmProfile(),
+      detectionStrength,
+      smallContacts,
+      contactWindow,
+    });
   }, [detectionStrength, smallContacts, contactWindow]);
 
   // Diagnose — beantwortet auf dem Gerät, welche Pointer-Felder das Panel

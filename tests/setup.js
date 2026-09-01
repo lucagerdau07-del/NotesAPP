@@ -1,5 +1,17 @@
 import 'fake-indexeddb/auto';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+
+// localStorage persists across tests within a file (jsdom gives each test
+// FILE a fresh window, not each test). The palm profile now writes to it
+// from production code (markPenSeen), so one test's real pen stroke would
+// otherwise leak sawPenPointer:true into every later test in that file.
+afterEach(() => {
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    // Some suites stub localStorage without a clear() method; nothing to do.
+  }
+});
 
 const blobConstructors = [
   typeof Blob !== 'undefined' ? Blob : null,

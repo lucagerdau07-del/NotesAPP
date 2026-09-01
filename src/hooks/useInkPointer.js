@@ -6,6 +6,7 @@ import {
   shouldBlockTouch as policyBlocksTouch,
 } from "../ink/inputPolicy.js";
 import { findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
+import { loadPalmProfile, markPenSeen } from "../ink/palmSettings.js";
 
 let nextStrokeNumber = 0;
 
@@ -60,7 +61,9 @@ const palmGuard = (options) =>
 
 export default function useInkPointer(options) {
   const optionsRef = useRef(options);
-  const inputStateRef = useRef(createInputState());
+  const inputStateRef = useRef(
+    createInputState({ sawPenPointer: loadPalmProfile().sawPenPointer === true }),
+  );
   const draftRef = useRef(null);
   const draftOwnerRef = useRef(null);
   const draftPointerIdRef = useRef(null);
@@ -151,7 +154,9 @@ export default function useInkPointer(options) {
       inputMode,
       palmGuard(optionsRef.current),
     );
+    const hadPen = inputStateRef.current.sawPenPointer;
     inputStateRef.current = routed.state;
+    if (!hadPen && routed.state.sawPenPointer) markPenSeen();
     if (routed.state.retroBlockedPointerIds.length > 0) {
       revokeCommitted(routed.state.retroBlockedPointerIds, timeStamp);
     }
