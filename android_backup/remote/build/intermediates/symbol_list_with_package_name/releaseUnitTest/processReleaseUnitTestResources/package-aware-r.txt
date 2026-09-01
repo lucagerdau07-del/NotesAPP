@@ -1,3 +1,0 @@
-com.notes.school.remote.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme

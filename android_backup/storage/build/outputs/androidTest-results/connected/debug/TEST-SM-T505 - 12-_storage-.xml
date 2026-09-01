@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='UTF-8' ?>
-<testsuite tests="0" failures="0" errors="0" skipped="0" time="1.611" timestamp="2026-08-22T16:22:30" hostname="localhost">
-  <properties>
-    <property name="device" value="SM-T505 - 12" />
-    <property name="flavor" value="" />
-    <property name="project" value=":storage" />
-  </properties>
-</testsuite>

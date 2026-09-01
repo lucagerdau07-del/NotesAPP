@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.notes.school.BuildSmokeTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-22T14:26:33" hostname="DESKTOP-5LP1CJ6" time="0.0">
-  <properties/>
-  <testcase name="applicationIdMatchesSpecNamespace" classname="com.notes.school.BuildSmokeTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

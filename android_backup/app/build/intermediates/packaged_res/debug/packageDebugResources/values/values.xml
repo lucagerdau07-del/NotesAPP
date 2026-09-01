@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">School Notes</string>
-    <style name="Theme.SchoolNotes" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF121212</item>
-    </style>
-</resources>

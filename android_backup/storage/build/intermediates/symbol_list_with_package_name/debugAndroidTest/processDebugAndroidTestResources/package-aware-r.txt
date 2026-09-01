@@ -1,3 +1,0 @@
-com.notes.school.storage.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme

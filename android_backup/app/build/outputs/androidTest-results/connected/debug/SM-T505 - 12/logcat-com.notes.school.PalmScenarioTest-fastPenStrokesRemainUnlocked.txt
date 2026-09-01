@@ -1,3 +1,0 @@
-08-22 18:23:36.997 28451 28730 I TestRunner: started: fastPenStrokesRemainUnlocked(com.notes.school.PalmScenarioTest)
-08-22 18:23:37.000 28799 28884 I Finsky:background: [386] SSM: Start staged session task with 2 tracked staged sessions
-08-22 18:23:37.003 28451 28730 I TestRunner: finished: fastPenStrokesRemainUnlocked(com.notes.school.PalmScenarioTest)

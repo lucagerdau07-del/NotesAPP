@@ -14,3 +14,10 @@ android/.idea/
 android/app/release/
 *.apk
 *.aab
+
+# Android (backup copy)
+android_backup/.gradle/
+android_backup/build/
+android_backup/*/build/
+android_backup/local.properties
+android_backup/.idea/

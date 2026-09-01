@@ -1,3 +1,0 @@
-08-22 18:23:36.970 28451 28730 I TestRunner: started: palmFirstAmbiguousResultsAreRecordedSeparatelyRatherThanAsserted(com.notes.school.PalmScenarioTest)
-08-22 18:23:36.976 28451 28730 I System.out: palm-first-small rejection rate: 0.0
-08-22 18:23:36.976 28451 28730 I TestRunner: finished: palmFirstAmbiguousResultsAreRecordedSeparatelyRatherThanAsserted(com.notes.school.PalmScenarioTest)
