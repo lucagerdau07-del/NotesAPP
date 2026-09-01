@@ -278,6 +278,9 @@ export default function Settings({ onBack }) {
           <ChevronLeft size={20} />
           <span className="settings-title">Einstellungen</span>
         </button>
+        <span style={{ color: "#8a8a8a", fontSize: 11, marginRight: 12 }}>
+          Build {__APP_BUILD_TIME__}
+        </span>
         <button className="settings-done-btn" onClick={onBack}>
           Fertig
         </button>
