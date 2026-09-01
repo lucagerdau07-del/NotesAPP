@@ -78,17 +78,21 @@ export function updateContacts(contacts, event, tuning = CONTACT_DEFAULTS) {
 export function isPinchPair(contacts, tuning = CONTACT_DEFAULTS) {
   const list = Object.values(contacts);
   if (list.length !== 2) return false;
-  // The size guard below is the only thing keeping a hand out of this test, and
-  // it needs contact geometry to mean anything. On a panel that reports none,
-  // every contact measures 0, so the sole surviving test is separation — which
-  // a resting palm and a tip writing beside it clear as a matter of course.
-  // Calling that a pinch abandons the election and latches gestures for as long
-  // as the hand stays down, which is the whole feature failing shut. On such a
-  // panel two contacts are hand plus tip until proven otherwise; zooming there
-  // takes a third finger or a lifted hand.
-  if (!tuning.geometryUsable || tuning.sizeChannel === 'none') return false;
   const [first, second] = list;
   if (first.maxSize >= tuning.palmContactPx || second.maxSize >= tuning.palmContactPx) return false;
+  // That size guard is the only thing keeping a hand out of this test, and it
+  // only fires on a panel that reports a palm as palm-sized. Plenty do not —
+  // the device this was reported on tops out around 17px for hand and tip
+  // alike — leaving separation as the sole test, which a hand parked at the
+  // edge of the screen clears against any tip writing across the page. So
+  // require the pair to be doing the same thing: both travelling, or both
+  // still new to the glass and not yet committed to anything. One parked while
+  // the other writes is a hand and a tip, on every panel, calibrated or not.
+  const pinchSpeed = tuning.restingPx / tuning.restingMs;
+  const travelling = first.speed >= pinchSpeed && second.speed >= pinchSpeed;
+  const bothNew = first.lastAt - first.downAt < tuning.restingMs
+    && second.lastAt - second.downAt < tuning.restingMs;
+  if (!travelling && !bothNew) return false;
   return Math.hypot(first.x - second.x, first.y - second.y) >= tuning.pinchMinSeparationPx;
 }
 
@@ -113,8 +117,13 @@ export function classifyContacts(contacts, tuning = CONTACT_DEFAULTS, now = 0) {
   // The pace that separates a settling hand from a writing tip, taken from the
   // resting rule rather than added as a second knob to keep in sync with it.
   const writingSpeed = tuning.restingPx / tuning.restingMs;
-  const elected = sized.length > 0
-    ? sized.reduce((best, contact) => (contact.maxSize < best.maxSize ? contact : best))
+  // A hand parked on the glass is never the tip that is writing, whatever size
+  // it reports, so a contact that is moving outranks one that is not. Sizes
+  // only break the tie among those still in the running.
+  const moving = sized.filter((contact) => contact.speed >= writingSpeed);
+  const candidates = moving.length > 0 ? moving : sized;
+  const elected = candidates.length > 0
+    ? candidates.reduce((best, contact) => (contact.maxSize < best.maxSize ? contact : best))
     // No usable geometry: the hand parks and the tip writes, so the contact
     // that is moving fastest right now is the only thing left to elect on.
     // Ranking by distance travelled instead would hand the slot to whichever
@@ -125,14 +134,22 @@ export function classifyContacts(contacts, tuning = CONTACT_DEFAULTS, now = 0) {
         .reduce((best, contact) => (!best || contact.speed > best.speed ? contact : best), null);
 
   const electedId = elected ? elected.id : null;
+  // Losing the election costs a contact its ink until it lifts, so the election
+  // has to have meant something. On a panel that reads a hand and a tip alike —
+  // the one this was reported on puts both around 5px — two same-sized contacts
+  // are a coin flip, and calling the loser a palm is how the pen goes dead
+  // beside a resting hand. Unless the winner earned it by moving, or was the
+  // only candidate there was, nobody is condemned and the next frame decides.
+  const decisive = elected !== null
+    && (elected.speed >= writingSpeed || sized.length <= 1);
   const palmIds = [...new Set([
     ...oversized,
     ...resting,
     // A single unclassified contact is left alone on purpose: stalling it until
     // it proves itself would put a visible lag on every ordinary stroke.
-    ...(electedId === null
-      ? []
-      : list.filter((contact) => contact.id !== electedId).map((contact) => contact.id)),
+    ...(decisive
+      ? list.filter((contact) => contact.id !== electedId).map((contact) => contact.id)
+      : []),
   ])];
   return { electedId, palmIds };
 }

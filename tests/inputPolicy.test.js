@@ -296,4 +296,34 @@ describe('passive stylus admission', () => {
     expect(result.state.blockedTouchPointerIds).not.toContain(2);
     expect(result.intent).toBe('continue-draw');
   });
+
+  it('lets the pen write beside a parked hand on a panel whose palm never reads palm-sized', () => {
+    // Measured on the device this was reported from: every contact, hand or
+    // tip, reports between 1.3 and 17.3 px. Nothing there ever reaches
+    // palmContactPx, so the size guard that is meant to keep a hand out of the
+    // pinch test cannot fire — with or without calibration. A hand parked at
+    // the edge of the screen is then simply "a contact far away from the other
+    // one", which is all that is left of the pinch test.
+    const size = 5;
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size, x: 700, y: 900, timeStamp: 0 }), 'stylus');
+    // The hand takes weight before it settles, so it travels past the resting
+    // threshold in the first frames and the resting timeout never fires on it.
+    for (let step = 1; step <= 4; step += 1) {
+      result = reducePointerInput(result.state, contact('move', 1, { size, x: 700 + step * 6, y: 900, timeStamp: step * 16 }), 'stylus');
+    }
+    for (let step = 1; step <= 20; step += 1) {
+      result = reducePointerInput(result.state, contact('move', 1, { size, x: 724, y: 900, timeStamp: 64 + step * 100 }), 'stylus');
+    }
+
+    result = reducePointerInput(result.state, contact('down', 2, { size, x: 200, y: 300, timeStamp: 2_100 }), 'stylus');
+    for (let step = 1; step <= 4; step += 1) {
+      result = reducePointerInput(
+        result.state,
+        contact('move', 2, { size, x: 200 + step * 25, y: 300, timeStamp: 2_100 + step * 16 }),
+        'stylus',
+      );
+    }
+    expect(result.state.blockedTouchPointerIds).not.toContain(2);
+    expect(result.intent).toBe('continue-draw');
+  });
 });
