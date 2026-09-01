@@ -50,8 +50,12 @@ export function updateContacts(contacts, event, tuning = CONTACT_DEFAULTS) {
   const time = number(event.timeStamp);
   const previous = contacts[id];
   if (!previous || event.phase === 'down') {
-    return { ...contacts, [id]: { id, maxSize: size, x, y, downAt: time, lastAt: time, pathPx: 0 } };
+    return {
+      ...contacts,
+      [id]: { id, maxSize: size, x, y, downAt: time, lastAt: time, pathPx: 0, speed: 0 },
+    };
   }
+  const step = Math.hypot(x - previous.x, y - previous.y);
   return {
     ...contacts,
     [id]: {
@@ -60,7 +64,13 @@ export function updateContacts(contacts, event, tuning = CONTACT_DEFAULTS) {
       x,
       y,
       lastAt: time,
-      pathPx: previous.pathPx + Math.hypot(x - previous.x, y - previous.y),
+      pathPx: previous.pathPx + step,
+      // Travel since touchdown only ever grows, so it ranks contacts by age
+      // rather than by what they are doing now. Current speed is what separates
+      // a hand parked on the glass from a tip writing beside it, whatever
+      // either of them did a second ago. Smoothed, so one coalesced or dropped
+      // frame does not read as a stop.
+      speed: previous.speed * 0.5 + (step / Math.max(1, time - previous.lastAt)) * 0.5,
     },
   };
 }
@@ -68,6 +78,15 @@ export function updateContacts(contacts, event, tuning = CONTACT_DEFAULTS) {
 export function isPinchPair(contacts, tuning = CONTACT_DEFAULTS) {
   const list = Object.values(contacts);
   if (list.length !== 2) return false;
+  // The size guard below is the only thing keeping a hand out of this test, and
+  // it needs contact geometry to mean anything. On a panel that reports none,
+  // every contact measures 0, so the sole surviving test is separation — which
+  // a resting palm and a tip writing beside it clear as a matter of course.
+  // Calling that a pinch abandons the election and latches gestures for as long
+  // as the hand stays down, which is the whole feature failing shut. On such a
+  // panel two contacts are hand plus tip until proven otherwise; zooming there
+  // takes a third finger or a lifted hand.
+  if (!tuning.geometryUsable || tuning.sizeChannel === 'none') return false;
   const [first, second] = list;
   if (first.maxSize >= tuning.palmContactPx || second.maxSize >= tuning.palmContactPx) return false;
   return Math.hypot(first.x - second.x, first.y - second.y) >= tuning.pinchMinSeparationPx;
@@ -91,13 +110,19 @@ export function classifyContacts(contacts, tuning = CONTACT_DEFAULTS, now = 0) {
   const sized = eligible.filter(
     (contact) => contact.maxSize > 0 && contact.maxSize <= tuning.penMaxPx,
   );
+  // The pace that separates a settling hand from a writing tip, taken from the
+  // resting rule rather than added as a second knob to keep in sync with it.
+  const writingSpeed = tuning.restingPx / tuning.restingMs;
   const elected = sized.length > 0
     ? sized.reduce((best, contact) => (contact.maxSize < best.maxSize ? contact : best))
-    // No usable geometry: the hand rests and the tip writes, so the contact
-    // that has actually travelled is the only thing left to elect on.
+    // No usable geometry: the hand parks and the tip writes, so the contact
+    // that is moving fastest right now is the only thing left to elect on.
+    // Ranking by distance travelled instead would hand the slot to whichever
+    // contact has been down longest — always the hand, which lands first and
+    // then wanders a couple of px per frame for as long as it is resting.
     : eligible
-        .filter((contact) => contact.pathPx >= tuning.restingPx)
-        .reduce((best, contact) => (!best || contact.pathPx > best.pathPx ? contact : best), null);
+        .filter((contact) => contact.speed >= writingSpeed)
+        .reduce((best, contact) => (!best || contact.speed > best.speed ? contact : best), null);
 
   const electedId = elected ? elected.id : null;
   const palmIds = [...new Set([

@@ -256,4 +256,44 @@ describe('passive stylus admission', () => {
     result = reducePointerInput(result.state, contact('move', 2, { x: 160, y: 100, timeStamp: 1_080 }), 'stylus', tuning);
     expect(result.intent).toBe('continue-draw');
   });
+
+  it('keeps the pen elected against a palm that has been drifting on the glass for seconds', () => {
+    // Reported from the device: the palm draws the occasional line while the
+    // pen writing next to it produces nothing. A resting hand is never
+    // perfectly still — its contact centroid wanders a couple of px per frame
+    // — so over a few seconds it accumulates far more travel than any single
+    // pen stroke does. Electing on lifetime travel therefore hands the tip
+    // slot to whichever contact has been down longest, which is always the
+    // hand. The pen must win on how fast it is moving now, not on how far it
+    // has come.
+    const tuning = { ...PALM_GUARD_DEFAULTS, sizeChannel: 'none', geometryUsable: false };
+    let result = reducePointerInput(createInputState(), contact('down', 1, { x: 100, y: 100, timeStamp: 0 }), 'stylus', tuning);
+
+    // The hand settles as it takes weight: the contact patch reshapes and its
+    // centroid travels well past the resting threshold inside the first frames,
+    // so the resting timeout never gets to fire on it.
+    let x = 100;
+    for (let step = 1; step <= 6; step += 1) {
+      x += 6;
+      result = reducePointerInput(result.state, contact('move', 1, { x, y: 100, timeStamp: step * 16 }), 'stylus', tuning);
+    }
+    for (let step = 1; step <= 50; step += 1) {
+      x += step % 2 === 0 ? 2 : -2;
+      result = reducePointerInput(result.state, contact('move', 1, { x, y: 100, timeStamp: 200 + step * 200 }), 'stylus', tuning);
+    }
+
+    result = reducePointerInput(result.state, contact('down', 2, { x: 400, y: 400, timeStamp: 10_100 }), 'stylus', tuning);
+    expect(result.state.drawingPointerId).toBe(2);
+
+    for (let step = 1; step <= 4; step += 1) {
+      result = reducePointerInput(
+        result.state,
+        contact('move', 2, { x: 400 + step * 30, y: 400, timeStamp: 10_100 + step * 16 }),
+        'stylus',
+        tuning,
+      );
+    }
+    expect(result.state.blockedTouchPointerIds).not.toContain(2);
+    expect(result.intent).toBe('continue-draw');
+  });
 });
