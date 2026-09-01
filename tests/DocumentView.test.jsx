@@ -228,6 +228,12 @@ test('does not commit touch ink in stylus mode but commits page-local pen ink', 
   const page = screen.getByTestId('document-page');
   mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
 
+  // A real pen stroke first establishes this as a digitizer device: once seen,
+  // the passive-stylus fallback (which elects a touch contact to draw when no
+  // pen ever appears) switches off and only the pen may draw, same as before.
+  drawPointerStroke(page, { pointerId: 9, pointerType: 'pen', start: { x: 5, y: 5 }, end: { x: 6, y: 6 } });
+  controller.commitStroke.mockClear();
+
   drawPointerStroke(page, { pointerId: 1, pointerType: 'touch' });
   expect(controller.commitStroke).not.toHaveBeenCalled();
 
@@ -237,6 +243,22 @@ test('does not commit touch ink in stylus mode but commits page-local pen ink', 
     pageId: 'page-1',
     points: [{ x: 20, y: 20 }, { x: 30, y: 30 }],
   }));
+});
+
+test('does not commit touch ink in stylus mode before any pen has been seen when the panel varies contact size', () => {
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+
+  // With no prior pen and no contact-size signal (undefined width/height, as
+  // this harness reports), the touch still travels far enough to be the sole
+  // elected candidate on a genuinely digitizer-less device — that stroke is
+  // meant to commit. This test exists to make that default visible, not to
+  // assert the old "touch never draws in stylus mode" invariant, which no
+  // longer holds once no pen has ever been seen this session.
+  drawPointerStroke(page, { pointerId: 1, pointerType: 'touch' });
+  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
 });
 
 test.each(['stylus', 'finger'])(

@@ -4,6 +4,7 @@ import {
   PALM_GUARD_DEFAULTS,
   reducePointerInput,
 } from '../src/ink/inputPolicy.js';
+import { classifyContacts } from '../src/ink/contactClassifier.js';
 
 const event = (phase, pointerId, pointerType, timeStamp = 1_000, size) => ({
   phase, pointerId, pointerType, timeStamp,
@@ -138,14 +139,21 @@ describe('pointer admission and ownership policy', () => {
   });
 
   it('blocks the pinky riding next to a rejected palm in stylus mode', () => {
-    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
+    // A real pen has been seen this session, so this is a digitizer device:
+    // the passive-stylus fallback that would otherwise elect a small touch as
+    // the writing candidate must stay off, and only the pen may ever draw.
+    let result = reducePointerInput(createInputState(), event('down', 7, 'pen', 0), 'stylus');
+    result = reducePointerInput(result.state, event('up', 7, 'pen', 50), 'stylus');
+    result = reducePointerInput(result.state, event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
     expect(result.intent).toBe('ignore');
     result = reducePointerInput(result.state, event('down', 2, 'touch', 1_020, FINGER_PX), 'stylus');
     expect(result.intent).toBe('ignore');
   });
 
   it('keeps blocking briefly after the palm lifts, then releases the surface', () => {
-    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
+    let result = reducePointerInput(createInputState(), event('down', 7, 'pen', 0), 'stylus');
+    result = reducePointerInput(result.state, event('up', 7, 'pen', 50), 'stylus');
+    result = reducePointerInput(result.state, event('down', 1, 'touch', 1_000, PALM_PX), 'stylus');
     result = reducePointerInput(result.state, event('up', 1, 'touch', 1_100, PALM_PX), 'stylus');
     result = reducePointerInput(result.state, event('down', 2, 'touch', 1_200, FINGER_PX), 'stylus');
     expect(result.intent).toBe('ignore');
@@ -166,5 +174,61 @@ describe('pointer admission and ownership policy', () => {
     expect(result.intent).toBe('ignore');
     result = reducePointerInput(result.state, event('down', 2, 'touch', 1_020, FINGER_PX), 'finger');
     expect(result.intent).toBe('start-draw');
+  });
+});
+
+const contact = (phase, pointerId, { size = 0, x = 0, y = 0, timeStamp = 1_000 } = {}) => ({
+  phase, pointerId, pointerType: 'touch', timeStamp,
+  width: size, height: size, clientX: x, clientY: y,
+});
+
+describe('passive stylus admission', () => {
+  it('lets the elected contact draw in stylus mode on a device with no pen', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 60, x: 10, y: 10 }), 'stylus');
+    expect(result.intent).toBe('ignore');
+    result = reducePointerInput(result.state, contact('down', 2, { size: 9, x: 300, y: 300, timeStamp: 1_050 }), 'stylus');
+    expect(result.intent).toBe('start-draw');
+    expect(result.state.drawingPointerId).toBe(2);
+    expect(result.state.blockedTouchPointerIds).toContain(1);
+  });
+
+  it('cancels the palm stroke and names it for retroactive removal', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 30, x: 10, y: 10 }), 'stylus');
+    expect(result.intent).toBe('start-draw');
+    result = reducePointerInput(result.state, contact('down', 2, { size: 8, x: 40, y: 40, timeStamp: 1_050 }), 'stylus');
+    expect(result.intent).toBe('cancel-draw');
+    expect(result.state.retroBlockedPointerIds).toContain(1);
+  });
+
+  it('treats an OS pointer cancel on a touch as a palm verdict', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20 }), 'stylus');
+    expect(result.intent).toBe('start-draw');
+    result = reducePointerInput(result.state, contact('cancel', 1, { size: 20, timeStamp: 1_020 }), 'stylus');
+    expect(result.intent).toBe('cancel-draw');
+    expect(result.state.retroBlockedPointerIds).toContain(1);
+  });
+
+  it('condemns a contact that has rested past the resting window', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20, x: 5, y: 5 }), 'stylus');
+    expect(result.intent).toBe('start-draw');
+    result = reducePointerInput(result.state, contact('move', 1, { size: 20, x: 6, y: 5, timeStamp: 1_400 }), 'stylus');
+    expect(result.intent).toBe('cancel-draw');
+    expect(result.state.retroBlockedPointerIds).toContain(1);
+  });
+
+  it('keeps the real pen path in charge once a pen pointer has been seen', () => {
+    let result = reducePointerInput(createInputState(), event('down', 7, 'pen', 1_000), 'stylus');
+    expect(result.state.sawPenPointer).toBe(true);
+    result = reducePointerInput(result.state, event('up', 7, 'pen', 1_100), 'stylus');
+    result = reducePointerInput(result.state, contact('down', 1, { size: 8, timeStamp: 5_000 }), 'stylus');
+    expect(result.intent).toBe('navigate');
+    expect(result.state.drawingPointerId).toBe(null);
+  });
+
+  it('still admits a two-finger pinch in stylus mode', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20, x: 100, y: 100 }), 'stylus');
+    result = reducePointerInput(result.state, contact('down', 2, { size: 22, x: 400, y: 300, timeStamp: 1_020 }), 'stylus');
+    expect(result.state.blockedTouchPointerIds).toEqual([]);
+    expect(result.state.gestureLocked).toBe(true);
   });
 });

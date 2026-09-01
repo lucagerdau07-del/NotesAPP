@@ -1,3 +1,5 @@
+import { CONTACT_DEFAULTS, classifyContacts, updateContacts } from './contactClassifier.js';
+
 export const POST_PEN_TOUCH_GUARD_MS = 300;
 
 // The browser exposes no palm flag, so palm rejection is assembled from the
@@ -15,13 +17,22 @@ export const PALM_GUARD_DEFAULTS = {
   palmContactPx: 45,
   // A palm that lifts usually re-seats within a few frames instead of leaving.
   palmLatchMs: 250,
+  ...CONTACT_DEFAULTS,
+  // On a device without a digitizer nothing ever reports pointerType 'pen', so
+  // stylus mode would admit nothing at all. The elected contact stands in for
+  // the pen until a real one shows up and takes the job back.
+  passiveStylus: true,
+  // How far back a stroke can still be taken away once its contact turns out
+  // to have been a palm. The hand lands before the tip, so this has to cover a
+  // whole short palm stroke, not just a frame.
+  retroWindowMs: 1200,
 };
 
 // stylus: only the pen draws. finger: touch draws too. move: nothing draws,
 // every pointer is left to the pan/pinch layer.
 export const INPUT_MODES = ['stylus', 'finger', 'move'];
 
-export function createInputState() {
+export function createInputState(seed = {}) {
   return {
     drawingPointerId: null,
     drawingPointerType: null,
@@ -31,6 +42,12 @@ export function createInputState() {
     lastPenUpAt: Number.NEGATIVE_INFINITY,
     lastPenSeenAt: Number.NEGATIVE_INFINITY,
     lastPalmUpAt: Number.NEGATIVE_INFINITY,
+    contacts: {},
+    electedPointerId: null,
+    // Pointer ids condemned by this event and not blocked before it. The hook
+    // uses them to take back ink that has already been drawn or committed.
+    retroBlockedPointerIds: [],
+    sawPenPointer: seed.sawPenPointer === true,
   };
 }
 
@@ -74,7 +91,12 @@ export function shouldBlockTouch(
   // palm reports a fingertip-sized patch, so sizing it on its own never catches
   // it. Only in stylus mode, where no touch is ever meant to draw — in finger
   // mode that rule would lock out the writing finger next to its own palm.
-  if (inputMode === 'stylus') {
+  // The elected-contact exception only applies while the passive-stylus
+  // fallback is actually the thing admitting touches: once a real pen has
+  // been seen, only the pen may draw and every touch stays under this guard,
+  // exactly as on a device with a digitizer.
+  const passiveActive = tuning.passiveStylus && !state.sawPenPointer;
+  if (inputMode === 'stylus' && !(passiveActive && state.electedPointerId === event.pointerId)) {
     if (state.blockedTouchPointerIds.length > 0) return true;
     if (timeStamp - state.lastPalmUpAt < tuning.palmLatchMs) return true;
   }
@@ -83,11 +105,20 @@ export function shouldBlockTouch(
 }
 
 export function reducePointerInput(
-  state,
+  inputState,
   event,
   inputMode = 'stylus',
   tuning = PALM_GUARD_DEFAULTS,
 ) {
+  const contacts = updateContacts(inputState.contacts ?? {}, event, tuning);
+  const verdict = classifyContacts(contacts, tuning, eventTime(event));
+  // Android withdraws a contact it has decided was a palm as a cancel. That is
+  // a verdict from the driver, better informed than anything computed up here.
+  const osPalmIds = event.pointerType === 'touch' && event.phase === 'cancel'
+    ? [event.pointerId]
+    : [];
+  const palmIds = [...new Set([...verdict.palmIds, ...osPalmIds])];
+  const state = { ...inputState, contacts, electedPointerId: verdict.electedId };
   const isTouch = event.pointerType === 'touch';
   const isRelease = event.phase === 'up' || event.phase === 'cancel';
   const touchPointerIds = !isTouch
@@ -98,13 +129,14 @@ export function reducePointerInput(
         ? remove(state.touchPointerIds, event.pointerId)
         : state.touchPointerIds;
   const blockedByPalmGuard = isTouch && shouldBlockTouch(state, event, tuning, inputMode);
+  const classifierBlocked = [...new Set([...state.blockedTouchPointerIds, ...palmIds])];
   const blockedTouchPointerIds = !isTouch
     ? state.blockedTouchPointerIds
-    : blockedByPalmGuard && event.phase === 'down'
-      ? addUnique(state.blockedTouchPointerIds, event.pointerId)
-      : isRelease
-        ? remove(state.blockedTouchPointerIds, event.pointerId)
-        : state.blockedTouchPointerIds;
+    : isRelease
+      ? remove(classifierBlocked, event.pointerId)
+      : blockedByPalmGuard && event.phase === 'down'
+        ? addUnique(classifierBlocked, event.pointerId)
+        : classifierBlocked;
   // Rejected contacts must not count toward the pinch: a palm plus the writing
   // finger is two pointers, and reading that as a gesture is how a rested hand
   // zooms the page out from under the stroke.
@@ -125,7 +157,21 @@ export function reducePointerInput(
     lastPalmUpAt: isTouch && isRelease && state.blockedTouchPointerIds.includes(event.pointerId)
       ? eventTime(event)
       : state.lastPalmUpAt,
+    retroBlockedPointerIds: palmIds.filter(
+      (id) => !inputState.blockedTouchPointerIds.includes(id),
+    ),
+    sawPenPointer: state.sawPenPointer || event.pointerType === 'pen',
   };
+
+  // The hand lands before the tip. When the contact that is currently drawing
+  // turns out to be that hand, the only correct move is to take the stroke
+  // back — deciding at pointerdown alone can never get this ordering right.
+  if (state.drawingPointerId !== null && palmIds.includes(state.drawingPointerId)) {
+    return {
+      state: { ...nextState, drawingPointerId: null, drawingPointerType: null },
+      intent: 'cancel-draw',
+    };
+  }
 
   if (blockedByPalmGuard) return { state: nextState, intent: 'ignore' };
 
@@ -164,6 +210,13 @@ export function reducePointerInput(
     const canDraw = inputMode !== 'move' && (
       event.pointerType === 'mouse'
       || (isTouch && inputMode === 'finger' && !gestureLocked)
+      || (
+        isTouch
+        && inputMode === 'stylus'
+        && tuning.passiveStylus
+        && !state.sawPenPointer
+        && !gestureLocked
+      )
     );
     if (canDraw) {
       return {
