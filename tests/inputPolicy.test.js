@@ -231,4 +231,29 @@ describe('passive stylus admission', () => {
     expect(result.state.blockedTouchPointerIds).toEqual([]);
     expect(result.state.gestureLocked).toBe(true);
   });
+
+  it('lets the stylus start writing right after a resting palm on a panel that reports no usable contact size', () => {
+    // The panel this bug was reported on reports the same contact size for
+    // every touch, so geometry can never single out the pen tip — only
+    // ordering and the palm's own resting timeout can. The hand always lands
+    // first and stays close to the pen, so this is the ordinary case, not an
+    // edge case.
+    const tuning = { ...PALM_GUARD_DEFAULTS, sizeChannel: 'none', geometryUsable: false };
+    let result = reducePointerInput(createInputState(), contact('down', 1, { x: 100, y: 100, timeStamp: 1_000 }), 'stylus', tuning);
+    expect(result.intent).toBe('start-draw');
+    // The hand settles rather than travelling, but not long enough yet to be
+    // classified as resting.
+    result = reducePointerInput(result.state, contact('move', 1, { x: 101, y: 100, timeStamp: 1_050 }), 'stylus', tuning);
+
+    // The pen touches down close to the resting hand — not a pinch, and its
+    // own geometry looks exactly like the palm's, since this panel reports
+    // nothing usable at all.
+    result = reducePointerInput(result.state, contact('down', 2, { x: 130, y: 100, timeStamp: 1_060 }), 'stylus', tuning);
+    expect(result.intent).toBe('replace-draw');
+    expect(result.state.drawingPointerId).toBe(2);
+    expect(result.state.gestureLocked).toBe(false);
+
+    result = reducePointerInput(result.state, contact('move', 2, { x: 160, y: 100, timeStamp: 1_080 }), 'stylus', tuning);
+    expect(result.intent).toBe('continue-draw');
+  });
 });

@@ -1,4 +1,4 @@
-import { CONTACT_DEFAULTS, classifyContacts, updateContacts } from './contactClassifier.js';
+import { CONTACT_DEFAULTS, classifyContacts, isPinchPair, updateContacts } from './contactClassifier.js';
 
 export const POST_PEN_TOUCH_GUARD_MS = 300;
 
@@ -96,7 +96,18 @@ export function shouldBlockTouch(
   // been seen, only the pen may draw and every touch stays under this guard,
   // exactly as on a device with a digitizer.
   const passiveActive = tuning.passiveStylus && !state.sawPenPointer;
-  if (inputMode === 'stylus' && !(passiveActive && state.electedPointerId === event.pointerId)) {
+  // A brand-new contact can never win election by movement on its own down
+  // event — it has not travelled anywhere yet, so its path is always 0. If an
+  // already-blocked palm were enough to reject it outright, no second contact
+  // could ever start writing on a panel whose geometry doesn't clearly single
+  // it out. Treat "not yet classified" (electedId still null) the same as
+  // "currently elected": give it the same optimistic admission the very first
+  // contact gets, and let the oversized/resting/election checks correct it
+  // afterward if it turns out to be palm.
+  const admissibleCandidate = passiveActive && (
+    state.electedPointerId === event.pointerId || state.electedPointerId === null
+  );
+  if (inputMode === 'stylus' && !admissibleCandidate) {
     if (state.blockedTouchPointerIds.length > 0) return true;
     if (timeStamp - state.lastPalmUpAt < tuning.palmLatchMs) return true;
   }
@@ -143,9 +154,20 @@ export function reducePointerInput(
   const gestureTouchIds = touchPointerIds.filter(
     (id) => !blockedTouchPointerIds.includes(id),
   );
+  const passiveActive = tuning.passiveStylus && !state.sawPenPointer;
+  // In passive-stylus fallback, two concurrent un-blocked touches are the
+  // ordinary case (the resting hand plus the pen tip, before either has been
+  // proven) — not a pinch. Only treat two touches as a deliberate gesture
+  // start when they actually spread apart like one; three or more is
+  // unambiguous either way. Elsewhere this stays the original "any two
+  // touches is a gesture" rule.
+  const looksLikeGestureStart = passiveActive && inputMode === 'stylus'
+    ? gestureTouchIds.length >= 3
+      || (gestureTouchIds.length === 2 && isPinchPair(contacts, tuning))
+    : gestureTouchIds.length >= 2;
   const gestureLocked = state.gestureLocked
     ? gestureTouchIds.length > 0
-    : gestureTouchIds.length >= 2;
+    : looksLikeGestureStart;
   const nextState = {
     ...state,
     touchPointerIds,
@@ -195,6 +217,28 @@ export function reducePointerInput(
     && isTouch
     && state.drawingPointerType === 'touch'
   ) {
+    // A second touch while another touch is drawing is normally a deliberate
+    // gesture (two fingers = pinch intent), so the draft is cancelled and
+    // gestures lock until full release. But in passive-stylus fallback this
+    // is routinely the pen tip landing after the hand — the exact case this
+    // feature exists for — so when it doesn't look like a gesture and isn't
+    // itself palm-sized, let it take over the drawing slot instead of just
+    // eating the event.
+    if (
+      passiveActive
+      && inputMode === 'stylus'
+      && !nextState.gestureLocked
+      && !isPalmContact(event, tuning)
+    ) {
+      return {
+        state: {
+          ...nextState,
+          drawingPointerId: event.pointerId,
+          drawingPointerType: event.pointerType,
+        },
+        intent: 'replace-draw',
+      };
+    }
     return {
       state: {
         ...nextState,
