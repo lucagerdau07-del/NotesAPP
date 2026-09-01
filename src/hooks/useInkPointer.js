@@ -112,6 +112,10 @@ export default function useInkPointer(options) {
         // it the guard is blind to a hand that lands before the pen does.
         width: event.width,
         height: event.height,
+        // The contact classifier needs real coordinates to tell a resting
+        // hand from a travelling tip and to measure pinch separation.
+        clientX: event.clientX,
+        clientY: event.clientY,
         phase,
       },
       inputMode,

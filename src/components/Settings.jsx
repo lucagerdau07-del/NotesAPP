@@ -155,6 +155,8 @@ export default function Settings({ onBack }) {
         timeStamp: event.timeStamp,
         width: event.width,
         height: event.height,
+        clientX: event.clientX,
+        clientY: event.clientY,
         phase,
       },
       "stylus",
