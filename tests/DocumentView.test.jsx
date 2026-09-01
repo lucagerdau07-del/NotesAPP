@@ -852,7 +852,21 @@ test('blocks document touches in select mode during active pen and post-pen guar
   fireEvent.pointerDown(page, { pointerId: 3, pointerType: 'touch', clientX: 300, clientY: 300, timeStamp: 100 });
   fireEvent.pointerMove(page, { pointerId: 3, pointerType: 'touch', clientX: 350, clientY: 350, timeStamp: 150 });
   
-  // Verify controller didn't receive weird states, though the test mostly verifies it doesn't crash 
+  // Verify controller didn't receive weird states, though the test mostly verifies it doesn't crash
   // and the blocked touch is ignored by checking coverage/logic paths.
   expect(controller.commitStroke).not.toHaveBeenCalled();
+});
+
+test('drops a cancelled touch out of the gesture set instead of leaving it pinching', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
+  render(<DocumentView inkController={createControllerDouble()} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 400, clientY: 300 });
+  fireEvent.pointerCancel(page, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 500, clientY: 300 });
+
+  // With one contact withdrawn there is no pair left, so nothing may zoom.
+  expect(page.style.transform).toBe('');
 });
