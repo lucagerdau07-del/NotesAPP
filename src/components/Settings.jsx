@@ -880,7 +880,12 @@ export default function Settings({ onBack }) {
               <button
                 data-testid="calibration-next"
                 className="settings-action-btn"
-                onClick={() => setCalibrationStep(2)}
+                // A resting palm is a second, concurrent touch anywhere on
+                // the page. Chromium never synthesizes a "click" out of a
+                // multi-touch sequence, so a plain onClick here would be
+                // untappable for the exact hand-on-glass case this wizard
+                // measures. pointerup fires per contact regardless.
+                onPointerUp={() => setCalibrationStep(2)}
               >
                 Weiter
               </button>
@@ -888,12 +893,12 @@ export default function Settings({ onBack }) {
               <button
                 data-testid="calibration-finish"
                 className="settings-action-btn"
-                onClick={finishCalibration}
+                onPointerUp={finishCalibration}
               >
                 Kalibrierung abschließen
               </button>
             )}
-            <button className="settings-action-btn" onClick={() => setIsCalibrating(false)}>
+            <button className="settings-action-btn" onPointerUp={() => setIsCalibrating(false)}>
               Schließen
             </button>
           </div>

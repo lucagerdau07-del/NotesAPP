@@ -23,10 +23,10 @@ describe('palm calibration wizard', () => {
     fireEvent.click(screen.getByTestId('recalibrate-btn'));
 
     stroke(screen.getByTestId('calibration-surface'), [8, 9, 10, 11, 12]);
-    fireEvent.click(screen.getByTestId('calibration-next'));
+    fireEvent.pointerUp(screen.getByTestId('calibration-next'));
 
     stroke(screen.getByTestId('calibration-surface'), [50, 55, 60, 65, 70]);
-    fireEvent.click(screen.getByTestId('calibration-finish'));
+    fireEvent.pointerUp(screen.getByTestId('calibration-finish'));
 
     const measured = loadPalmProfile().measured;
     expect(measured.geometryUsable).toBe(true);
@@ -38,10 +38,10 @@ describe('palm calibration wizard', () => {
     fireEvent.click(screen.getByTestId('recalibrate-btn'));
 
     stroke(screen.getByTestId('calibration-surface'), [33, 33, 33, 33]);
-    fireEvent.click(screen.getByTestId('calibration-next'));
+    fireEvent.pointerUp(screen.getByTestId('calibration-next'));
 
     stroke(screen.getByTestId('calibration-surface'), [33, 33, 33, 33]);
-    fireEvent.click(screen.getByTestId('calibration-finish'));
+    fireEvent.pointerUp(screen.getByTestId('calibration-finish'));
 
     expect(loadPalmProfile().measured.geometryUsable).toBe(false);
     expect(screen.getByTestId('calibration-result')).toHaveTextContent(/nicht/i);
