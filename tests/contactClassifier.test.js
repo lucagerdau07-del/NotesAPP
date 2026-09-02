@@ -86,15 +86,32 @@ describe('contact classifier', () => {
     expect(verdict.palmIds).toEqual([1]);
   });
 
-  it('leaves a deliberate two-finger pinch alone', () => {
+  it('leaves a deliberate two-finger pinch alone once both fingers are moving', () => {
+    // A pinch is two contacts travelling. Size cannot carry this test: the
+    // panel this was tuned against reports a hand and a tip alike, so a pair
+    // that has merely landed far apart is just as likely to be the hand and the
+    // pen, and calling that a pinch freezes writing while a palm is down.
+    const contacts = track([
+      touch('down', 1, { size: 20, x: 100, y: 100, timeStamp: 1_000 }),
+      touch('down', 2, { size: 22, x: 400, y: 300, timeStamp: 1_000 }),
+      touch('move', 1, { size: 20, x: 80, y: 90, timeStamp: 1_016 }),
+      touch('move', 2, { size: 22, x: 420, y: 310, timeStamp: 1_016 }),
+    ]);
+    expect(isPinchPair(contacts, CONTACT_DEFAULTS)).toBe(true);
+    const verdict = classifyContacts(contacts, CONTACT_DEFAULTS, 1_016);
+    expect(verdict.electedId).toBe(null);
+    expect(verdict.palmIds).toEqual([]);
+  });
+
+  it('does not call a pair that has merely landed far apart a pinch', () => {
+    // The hand and the tip touch down together too, so nothing may be decided
+    // before either has moved. Nobody is condemned meanwhile.
     const contacts = track([
       touch('down', 1, { size: 20, x: 100, y: 100 }),
       touch('down', 2, { size: 22, x: 400, y: 300 }),
     ]);
-    expect(isPinchPair(contacts, CONTACT_DEFAULTS)).toBe(true);
-    const verdict = classifyContacts(contacts, CONTACT_DEFAULTS, 1_000);
-    expect(verdict.electedId).toBe(null);
-    expect(verdict.palmIds).toEqual([]);
+    expect(isPinchPair(contacts, CONTACT_DEFAULTS)).toBe(false);
+    expect(classifyContacts(contacts, CONTACT_DEFAULTS, 1_000).palmIds).toEqual([]);
   });
 
   it('does not mistake two clustered palm blobs for a pinch', () => {

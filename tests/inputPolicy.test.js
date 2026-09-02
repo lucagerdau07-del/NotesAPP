@@ -225,9 +225,18 @@ describe('passive stylus admission', () => {
     expect(result.state.drawingPointerId).toBe(null);
   });
 
-  it('still admits a two-finger pinch in stylus mode', () => {
+  it('still admits a two-finger pinch in stylus mode once both fingers move', () => {
+    // Landing two contacts far apart is not yet a pinch here: without a
+    // digitizer the tip is a touch too, so that pair is just as likely to be a
+    // resting hand plus the pen. Nothing is blocked while the verdict is open,
+    // and the gesture locks as soon as the pair actually moves like a pinch.
     let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20, x: 100, y: 100 }), 'stylus');
     result = reducePointerInput(result.state, contact('down', 2, { size: 22, x: 400, y: 300, timeStamp: 1_020 }), 'stylus');
+    expect(result.state.blockedTouchPointerIds).toEqual([]);
+    expect(result.state.gestureLocked).toBe(false);
+
+    result = reducePointerInput(result.state, contact('move', 1, { size: 20, x: 80, y: 90, timeStamp: 1_036 }), 'stylus');
+    result = reducePointerInput(result.state, contact('move', 2, { size: 22, x: 420, y: 310, timeStamp: 1_036 }), 'stylus');
     expect(result.state.blockedTouchPointerIds).toEqual([]);
     expect(result.state.gestureLocked).toBe(true);
   });

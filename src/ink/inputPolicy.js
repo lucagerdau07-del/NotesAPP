@@ -1,4 +1,4 @@
-import { CONTACT_DEFAULTS, classifyContacts, updateContacts } from './contactClassifier.js';
+import { CONTACT_DEFAULTS, classifyContacts, isPinchPair, updateContacts } from './contactClassifier.js';
 
 export const POST_PEN_TOUCH_GUARD_MS = 300;
 
@@ -143,9 +143,20 @@ export function reducePointerInput(
   const gestureTouchIds = touchPointerIds.filter(
     (id) => !blockedTouchPointerIds.includes(id),
   );
+  // Two un-blocked touches are a deliberate gesture where every touch is a
+  // finger. Without a digitizer the tip is a touch too, so the ordinary pair
+  // there is the resting hand plus the pen — locking gestures on it freezes
+  // writing for as long as the hand is down. Two only counts as a gesture start
+  // when the pair actually moves like one; three or more is unambiguous either
+  // way. Elsewhere this stays the plain "any two touches" rule.
+  const passiveActive = tuning.passiveStylus && !state.sawPenPointer;
+  const looksLikeGestureStart = passiveActive && inputMode === 'stylus'
+    ? gestureTouchIds.length >= 3
+      || (gestureTouchIds.length === 2 && isPinchPair(contacts, tuning))
+    : gestureTouchIds.length >= 2;
   const gestureLocked = state.gestureLocked
     ? gestureTouchIds.length > 0
-    : gestureTouchIds.length >= 2;
+    : looksLikeGestureStart;
   const nextState = {
     ...state,
     touchPointerIds,
@@ -195,6 +206,29 @@ export function reducePointerInput(
     && isTouch
     && state.drawingPointerType === 'touch'
   ) {
+    // Where every touch is a finger, a second one is a deliberate gesture, so
+    // the draft goes and gestures lock. But without a digitizer the tip is a
+    // touch as well, and the hand landing beside it — or the tip landing beside
+    // the hand — is the ordinary case this whole fallback exists for. Killing
+    // the stroke there is the pen going dead the moment a palm touches down. So
+    // when it does not look like a gesture and is not itself palm-sized, let it
+    // take over the drawing slot instead.
+    const passiveActive = tuning.passiveStylus && !state.sawPenPointer;
+    if (
+      passiveActive
+      && inputMode === 'stylus'
+      && !nextState.gestureLocked
+      && !isPalmContact(event, tuning)
+    ) {
+      return {
+        state: {
+          ...nextState,
+          drawingPointerId: event.pointerId,
+          drawingPointerType: event.pointerType,
+        },
+        intent: 'replace-draw',
+      };
+    }
     return {
       state: {
         ...nextState,
