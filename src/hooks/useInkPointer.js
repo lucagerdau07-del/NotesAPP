@@ -135,16 +135,6 @@ export default function useInkPointer(options) {
     const { inputMode = "stylus" } = optionsRef.current;
     const timeStamp = Number.isFinite(event.timeStamp) ? event.timeStamp : lastEventTimeRef.current;
     lastEventTimeRef.current = timeStamp;
-    if (phase === 'down') {
-      // A pointerId names a contact only while that contact is on the glass;
-      // the platform hands the same number to whatever lands next. Ink still
-      // held revocable under this id belongs to a contact that is gone, so
-      // leaving it there lets the hand that inherits the id take back the
-      // stroke the tip just finished.
-      recentTouchStrokesRef.current = recentTouchStrokesRef.current.filter(
-        (entry) => entry.pointerId !== event.pointerId,
-      );
-    }
     const routed = reducePointerInput(
       inputStateRef.current,
       {
