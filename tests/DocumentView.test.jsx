@@ -139,7 +139,9 @@ test.each([
   const focusBox = { pageId: 'page-1', x: 100, y: 100, width: 200, height: 100 };
   const setFocusBox = vi.fn();
   render(<DocumentView
-    inkController={createControllerDouble()}
+    // Pinch-zoom lives in the finger and move tools: with no digitizer the tip
+    // is a touch too, so the stylus tool cannot read a second touch as a zoom.
+    inkController={createControllerDouble({ inputMode: 'finger' })}
     focusBoxState={{ focusBox, setFocusBox }}
     toolbarState={toolState({ layoutMode: 'split' })}
   />);
@@ -288,7 +290,9 @@ test.each(['stylus', 'finger'])(
 
 test('zooms and pans around the moving two-finger centroid', () => {
   vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
-  render(<DocumentView inkController={createControllerDouble()} toolbarState={toolState()} />);
+  // Pinch-zoom lives in the finger and move tools: with no digitizer the tip is
+  // a touch too, so the stylus tool cannot read a second touch as a zoom.
+  render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
   scroller.scrollLeft = 50;
@@ -315,6 +319,9 @@ test('keeps a pinch-resized focus rectangle inside its selected page', () => {
     return 1;
   });
   const controller = createControllerDouble({
+    // Pinch-zoom lives in the finger and move tools: with no digitizer the tip
+    // is a touch too, so the stylus tool cannot read a second touch as a zoom.
+    inputMode: 'finger',
     document: {
       version: 1,
       documentId: 'note-1',
@@ -869,4 +876,29 @@ test('drops a cancelled touch out of the gesture set instead of leaving it pinch
 
   // With one contact withdrawn there is no pair left, so nothing may zoom.
   expect(page.style.transform).toBe('');
+});
+
+test('writes with the passive stylus while a hand rests on the page', () => {
+  // Traced off the device: the gesture layer sits in front of the ink policy
+  // and only counts touch contacts, so the hand landing beside the tip made two
+  // and every active stroke was aborted for a pinch. The palm guard cannot
+  // filter the hand out at that point — a contact that has not moved yet is not
+  // yet recognisable as a palm, which is exactly when this fires.
+  const controller = createControllerDouble();
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+
+  // Control: one contact alone writes, so a failure below is the second contact.
+  fireEvent.pointerDown(page, { pointerId: 9, pointerType: 'touch', clientX: 200, clientY: 300, width: 5, height: 5 });
+  fireEvent.pointerMove(page, { pointerId: 9, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
+  fireEvent.pointerUp(page, { pointerId: 9, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
+  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
+
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'touch', clientX: 700, clientY: 900, width: 5, height: 5 });
+  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300, width: 5, height: 5 });
+  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
+  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 300, width: 5, height: 5 });
+  fireEvent.pointerUp(page, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 300, width: 5, height: 5 });
+
+  expect(controller.commitStroke).toHaveBeenCalledTimes(2);
 });

@@ -1789,6 +1789,15 @@ export default function DocumentView({
     }
 
     if (activePointers.current.size !== 2) return;
+    // Two touches only mean a pinch where every touch is a finger. Without a
+    // digitizer the tip is a touch as well, so the ordinary pair here is the
+    // hand landing beside it — and aborting both strokes for a zoom is the
+    // stylus going dead the moment a palm touches down. The palm guard cannot
+    // separate them at this point either: a contact that has not moved yet is
+    // not recognisable as a hand, which is exactly when this runs. Zooming in
+    // this mode goes through the finger or move tool, where a touch is only
+    // ever a finger.
+    if (inputMode === "stylus" && palmGuard.passiveStylus) return;
     gutterPanData.current = null;
 
     for (const pointerId of activePointers.current.keys()) {

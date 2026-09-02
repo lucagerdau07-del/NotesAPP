@@ -492,4 +492,28 @@ describe('retroactive palm removal', () => {
     });
     expect(removeStrokes).not.toHaveBeenCalled();
   });
+
+  it('keeps ink from a finished contact when the platform hands its id to the next one', () => {
+    // Reported from the device: write first, then rest the hand, and the
+    // writing disappears. A pointerId names a contact only while that contact
+    // is on the glass — the platform reissues the number to whatever lands
+    // next. The hand inherits the tip's id, is recognised as a palm, and the
+    // revocation buffer hands back the tip's stroke on its behalf.
+    const { result, commitStroke, removeStrokes } = renderInkPointer();
+
+    act(() => {
+      result.current.onPointerDown(pointer(1, 'touch', 10, 10, undefined, 0));
+      result.current.onPointerMove(pointer(1, 'touch', 60, 10, undefined, 16));
+      result.current.onPointerUp(pointer(1, 'touch', 60, 10, undefined, 32));
+    });
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.onPointerDown(pointer(1, 'touch', 700, 900, undefined, 100));
+      for (let step = 0; step < 6; step += 1) {
+        result.current.onPointerMove(pointer(1, 'touch', 700, 900, undefined, 150 + step * 100));
+      }
+    });
+    expect(removeStrokes).not.toHaveBeenCalled();
+  });
 });
