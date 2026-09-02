@@ -62,6 +62,12 @@ export default function Settings({ onBack }) {
   // überhaupt variiert. Ohne diese Messung ist jede Schwelle geraten.
   const probeRef = useRef(createProbe());
   const [probeSummary, setProbeSummary] = useState(null);
+  // Aggregates answer what the panel reports, but not what the guard then does
+  // with it, and not whether a second contact reaches us at all. The trace runs
+  // the real policy over the real events so both are visible on the device.
+  const traceStateRef = useRef(createInputState());
+  const traceLastRef = useRef("");
+  const [trace, setTrace] = useState([]);
 
   const recordProbe = (event, phase) => {
     recordSample(
@@ -81,11 +87,44 @@ export default function Settings({ onBack }) {
       "diagnose",
     );
     setProbeSummary(summarizeSamples(probeRef.current, "diagnose"));
+
+    const routed = reducePointerInput(
+      traceStateRef.current,
+      {
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        timeStamp: event.timeStamp,
+        width: event.width,
+        height: event.height,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        phase,
+      },
+      "stylus",
+      palmGuardFromProfile(loadPalmProfile()),
+    );
+    traceStateRef.current = routed.state;
+    const size = Math.round(Math.max(event.width || 0, event.height || 0) * 10) / 10;
+    const verdict = `${routed.intent} elect=${routed.state.electedPointerId ?? "-"}`
+      + ` block=[${routed.state.blockedTouchPointerIds.join(",")}]`
+      + ` down=[${routed.state.touchPointerIds.join(",")}]`
+      + ` lock=${routed.state.gestureLocked ? "1" : "0"}`;
+    // Moves arrive at pointer rate and would push the interesting lines off the
+    // top instantly, so only the ones that actually change the verdict are kept.
+    if (phase === "move" && verdict === traceLastRef.current) return;
+    traceLastRef.current = verdict;
+    setTrace((rows) => [
+      `${phase} id${event.pointerId}/${event.pointerType} ${size}px ${verdict}`,
+      ...rows,
+    ].slice(0, 18));
   };
 
   const resetProbe = () => {
     probeRef.current = createProbe();
+    traceStateRef.current = createInputState();
+    traceLastRef.current = "";
     setProbeSummary(null);
+    setTrace([]);
   };
 
   // Agent backend — the OpenRouter key stays in the Hugging Face Space secret,
@@ -606,7 +645,20 @@ export default function Settings({ onBack }) {
                   ].join("\n")
                 : "Noch keine Daten."}
             </pre>
-            <button className="settings-action-btn" onClick={resetProbe}>
+            <pre
+              data-testid="probe-trace"
+              style={{
+                color: "#8FE388",
+                fontSize: 10,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                maxHeight: 240,
+                overflowY: "auto",
+              }}
+            >
+              {trace.length > 0 ? trace.join("\n") : "Trace leer."}
+            </pre>
+            <button className="settings-action-btn" onPointerUp={resetProbe}>
               Messung zurücksetzen
             </button>
           </div>
