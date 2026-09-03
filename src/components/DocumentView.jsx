@@ -2275,13 +2275,15 @@ export default function DocumentView({
   };
 
   const getStaticBackgroundStyles = () => {
+    const linesRgb = inkDocument.pages[0]?.linesRgb || "255,255,255";
+
     if (paperStyle === "blank") {
       return { backgroundImage: "none" };
     }
 
     if (paperStyle === "lined") {
       return {
-        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.07) calc(100% - 1px))`,
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},.07) calc(100% - 1px))`,
         backgroundSize: "100% 34px",
         backgroundPosition: "0 92px",
         backgroundRepeat: "repeat-y",
@@ -2290,7 +2292,7 @@ export default function DocumentView({
 
     if (paperStyle === "grid") {
       return {
-        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(255,255,255,.065) calc(100% - 1px))`,
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(${linesRgb},.065) calc(100% - 1px))`,
         backgroundSize: "100% 24px, 24px 100%",
         backgroundPosition: "0 92px, 88px 0",
         backgroundRepeat: "repeat-y, repeat-x",
@@ -2299,7 +2301,7 @@ export default function DocumentView({
 
     if (paperStyle === "dotted") {
       return {
-        backgroundImage: `radial-gradient(circle, rgba(255,255,255,.18) 1.2px, transparent 1.3px)`,
+        backgroundImage: `radial-gradient(circle, rgba(${linesRgb},.18) 1.2px, transparent 1.3px)`,
         backgroundSize: "24px 24px",
         backgroundPosition: "16px 92px",
         backgroundRepeat: "repeat",

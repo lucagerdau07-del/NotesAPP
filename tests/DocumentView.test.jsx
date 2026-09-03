@@ -919,6 +919,31 @@ test('renders a custom page format and background instead of the hardcoded defau
   expect(page.style.width).toBe('900px');
 });
 
+test('uses dark ruling lines on a light page background instead of the hardcoded white', () => {
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-white-bg',
+      pages: [{ id: 'page-1', width: 900, height: 900, background: '#FFFFFF', linesRgb: '0,0,0' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  // 'dotted' uses a plain radial-gradient (no calc()), which is one of the few
+  // gradient forms jsdom's CSSOM actually parses and reflects back as an
+  // inline style — 'lined'/'grid' use calc() inside the gradient stops, which
+  // jsdom silently fails to parse, so backgroundImage never round-trips for
+  // those in this test environment.
+  render(<DocumentView inkController={controller} toolbarState={toolState({ paperStyle: 'dotted' })} />);
+  const page = screen.getByTestId('document-page');
+  const rulingOverlay = Array.from(page.querySelectorAll('div')).find((el) =>
+    el.style.backgroundImage?.includes('radial-gradient'),
+  );
+  expect(rulingOverlay).toBeTruthy();
+  expect(rulingOverlay.style.backgroundImage).toContain('rgba(0, 0, 0,');
+  expect(rulingOverlay.style.backgroundImage).not.toContain('rgba(255, 255, 255,');
+});
+
 test('renders WhiteboardEditor instead of the page-stack view for a whiteboard document', () => {
   const controller = createControllerDouble({
     document: {

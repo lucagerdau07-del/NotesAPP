@@ -14,6 +14,7 @@ describe('resolvePageStyle', () => {
       height: 800 * 1.414,
       background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
       ruling: 'lined',
+      linesRgb: '255,255,255',
     });
   });
 
@@ -26,6 +27,7 @@ describe('resolvePageStyle', () => {
       height: PAGE_FORMATS.square.height,
       background: '#FFFFFF',
       ruling: 'grid',
+      linesRgb: '0,0,0',
     });
   });
 
