@@ -372,6 +372,7 @@ export default function PageObjectLayer({
   onSelect,
   onChange,
   onDelete,
+  mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
   const drag = useDrag(onChange);
   const zoom = pageLayout?.zoom || 1;
@@ -387,10 +388,7 @@ export default function PageObjectLayer({
     >
       {objects.map((stored) => {
         const object = drag.draft?.id === stored.id ? drag.draft : stored;
-        const origin = pagePointToViewport(pageLayout, object.pageId, {
-          x: 0,
-          y: 0,
-        });
+        const origin = mapOrigin(pageLayout, object.pageId);
         if (!origin) return null;
         const bounds = objectBounds(object);
         const isSelected = selectedId === object.id;
