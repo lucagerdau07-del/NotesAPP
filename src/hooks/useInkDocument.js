@@ -21,14 +21,14 @@ const defaultPreferences = {
   eraserMode: "pixel",
 };
 
-function createHistoryForDocument(repository, documentId, initialPageIds) {
+function createHistoryForDocument(repository, documentId, initialPageIds, initialPageStyle) {
   try {
     return (
       repository.loadHistory(documentId) ||
-      createInkHistory(createInkDocument(documentId, initialPageIds))
+      createInkHistory(createInkDocument(documentId, initialPageIds, initialPageStyle))
     );
   } catch {
-    return createInkHistory(createInkDocument(documentId, initialPageIds));
+    return createInkHistory(createInkDocument(documentId, initialPageIds, initialPageStyle));
   }
 }
 
@@ -55,6 +55,7 @@ function saveSafely(save) {
 export default function useInkDocument({
   documentId,
   initialPageIds,
+  initialPageStyle,
   repository = browserInkRepository,
   saveDelay = 120,
 }) {
@@ -65,7 +66,7 @@ export default function useInkDocument({
   repositoryRef.current = repository;
 
   const [history, setHistory] = useState(() =>
-    createHistoryForDocument(repository, activeDocumentId, initialPageIds),
+    createHistoryForDocument(repository, activeDocumentId, initialPageIds, initialPageStyle),
   );
   const [preferences, setPreferences] = useState(() =>
     loadPreferences(repository, activeDocumentId),
@@ -75,7 +76,7 @@ export default function useInkDocument({
   // rather than letting callbacks briefly target the previously displayed note.
   if (history.present.documentId !== activeDocumentId) {
     setHistory(
-      createHistoryForDocument(repository, activeDocumentId, initialPageIds),
+      createHistoryForDocument(repository, activeDocumentId, initialPageIds, initialPageStyle),
     );
   }
   if (preferences.documentId !== activeDocumentId) {

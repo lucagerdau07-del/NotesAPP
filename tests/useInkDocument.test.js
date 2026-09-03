@@ -281,3 +281,39 @@ describe('useInkDocument', () => {
     expect(result.current.document.pages.map(page => page.id)).toEqual(['p1', 'p2']);
   });
 });
+
+describe('useInkDocument initialPageStyle', () => {
+  it('stamps initialPageStyle onto a brand-new document', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    const { result } = renderHook(() =>
+      useInkDocument({
+        documentId: 'wb-1',
+        initialPageStyle: { kind: 'whiteboard' },
+        repository,
+      }),
+    );
+    expect(result.current.document.pages[0]).toMatchObject({ kind: 'whiteboard' });
+  });
+
+  it('ignores initialPageStyle when the document already has persisted history', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    repository.saveHistory('existing-1', {
+      past: [],
+      present: {
+        version: 1, documentId: 'existing-1',
+        pages: [{ id: 'existing-1-page-1', kind: 'page' }],
+        strokes: [], objects: [], updatedAt: 5,
+      },
+      future: [],
+      limit: 100,
+    });
+    const { result } = renderHook(() =>
+      useInkDocument({
+        documentId: 'existing-1',
+        initialPageStyle: { kind: 'whiteboard' },
+        repository,
+      }),
+    );
+    expect(result.current.document.pages[0].kind).toBe('page');
+  });
+});
