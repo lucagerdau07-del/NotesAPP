@@ -27,7 +27,14 @@ export function resolvePageStyle(options = {}) {
   const { pageKind, format, background, ruling } = options || {};
 
   if (pageKind === 'whiteboard') {
-    return { kind: 'whiteboard' };
+    const backgroundPreset =
+      BACKGROUND_PRESETS.find((preset) => preset.id === background) ||
+      BACKGROUND_PRESETS.find((preset) => preset.id === DEFAULT_BACKGROUND);
+    return {
+      kind: 'whiteboard',
+      background: backgroundPreset.css,
+      inkColor: backgroundPreset.inkColor,
+    };
   }
 
   const formatPreset = PAGE_FORMATS[format] || PAGE_FORMATS[DEFAULT_FORMAT];

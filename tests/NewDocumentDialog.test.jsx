@@ -28,12 +28,30 @@ describe('NewDocumentDialog', () => {
     expect(screen.getByPlaceholderText('Neue Mathe-Notiz')).toBeInTheDocument();
   });
 
-  it('hides format/background/ruling once whiteboard is chosen', () => {
+  it('hides format/ruling once whiteboard is chosen', () => {
     render(<NewDocumentDialog open onCreate={vi.fn()} onClose={vi.fn()} />);
     fireEvent.click(screen.getByTestId('new-doc-kind-whiteboard'));
     expect(screen.queryByTestId('new-doc-format-square')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('new-doc-background-white')).not.toBeInTheDocument();
     expect(screen.queryByTestId('new-doc-ruling-grid')).not.toBeInTheDocument();
+  });
+
+  it('shows background swatches for whiteboard too, but not format/ruling', () => {
+    render(<NewDocumentDialog open onCreate={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('new-doc-kind-whiteboard'));
+    expect(screen.getByTestId('new-doc-background-white')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-doc-format-square')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('new-doc-ruling-grid')).not.toBeInTheDocument();
+  });
+
+  it('submits the chosen background for a whiteboard', () => {
+    const onCreate = vi.fn();
+    render(<NewDocumentDialog open onCreate={onCreate} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('new-doc-kind-whiteboard'));
+    fireEvent.click(screen.getByTestId('new-doc-background-white'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ pageKind: 'whiteboard', background: 'white' }),
+    );
   });
 
   it('submits the chosen options', () => {

@@ -184,7 +184,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     <div
       data-testid="document-view"
       data-document-id={document.documentId}
-      style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#0B0B0D" }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        overflow: "hidden",
+        background: document.pages[0]?.background || "#0B0B0D",
+      }}
     >
       <div
         ref={measureRef}

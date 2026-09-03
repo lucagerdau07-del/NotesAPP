@@ -32,6 +32,14 @@ function createControllerDouble(overrides = {}) {
 }
 
 describe('WhiteboardEditor', () => {
+  it('uses the document\'s background instead of the hardcoded dark default', () => {
+    const controller = createControllerDouble();
+    controller.document.pages[0].background = '#FFFFFF';
+    render(<WhiteboardEditor inkController={controller} />);
+    const root = screen.getByTestId('document-view');
+    expect(root.style.background).toContain('255, 255, 255');
+  });
+
   it('renders a whiteboard canvas for the document\'s single page', () => {
     render(<WhiteboardEditor inkController={createControllerDouble()} />);
     expect(screen.getByTestId('whiteboard-canvas')).toBeInTheDocument();
