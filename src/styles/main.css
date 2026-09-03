@@ -2786,3 +2786,592 @@ body::after {
 .text-insert-btn:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Integrated sidebar browser ------------------------------------------------ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rail-browser {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1eee7;
+  font-family: Manrope, sans-serif;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+}
+
+.rail-browser[hidden] {
+  display: none;
+}
+
+.browser-toolbar {
+  flex: 0 0 54px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 8px 7px;
+  background: rgba(14, 15, 18, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.browser-icon-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.72);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.1s ease;
+}
+
+.browser-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.browser-icon-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.browser-icon-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.browser-icon-btn:focus-visible,
+.browser-toolbar input:focus-visible,
+.browser-home button:focus-visible,
+.browser-dialog button:focus-visible,
+.browser-dialog input:focus-visible,
+.browser-history-search input:focus-visible {
+  outline: 2px solid #1acee6;
+  outline-offset: 2px;
+}
+
+.browser-address-form {
+  flex: 1 1 130px;
+  min-width: 80px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(241, 238, 231, 0.48);
+}
+
+.browser-address-form:focus-within {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(26, 206, 230, 0.48);
+}
+
+.browser-address-form input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f1eee7;
+  font: 500 12px/1.2 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.browser-address-form input::placeholder {
+  color: rgba(241, 238, 231, 0.38);
+}
+
+.browser-spin {
+  flex: 0 0 auto;
+  animation: rail-chat-spin 0.9s linear infinite;
+}
+
+.browser-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(26, 27, 30, 0.64);
+}
+
+.browser-home {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.browser-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(4, 5, 7, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.browser-segment button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.54);
+  font: 600 11.5px/1 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.browser-segment button.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.browser-home-section {
+  margin-top: 28px;
+}
+
+.browser-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 17px;
+}
+
+.browser-section-head h2,
+.browser-error h2,
+.browser-dialog h2 {
+  margin: 2px 0 0;
+  color: #fff;
+  font: 700 18px/1.15 "Bricolage Grotesque", Manrope, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+.browser-eyebrow {
+  color: rgba(241, 238, 231, 0.42);
+  font: 700 9.5px/1 ui-monospace, monospace;
+  letter-spacing: 0.09em;
+}
+
+.browser-text-action {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #59cfe8;
+  font: 600 11px/1 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-text-action:hover:not(:disabled) {
+  background: rgba(26, 206, 230, 0.1);
+}
+
+.browser-text-action:disabled {
+  opacity: 0.35;
+}
+
+.browser-text-action.danger,
+.browser-shortcut-menu .danger,
+.browser-dialog .danger {
+  color: #ff8179;
+}
+
+.browser-shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px 10px;
+}
+
+.browser-shortcut {
+  position: relative;
+  min-width: 0;
+}
+
+.browser-shortcut-open {
+  width: 100%;
+  min-height: 98px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.86);
+  font: 500 11.5px/1.3 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-shortcut-open:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.browser-shortcut-open > span:last-child {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.browser-shortcut-icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(220, 226, 230, 0.86));
+  color: #172229;
+  box-shadow: inset 0 1px #fff, 0 8px 20px rgba(0, 0, 0, 0.2);
+  font: 700 19px/1 "Bricolage Grotesque", sans-serif;
+}
+
+.browser-shortcut > .browser-icon-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+}
+
+.browser-shortcut:hover > .browser-icon-btn,
+.browser-shortcut:focus-within > .browser-icon-btn {
+  opacity: 1;
+}
+
+.browser-shortcut-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  z-index: 5;
+  width: 112px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(24, 25, 29, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.46);
+}
+
+.browser-shortcut-menu button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.82);
+  text-align: left;
+  font: 500 10.5px/1 Manrope, sans-serif;
+}
+
+.browser-shortcut-menu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.browser-shortcut-menu button:disabled {
+  opacity: 0.3;
+}
+
+.browser-empty {
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.13);
+  border-radius: 17px;
+  color: rgba(241, 238, 231, 0.38);
+  text-align: center;
+}
+
+.browser-empty.compact {
+  min-height: 130px;
+}
+
+.browser-empty strong {
+  color: rgba(241, 238, 231, 0.72);
+  font: 600 12px/1.2 Manrope, sans-serif;
+}
+
+.browser-empty span {
+  max-width: 220px;
+  font: 400 11px/1.45 Manrope, sans-serif;
+}
+
+.browser-history-search {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 0 11px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(241, 238, 231, 0.42);
+}
+
+.browser-history-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f1eee7;
+  font: 500 12px/1 Manrope, sans-serif;
+}
+
+.browser-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-history-list > button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(241, 238, 231, 0.48);
+  text-align: left;
+  cursor: pointer;
+}
+
+.browser-history-list > button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.browser-history-mark {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.browser-history-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.browser-history-copy strong,
+.browser-history-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-history-copy strong {
+  color: rgba(241, 238, 231, 0.88);
+  font: 600 11.5px/1.2 Manrope, sans-serif;
+}
+
+.browser-history-copy small {
+  font: 400 9.5px/1.2 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.browser-viewport {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+}
+
+.browser-viewport[hidden] {
+  display: none;
+}
+
+.browser-viewport iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #fff;
+}
+
+.browser-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  text-align: center;
+}
+
+.browser-error-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 13px;
+  border-radius: 15px;
+  background: rgba(255, 129, 121, 0.12);
+  color: #ff8179;
+}
+
+.browser-error p {
+  max-width: 260px;
+  margin: 9px 0 4px;
+  color: rgba(241, 238, 231, 0.62);
+  font: 400 12px/1.5 Manrope, sans-serif;
+}
+
+.browser-error small {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+  color: rgba(241, 238, 231, 0.36);
+  font: 400 9.5px/1.4 Manrope, sans-serif;
+}
+
+.browser-error-actions,
+.browser-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.browser-error-actions button,
+.browser-dialog-actions button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1eee7;
+  font: 600 11px/1 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-error-actions button:first-child,
+.browser-dialog-actions button[type="submit"] {
+  background: linear-gradient(140deg, #1acee6, #00687c);
+  border-color: rgba(127, 230, 242, 0.38);
+  color: #fff;
+}
+
+.browser-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 4, 6, 0.72);
+  backdrop-filter: blur(12px);
+  overscroll-behavior: contain;
+}
+
+.browser-dialog {
+  width: min(100%, 330px);
+  padding: 16px;
+  border-radius: 17px;
+  background: rgba(34, 35, 40, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.58);
+}
+
+.browser-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.browser-dialog > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 11px;
+  color: rgba(241, 238, 231, 0.58);
+  font: 600 10.5px/1 Manrope, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.browser-dialog input {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font: 500 12px/1 Manrope, sans-serif;
+}
+
+.browser-dialog p {
+  margin: 10px 0 0;
+  color: rgba(241, 238, 231, 0.6);
+  font: 400 12px/1.5 Manrope, sans-serif;
+}
+
+@media (max-width: 720px) {
+  .browser-toolbar {
+    gap: 1px;
+    padding-inline: 5px;
+  }
+
+  .browser-icon-btn {
+    flex-basis: 30px;
+    width: 30px;
+  }
+
+  .browser-toolbar > .browser-icon-btn:nth-of-type(4),
+  .browser-toolbar > .browser-icon-btn:nth-of-type(6) {
+    display: none;
+  }
+
+  .browser-home {
+    padding-inline: 14px;
+  }
+}
