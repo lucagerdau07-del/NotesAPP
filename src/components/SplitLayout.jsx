@@ -4,6 +4,7 @@ import WritingZone from "./WritingZone";
 import useInkDocument from "../hooks/useInkDocument";
 import useFocusBox from "../hooks/useFocusBox";
 import useDocumentSource from "../hooks/useDocumentSource";
+import { resolvePageStyle } from "../documents/pageStyles.js";
 
 export default function SplitLayout({
   activeTab,
@@ -23,10 +24,18 @@ export default function SplitLayout({
       : undefined;
   const [isEraser, setIsEraser] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [paperStyle, setPaperStyle] = useState("lined");
   const [showPageBreaks, setShowPageBreaks] = useState(true);
   const [layoutMode, setLayoutMode] = useState("full"); // 'full' | 'split'
-  const inkController = useInkDocument({ documentId, initialPageIds });
+  const initialPageStyle =
+    !note || note?.kind === "imported" ? undefined : resolvePageStyle(note);
+  const inkController = useInkDocument({
+    documentId,
+    initialPageIds,
+    initialPageStyle,
+  });
+  const [paperStyle, setPaperStyle] = useState(
+    () => inkController.document.pages[0]?.ruling || "lined",
+  );
   const {
     sourceHandle,
     loading: sourceLoading,

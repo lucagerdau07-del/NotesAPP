@@ -44,4 +44,11 @@ describe('SplitLayout', () => {
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-kind', 'imported');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-page-count', '2');
   });
+
+  it('seeds the ruling toggle from the document instead of always defaulting to lined', () => {
+    const note = { id: 'styled-3', title: 'Blatt', subject: '', ruling: 'grid' };
+    const { container } = render(<SplitLayout activeTab="smartCanvas" note={note} />);
+    // paperStyle flows into DocumentView's className as `paper-style-${paperStyle}`.
+    expect(container.querySelector('.paper-style-grid')).toBeTruthy();
+  });
 });
