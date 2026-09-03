@@ -904,6 +904,8 @@ export default function DocumentView({
     "#EFECE4",
     "#3E7BD8",
     "#D8615B",
+    "#4FA66B",
+    "#D4A937",
   ]);
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);

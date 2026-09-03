@@ -555,7 +555,7 @@ test('opens color wheel popover and updates color', () => {
   expect(screen.getByText('Farbrad & Palette')).toBeTruthy();
 
   // Click a preset color in the palette
-  const preset = screen.getByTitle('#3E7BD8');
+  const preset = screen.getByTitle(/^#3E7BD8/);
   fireEvent.click(preset);
   expect(setColor).toHaveBeenCalledWith('#3E7BD8');
 });

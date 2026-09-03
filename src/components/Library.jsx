@@ -3181,6 +3181,25 @@ export default function Library({
         </button>
       </div>
 
+      <button
+        className="liquid-glass-circle liquid-control liquid-control-reset"
+        data-liquid-glass-control="reset"
+        data-config={JSON.stringify({
+          cornerRadius: 26,
+          zRadius: 26,
+          button: true,
+        })}
+        onClick={() => {
+          setSearchQuery("");
+          if (selectedSubject) setSelectedSubject(null);
+          showToast("Filter & Suche zurückgesetzt");
+        }}
+        title="Schließen / Filter leeren"
+        style={{ position: "absolute", left: 556, top: 20, zIndex: 30 }}
+      >
+        <X size={19} strokeWidth={2.4} />
+      </button>
+
       {/* view toggle + new note (right aligned) */}
       <div
         className="liquid-glass-pill liquid-control liquid-control-view-sort"
