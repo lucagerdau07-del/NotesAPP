@@ -1,9 +1,9 @@
 // src/components/WhiteboardEditor.jsx
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Undo2, Redo2, PenLine, Eraser } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
-import useWhiteboardCamera from "../hooks/useWhiteboardCamera.js";
+import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { screenToWorld } from "../ink/whiteboardCoordinates.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
@@ -16,11 +16,12 @@ function relativePoint(element, event) {
 
 export default function WhiteboardEditor({ inkController, railSlot }) {
   const containerRef = useRef(null);
+  const canvasControllerRef = useRef(null);
   const touchesRef = useRef(new Map());
   const pinchRef = useRef(null);
+  const pinchCommitRef = useRef(false);
   const [isEraser, setIsEraser] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [liveDraft, setLiveDraft] = useState(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
   const palmGuard = useMemo(() => palmGuardFromProfile(loadPalmProfile()), []);
 
@@ -53,14 +54,15 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     document,
     commitStroke: inkController.commitStroke,
     removeStrokes: inkController.removeStrokes,
-    onDraftAppend: (draft) => {
-      setLiveDraft(draft ? { ...draft, points: draft.points.slice() } : null);
-    },
+    onDraftAppend: (draft, appendedFrom) =>
+      canvasControllerRef.current?.appendDraftSegment(draft, appendedFrom),
   });
 
-  if (!inkPointer.draftStroke && liveDraft) {
-    setLiveDraft(null);
-  }
+  useLayoutEffect(() => {
+    if (!pinchCommitRef.current) return;
+    pinchCommitRef.current = false;
+    canvasControllerRef.current?.clearViewportPreview();
+  }, [camera]);
 
   const measureRef = useCallback((node) => {
     containerRef.current = node;
@@ -71,6 +73,28 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     observer.observe(node);
   }, []);
 
+  const updatePinchPreview = (pinch) => {
+    if (!pinch || pinchRef.current !== pinch) return;
+    const [a, b] = pinch.pointerIds.map((id) => touchesRef.current.get(id));
+    if (!a || !b) return;
+    const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+    const distance = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
+    const centerScreen = {
+      x: (a.x + b.x) / 2 - rect.left,
+      y: (a.y + b.y) / 2 - rect.top,
+    };
+    const scale = clampWhiteboardScale(
+      pinch.startScale * (distance / pinch.startDistance),
+    );
+    const ratio = scale / pinch.startScale;
+    pinch.pending = { centerScreen, scale };
+    canvasControllerRef.current?.setViewportPreview(
+      centerScreen.x - pinch.startCenter.x * ratio,
+      centerScreen.y - pinch.startCenter.y * ratio,
+      ratio,
+    );
+  };
+
   const handlePointerDown = (event) => {
     if (event.pointerType === "touch") {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -80,9 +104,14 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         const [a, b] = Array.from(touchesRef.current.values());
         const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
         pinchRef.current = {
+          pointerIds: Array.from(touchesRef.current.keys()),
           startDistance: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
           startScale: camera.scale,
+          startCenter: centerScreen,
           worldCenter: screenToWorld(camera, centerScreen),
+          pending: null,
+          ticking: false,
+          frameId: null,
         };
         return;
       }
@@ -95,12 +124,19 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (event.pointerType === "touch" && touchesRef.current.has(event.pointerId)) {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2 && pinchRef.current) {
-        const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
-        const [a, b] = Array.from(touchesRef.current.values());
-        const distance = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
-        const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
-        const scale = pinchRef.current.startScale * (distance / pinchRef.current.startDistance);
-        focusWorldPointAtScreen(pinchRef.current.worldCenter, centerScreen, scale);
+        const pinch = pinchRef.current;
+        if (pinch.ticking) return;
+        pinch.ticking = true;
+        const frameId = requestAnimationFrame(() => {
+          const current = pinchRef.current;
+          if (!current) return;
+          current.ticking = false;
+          current.frameId = null;
+          updatePinchPreview(current);
+        });
+        // requestAnimationFrame is synchronous in some tests. Do not resurrect
+        // a frame id after that callback has already completed.
+        if (pinch.ticking) pinch.frameId = frameId;
         return;
       }
       if (touchesRef.current.size >= 2) return;
@@ -110,6 +146,35 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
 
   const handlePointerUp = (event) => {
     if (event.pointerType === "touch") {
+      const pinch = pinchRef.current;
+      if (pinch?.pointerIds.includes(event.pointerId)) {
+        if (pinch.ticking) {
+          if (pinch.frameId !== null) cancelAnimationFrame(pinch.frameId);
+          pinch.ticking = false;
+          pinch.frameId = null;
+          updatePinchPreview(pinch);
+        }
+        const pending = pinch.pending;
+        if (pending) {
+          const nextCamera = {
+            scale: pending.scale,
+            x: pinch.worldCenter.x - pending.centerScreen.x / pending.scale,
+            y: pinch.worldCenter.y - pending.centerScreen.y / pending.scale,
+          };
+          const changed =
+            nextCamera.scale !== camera.scale ||
+            nextCamera.x !== camera.x ||
+            nextCamera.y !== camera.y;
+          if (changed) {
+            pinchCommitRef.current = true;
+            focusWorldPointAtScreen(pinch.worldCenter, pending.centerScreen, pending.scale);
+          } else {
+            canvasControllerRef.current?.clearViewportPreview();
+          }
+        } else {
+          canvasControllerRef.current?.clearViewportPreview();
+        }
+      }
       touchesRef.current.delete(event.pointerId);
       if (touchesRef.current.size < 2) pinchRef.current = null;
     }
@@ -118,6 +183,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
 
   const handlePointerCancel = (event) => {
     if (event.pointerType === "touch") {
+      if (pinchRef.current?.pointerIds.includes(event.pointerId)) {
+        if (pinchRef.current.frameId !== null) {
+          cancelAnimationFrame(pinchRef.current.frameId);
+        }
+        canvasControllerRef.current?.clearViewportPreview();
+      }
       touchesRef.current.delete(event.pointerId);
       if (touchesRef.current.size < 2) pinchRef.current = null;
     }
@@ -196,9 +267,10 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         onPointerCancel={handlePointerCancel}
       >
         <WhiteboardCanvas
+          ref={canvasControllerRef}
           pageId={pageId}
           strokes={strokes}
-          draftStroke={liveDraft}
+          draftStroke={inkPointer.draftStroke}
           camera={camera}
           width={size.width}
           height={size.height}

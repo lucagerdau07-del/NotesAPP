@@ -1,9 +1,11 @@
 // tests/WhiteboardEditor.test.jsx
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import WhiteboardEditor from '../src/components/WhiteboardEditor.jsx';
 import * as renderInk from '../src/ink/renderInk.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 function createControllerDouble(overrides = {}) {
   return {
@@ -53,9 +55,45 @@ describe('WhiteboardEditor', () => {
     expect(stroke.points.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('repaints the in-progress stroke on pointer move, before pointer up', () => {
+  it('does not redraw committed ink when a new draft starts', () => {
     const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
-    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+    renderSpy.mockClear();
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+
+    expect(renderSpy).not.toHaveBeenCalled();
+  });
+
+  it('paints only the newly appended draft segment on pointer move', () => {
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const committedStroke = {
+      id: 'committed',
+      pageId: 'wb-1-page-1',
+      tool: 'pen',
+      color: '#EFECE4',
+      width: 3,
+      opacity: 1,
+      points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+    };
+    const controller = createControllerDouble();
+    controller.document = { ...controller.document, strokes: [committedStroke] };
+    render(<WhiteboardEditor inkController={controller} />);
     const surface = screen.getByTestId('whiteboard-surface');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
 
@@ -63,13 +101,90 @@ describe('WhiteboardEditor', () => {
     renderSpy.mockClear();
     fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
 
-    // Without pointerup, the stroke is not yet committed to the document — the
-    // only way the canvas can show it is by repainting the live draft.
-    expect(renderSpy).toHaveBeenCalled();
-    const draftArg = renderSpy.mock.calls.find((call) => call[1] && call[1].points?.length >= 2);
-    expect(draftArg).toBeTruthy();
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(renderSpy.mock.calls[0][1]).toMatchObject({
+      pageId: 'wb-1-page-1',
+      points: [{ x: 10, y: 10 }, { x: 40, y: 30 }],
+    });
+    expect(renderSpy.mock.calls[0][1].id).not.toBe('committed');
 
     renderSpy.mockRestore();
+  });
+
+  it('previews pinch zoom without redrawing committed ink on every touch move', () => {
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+      callback(0);
+      return 1;
+    });
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    const canvas = screen.getByTestId('whiteboard-canvas');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    renderSpy.mockClear();
+
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 75, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+
+    expect(renderSpy).not.toHaveBeenCalled();
+    expect(canvas.style.transform).toContain('scale(1.5)');
+  });
+
+  it('commits the latest pinch position when a finger lifts before the queued frame', () => {
+    const queuedFrames = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    renderSpy.mockClear();
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 75, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+    expect(queuedFrames).toHaveLength(1);
+
+    fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+
+    expect(renderSpy).toHaveBeenCalled();
+    expect(renderSpy.mock.calls.every((call) => (
+      call[2].scaleX === 1.5 && call[2].scaleY === 1.5
+    ))).toBe(true);
+    expect(screen.getByTestId('whiteboard-canvas').style.transform).toBe('');
   });
 
   it('wires undo/redo buttons to the controller', () => {
