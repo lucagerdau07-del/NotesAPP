@@ -152,6 +152,17 @@ function createCanvasContext() {
     moveTo: vi.fn(),
     scale: vi.fn(),
     setTransform: vi.fn(),
+    rect: vi.fn(),
+    roundRect: vi.fn(),
+    ellipse: vi.fn(),
+    fill: vi.fn(),
+    // Bucket fill (src/ink/bucketFill.js) reads pixel data to find "walls".
+    // jsdom has no real 2D rasterizer, so this stub reports an all-transparent
+    // canvas — floodFill then treats the whole rasterized window as open,
+    // which is enough for tests that only assert a fill object gets created.
+    getImageData: vi.fn((x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h })),
+    createImageData: vi.fn((w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h })),
+    putImageData: vi.fn(),
     drawn: [],
   };
   const states = [];
@@ -181,6 +192,10 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     if (!canvasContexts.has(this)) canvasContexts.set(this, createCanvasContext());
     return canvasContexts.get(this);
   }),
+});
+Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+  configurable: true,
+  value: vi.fn(() => 'data:image/png;base64,'),
 });
 
 global.ResizeObserver = class ResizeObserver {

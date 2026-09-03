@@ -1,14 +1,15 @@
 // src/components/WhiteboardEditor.jsx
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso, Shapes } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso, Shapes, PaintBucket } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { screenToWorld, worldToScreen } from "../ink/whiteboardCoordinates.js";
 import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js";
-import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
+import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
+import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
@@ -82,6 +83,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [isEraser, setIsEraser] = useState(false);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [isLassoMode, setIsLassoMode] = useState(false);
+  const [isBucketMode, setIsBucketMode] = useState(false);
   const [lassoDraft, setLassoDraft] = useState(null);
   const [lassoSelection, setLassoSelection] = useState(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -164,6 +166,11 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         return;
       }
       if (touchesRef.current.size > 2) return;
+    }
+    if (isBucketMode) {
+      const point = mapPoint(event);
+      handleBucketFill(point);
+      return;
     }
     if (placingTool) {
       const point = mapPoint(event);
@@ -296,6 +303,74 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lassoSelection, isLassoMode, inkController]);
 
+  const handleBucketFill = (worldPoint) => {
+    if (!worldPoint) return;
+
+    const target = [...pageObjects]
+      .reverse()
+      .find(
+        (object) =>
+          (object.type === "rect" || object.type === "ellipse") &&
+          isPointInsideObject(object, worldPoint.x, worldPoint.y),
+      );
+    if (target) {
+      inkController.updateObject?.(target.id, { fillColor: inkController.color || "#3E7BD8" });
+      return;
+    }
+
+    // Rasterize a viewport-sized window in world units, centered on the
+    // current camera view, translating strokes/objects into that window's
+    // local (0,0)-origin space first so rasterizePageWalls (unchanged, page
+    // version's exact function) never needs to know about "world" at all.
+    // Read the live layout box (same source mapPoint uses via relativePoint)
+    // rather than the `size` state, which only updates from ResizeObserver
+    // and can lag behind — especially in tests, which stub getBoundingClientRect.
+    const rect = containerRef.current?.getBoundingClientRect();
+    const viewportWidth = rect?.width || size.width;
+    const viewportHeight = rect?.height || size.height;
+    const windowWidth = Math.max(1, Math.round(viewportWidth / camera.scale));
+    const windowHeight = Math.max(1, Math.round(viewportHeight / camera.scale));
+    const originX = camera.x;
+    const originY = camera.y;
+    const translate = (points) => points.map((p) => ({ x: p.x - originX, y: p.y - originY }));
+    const localStrokes = strokes
+      .filter((s) => s.pageId === pageId)
+      .map((s) => ({ ...s, points: translate(s.points) }));
+    const localObjects = pageObjects.map((o) => ({ ...o, x: o.x - originX, y: o.y - originY }));
+
+    // `document` (above) shadows window.document — use globalThis.document here.
+    const canvas = globalThis.document.createElement("canvas");
+    const wallData = rasterizePageWalls(canvas, {
+      strokes: localStrokes,
+      objects: localObjects,
+      pageId,
+      width: windowWidth,
+      height: windowHeight,
+    });
+    const localX = Math.round(worldPoint.x - originX);
+    const localY = Math.round(worldPoint.y - originY);
+    if (localX < 0 || localY < 0 || localX >= windowWidth || localY >= windowHeight) return;
+    const result = floodFill(wallData, windowWidth, windowHeight, localX, localY);
+    if (!result) return;
+    const { dataUrl, x, y, width: w, height: h } = fillResultToDataUrl(
+      result,
+      windowWidth,
+      hexToRgb(inkController.color || "#3E7BD8"),
+    );
+    const object = createPageObject({
+      pageId,
+      type: "fill",
+      x: x + originX,
+      y: y + originY,
+      width: w,
+      height: h,
+      color: inkController.color || "#3E7BD8",
+      strokeWidth: 1,
+      src: dataUrl,
+    });
+    inkController.addObject?.(object);
+  };
+
   const handleInsertTool = (item) => {
     if (item.id === "image") {
       imageInputRef.current?.click();
@@ -378,6 +453,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           setIsLassoMode((mode) => !mode);
           setLassoSelection(null);
           setPlacingTool(null);
+          setIsBucketMode(false);
         }}
         title="Lasso-Auswahl"
       >
@@ -388,6 +464,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         onClick={() => {
           setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
           setIsLassoMode(false);
+          setIsBucketMode(false);
         }}
         title="Text"
       >
@@ -399,10 +476,22 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           if (placingTool) setPlacingTool(null);
           else setIsDesignToolsOpen((open) => !open);
           setIsLassoMode(false);
+          setIsBucketMode(false);
         }}
         title="Einfügen"
       >
         <Shapes size={19} />
+      </button>
+      <button
+        className={`rail-btn ${isBucketMode ? "active" : ""}`}
+        onClick={() => {
+          setIsBucketMode((mode) => !mode);
+          setIsLassoMode(false);
+          setPlacingTool(null);
+        }}
+        title="Eimer-Füllung"
+      >
+        <PaintBucket size={19} />
       </button>
       <input
         ref={imageInputRef}

@@ -157,4 +157,32 @@ describe('WhiteboardEditor', () => {
     expect(object.width).toBeCloseTo(200);
     expect(object.height).toBeCloseTo(150);
   });
+
+  it('bucket-fills inside a closed loop of strokes at the clicked world point', () => {
+    const addObject = vi.fn();
+    const controller = createControllerDouble({
+      addObject,
+      document: {
+        version: 1, documentId: 'wb-1', pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+        // A small closed square of strokes centered near (100,100) in world space.
+        strokes: [
+          { id: 's1', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 50 }, { x: 150, y: 50 }] },
+          { id: 's2', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 150, y: 50 }, { x: 150, y: 150 }] },
+          { id: 's3', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 150, y: 150 }, { x: 50, y: 150 }] },
+          { id: 's4', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 150 }, { x: 50, y: 50 }] },
+        ],
+        objects: [], updatedAt: 0,
+      },
+    });
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTitle('Eimer-Füllung'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+
+    expect(addObject).toHaveBeenCalledTimes(1);
+    expect(addObject.mock.calls[0][0].type).toBe('fill');
+  });
 });
