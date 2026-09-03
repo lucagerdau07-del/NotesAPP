@@ -39,14 +39,16 @@ function loadPreferences(repository, documentId, initialColor) {
       ...defaultPreferences,
       ...repository.loadPreferences(documentId),
     };
-    // repository.loadPreferences never distinguishes "nothing persisted yet"
-    // from "persisted, and it happens to match the hardcoded default" - it
-    // always returns a full object. So: only a color that still equals the
-    // hook's own hardcoded default is treated as unset and gets overridden by
-    // initialColor.
-    // ponytail: misses the (rare) doc that explicitly persisted the exact
-    // default color; fix if that ever needs to survive an initialColor.
-    if (initialColor && merged.color === defaultPreferences.color) {
+    // loadPreferences() always synthesizes a full object, so it can't tell
+    // "nothing persisted" from "persisted, and it matches the default".
+    // hasPreferences() can, though - it checks raw storage. Only when nothing
+    // was ever saved does the preset's initialColor get to apply; any
+    // existing document keeps whatever color it saved, even if that happens
+    // to equal the default.
+    const hasSavedPreferences =
+      typeof repository.hasPreferences === "function" &&
+      repository.hasPreferences(documentId);
+    if (initialColor && !hasSavedPreferences) {
       merged.color = initialColor;
     }
     return merged;

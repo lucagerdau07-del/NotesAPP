@@ -345,4 +345,18 @@ describe('useInkDocument initialColor', () => {
     );
     expect(result.current.color).toBe('#3E7BD8');
   });
+
+  it('does not override a persisted color preference that happens to equal the hardcoded default', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    repository.savePreferences('existing-default-color', preferences({ color: '#EFECE4' }));
+    const { result } = renderHook(() =>
+      useInkDocument({
+        documentId: 'existing-default-color',
+        initialColor: '#1A1A1A',
+        repository,
+        saveDelay: 0,
+      }),
+    );
+    expect(result.current.color).toBe('#EFECE4');
+  });
 });

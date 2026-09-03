@@ -144,6 +144,21 @@ export function createInkRepository(storage) {
       }
     },
 
+    // Unlike loadPreferences(), which always synthesizes a full object, this
+    // tells callers whether anything was ever actually saved for this
+    // document - the "brand-new document" signal loadPreferences can't give.
+    hasPreferences(documentId) {
+      const id = String(documentId);
+      try {
+        return (
+          parsePreferences(storage.getItem(preferencesKey(id))) !== null ||
+          parsePreferences(storage.getItem(legacyPreferencesKey)) !== null
+        );
+      } catch {
+        return false;
+      }
+    },
+
     savePreferences(documentId, preferences) {
       const id = String(documentId);
       try {
