@@ -967,7 +967,7 @@ body::after {
 /* One glass control grown wider — the tool column keeps a fixed width so
    the buttons never move, the chat fills the rest. */
 .editor-sidebar.panel-open {
-  width: min(520px, calc(100vw - 24px));
+  width: min(clamp(520px, 42vw, 800px), calc(100vw - 24px));
   border-radius: 30px;
   transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -3392,6 +3392,10 @@ body::after {
 }
 
 @media (max-width: 720px) {
+  .editor-sidebar.panel-open {
+    width: calc(100vw - 16px);
+  }
+
   .browser-toolbar {
     gap: 1px;
     padding-inline: 5px;

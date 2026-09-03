@@ -4,6 +4,8 @@ dist/
 .superpowers/
 .worktrees/
 backups/
+.playwright-cli/
+output/playwright/
 
 # Android
 android/.gradle/
