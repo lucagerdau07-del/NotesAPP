@@ -12,10 +12,25 @@ function strokeTransform(transform = {}) {
   };
 }
 
+export const MAX_CANVAS_DIMENSION = 4096;
+export const MAX_CANVAS_PIXELS = 16_000_000;
+
 export function resizeInkCanvas(canvas, cssWidth, cssHeight, dpr = 1) {
   const pixelRatio = dpr > 0 && Number.isFinite(dpr) ? dpr : 1;
-  const width = Math.round(Math.max(0, finiteOr(cssWidth, 0)) * pixelRatio);
-  const height = Math.round(Math.max(0, finiteOr(cssHeight, 0)) * pixelRatio);
+  let width = Math.round(Math.max(0, finiteOr(cssWidth, 0)) * pixelRatio);
+  let height = Math.round(Math.max(0, finiteOr(cssHeight, 0)) * pixelRatio);
+
+  const maxDim = Math.max(width, height);
+  if (maxDim > MAX_CANVAS_DIMENSION) {
+    const scale = MAX_CANVAS_DIMENSION / maxDim;
+    width = Math.floor(width * scale);
+    height = Math.floor(height * scale);
+  }
+  if (width * height > MAX_CANVAS_PIXELS) {
+    const scale = Math.sqrt(MAX_CANVAS_PIXELS / (width * height));
+    width = Math.floor(width * scale);
+    height = Math.floor(height * scale);
+  }
 
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
@@ -65,9 +80,18 @@ export function renderInkDocument(context, document, layout) {
   const cssWidth = finiteOr(layout?.cssWidth, finiteOr(layout?.width, 0));
   const cssHeight = finiteOr(layout?.cssHeight, finiteOr(layout?.height, 0));
   const dpr = layout?.dpr > 0 && Number.isFinite(layout.dpr) ? layout.dpr : 1;
+  const canvas = context.canvas;
+  const transformScaleX =
+    canvas && cssWidth > 0 && Number.isFinite(canvas.width)
+      ? canvas.width / cssWidth
+      : dpr;
+  const transformScaleY =
+    canvas && cssHeight > 0 && Number.isFinite(canvas.height)
+      ? canvas.height / cssHeight
+      : dpr;
 
   context.save();
-  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.setTransform(transformScaleX, 0, 0, transformScaleY, 0, 0);
   context.clearRect(0, 0, cssWidth, cssHeight);
 
   const pageLayouts = Array.isArray(layout?.pageLayouts)

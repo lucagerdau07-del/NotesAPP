@@ -1123,10 +1123,14 @@ export default function DocumentView({
       return;
     }
 
-    const context = inkCanvasRef.current?.getContext("2d");
+    const canvas = inkCanvasRef.current;
+    const context = canvas?.getContext("2d");
     if (!context) return;
-    const dpr = globalThis.devicePixelRatio || 1;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cssWidth = resolvedPageWidth * zoom;
+    const cssHeight = totalDocumentHeight;
+    const scaleX = cssWidth > 0 && Number.isFinite(canvas.width) ? canvas.width / cssWidth : (globalThis.devicePixelRatio || 1);
+    const scaleY = cssHeight > 0 && Number.isFinite(canvas.height) ? canvas.height / cssHeight : (globalThis.devicePixelRatio || 1);
+    context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     renderInkStroke(context, segment, {
       offsetX: 0,
       offsetY: pageBox.top * zoom,
@@ -1381,14 +1385,17 @@ export default function DocumentView({
     });
   };
 
+  const previousDraftRef = useRef(null);
   useLayoutEffect(() => {
     const canvas = inkCanvasRef.current;
-    if (!canvas) return undefined;
+    if (!canvas) return;
 
-    redrawInkCanvasRef.current();
-    const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
-    observer.observe(canvas);
-    return () => observer.disconnect();
+    const draftJustStarted =
+      inkPointer.draftStroke && previousDraftRef.current !== inkPointer.draftStroke;
+    previousDraftRef.current = inkPointer.draftStroke;
+    if (draftJustStarted && inkPointer.draftStroke.points?.length < 2) return;
+
+    redrawInkCanvasRef.current?.();
   }, [
     inkDocument,
     inkPointer.draftStroke,
@@ -1398,6 +1405,14 @@ export default function DocumentView({
     totalDocumentHeight,
     zoom,
   ]);
+
+  useEffect(() => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return undefined;
+    const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (typeof globalThis.matchMedia !== "function") return undefined;
@@ -1562,6 +1577,9 @@ export default function DocumentView({
   };
 
   const handlePointerMove = (e) => {
+    if (pinchInitialData.current) {
+      return;
+    }
     if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
       inkPointer.onPointerMove(e);
       const point = mapViewportPoint(

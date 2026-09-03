@@ -133,4 +133,14 @@ describe('deterministic complete-path ink renderer', () => {
     resizeInkCanvas(canvas, 100.5, 50.5, 2);
     expect(canvas).toMatchObject({ width: 201, height: 101 });
   });
+
+  it('clamps huge dimensions to MAX_CANVAS_DIMENSION to preserve GPU acceleration', () => {
+    const canvas = { width: 0, height: 0, style: {} };
+
+    resizeInkCanvas(canvas, 5000, 10000, 2);
+
+    expect(canvas.width).toBeLessThanOrEqual(4096);
+    expect(canvas.height).toBeLessThanOrEqual(4096);
+    expect(canvas.width * canvas.height).toBeLessThanOrEqual(16_000_000);
+  });
 });
