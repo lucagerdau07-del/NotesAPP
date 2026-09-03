@@ -37,6 +37,7 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import NewDocumentDialog from "./NewDocumentDialog.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
@@ -2764,6 +2765,7 @@ export default function Library({
   const [sortBy, setSortBy] = useState("recent"); // 'recent' | 'title' | 'subject'
   const [searchQuery, setSearchQuery] = useState("");
   const [isMicActive, setIsMicActive] = useState(false);
+  const [isNewDocDialogOpen, setIsNewDocDialogOpen] = useState(false);
   const [sortToast, setSortToast] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
@@ -3106,14 +3108,7 @@ export default function Library({
         }}
       >
         <button
-          onClick={() =>
-            onOpenNote?.({
-              title: selectedSubject
-                ? `Neue ${selectedSubject.name}-Notiz`
-                : "Neue Notiz",
-              subject: selectedSubject ? selectedSubject.name : "",
-            })
-          }
+          onClick={() => setIsNewDocDialogOpen(true)}
           style={{
             background: "none",
             border: "none",
@@ -3270,14 +3265,7 @@ export default function Library({
 
       <div
         ref={newNoteRef}
-        onClick={() =>
-          onOpenNote?.({
-            title: selectedSubject
-              ? `Neue ${selectedSubject.name}-Notiz`
-              : "Neue Notiz",
-            subject: selectedSubject ? selectedSubject.name : "",
-          })
-        }
+        onClick={() => setIsNewDocDialogOpen(true)}
         className="liquid-glass-pill lib-newnote"
         style={{
           position: "absolute",
@@ -3820,6 +3808,15 @@ export default function Library({
           </div>
         </div>
       </div>
+      <NewDocumentDialog
+        open={isNewDocDialogOpen}
+        subject={selectedSubject ? selectedSubject.name : ""}
+        onCreate={(payload) => {
+          setIsNewDocDialogOpen(false);
+          onOpenNote?.(payload);
+        }}
+        onClose={() => setIsNewDocDialogOpen(false)}
+      />
     </div>
   );
 }

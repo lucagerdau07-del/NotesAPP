@@ -36,6 +36,7 @@ describe('App Component', () => {
   it('opens the editor from a note and can return to the library', () => {
     render(<App />);
     fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
     expect(screen.getByTestId('document-view')).toBeInTheDocument();
     expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
 
@@ -46,6 +47,7 @@ describe('App Component', () => {
   it('passes a stable generated ID to a newly opened note', () => {
     const { rerender } = render(<App />);
     fireEvent.click(screen.getByTestId('new-note-btn'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
 
     const documentId = screen.getByTestId('document-view').getAttribute('data-document-id');
     expect(documentId).toBeTruthy();
