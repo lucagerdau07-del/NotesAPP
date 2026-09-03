@@ -134,32 +134,36 @@ export default function NewDocumentDialog({ open, subject = "", onCreate, onClos
                 ))}
               </div>
             </div>
+          </>
+        )}
 
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>Hintergrundfarbe</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {BACKGROUND_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    data-testid={`new-doc-background-${preset.id}`}
-                    onClick={() => setBackground(preset.id)}
-                    title={preset.label}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: "50%",
-                      background: preset.css,
-                      border:
-                        background === preset.id
-                          ? "2px solid #3E7BD8"
-                          : "1px solid rgba(255,255,255,.25)",
-                      cursor: "pointer",
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>Hintergrundfarbe</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {BACKGROUND_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                data-testid={`new-doc-background-${preset.id}`}
+                onClick={() => setBackground(preset.id)}
+                title={preset.label}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  background: preset.css,
+                  border:
+                    background === preset.id
+                      ? "2px solid #3E7BD8"
+                      : "1px solid rgba(255,255,255,.25)",
+                  cursor: "pointer",
+                }}
+              />
+            ))}
+          </div>
+        </div>
 
+        {pageKind === "page" && (
+          <>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>Linierung</div>
               <div style={{ display: "flex", gap: 8 }}>

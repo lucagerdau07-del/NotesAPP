@@ -73,7 +73,7 @@ const INPUT_MODE_ICONS = {
 
 // Default footprint per type, in page units. Inserts land centered on the
 // visible area, so these only decide how big the thing starts out.
-const DESIGN_TOOLS = [
+export const DESIGN_TOOLS = [
   { id: "arrow", name: "Pfeil", icon: <ArrowUpRight size={15} />, width: 180, height: 90 },
   { id: "line", name: "Linie", icon: <Minus size={15} />, width: 200, height: 0 },
   { id: "rect", name: "Rahmen", icon: <Square size={15} />, width: 200, height: 130 },
@@ -87,7 +87,7 @@ const DESIGN_TOOLS = [
 // A plain click starts this small and grows to fit as you type — no reason
 // to seed it with a wide placeholder box first. A dragged box keeps whatever
 // size the drag defined instead (see draftPlacement handling below).
-const TEXT_TOOL = {
+export const TEXT_TOOL = {
   id: "text",
   name: "Text",
   icon: <Type size={15} />,
@@ -106,7 +106,7 @@ const PEN_TOOL_ICONS = {
   pencil: Pencil,
 };
 
-function DesignToolsPopover({ onInsert, onClose }) {
+export function DesignToolsPopover({ onInsert, onClose }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {

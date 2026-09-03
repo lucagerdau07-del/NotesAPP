@@ -43,9 +43,27 @@ describe('resolvePageStyle', () => {
     expect(result.ruling).toBe('lined');
   });
 
-  it('returns just a whiteboard marker for pageKind "whiteboard"', () => {
+  it('ignores format for pageKind "whiteboard" and resolves a whiteboard style', () => {
     expect(resolvePageStyle({ pageKind: 'whiteboard', format: 'square' })).toEqual({
       kind: 'whiteboard',
+      background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
+      inkColor: '#EFECE4',
+    });
+  });
+
+  it('resolves a background for a whiteboard too', () => {
+    expect(resolvePageStyle({ pageKind: 'whiteboard', background: 'white' })).toEqual({
+      kind: 'whiteboard',
+      background: '#FFFFFF',
+      inkColor: '#1A1A1A',
+    });
+  });
+
+  it('defaults the whiteboard background to dark when none is chosen', () => {
+    expect(resolvePageStyle({ pageKind: 'whiteboard' })).toEqual({
+      kind: 'whiteboard',
+      background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
+      inkColor: '#EFECE4',
     });
   });
 });

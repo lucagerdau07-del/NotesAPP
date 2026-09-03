@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import DocumentView from '../src/components/DocumentView';
+import PageObjectLayer from '../src/components/document/PageObjectLayer.jsx';
+import LassoSelectionLayer from '../src/components/document/LassoSelectionLayer.jsx';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -74,6 +76,33 @@ function drawPointerStroke(element, {
     pointerId, pointerType, clientX: end.x, clientY: end.y,
   });
 }
+
+test('PageObjectLayer uses an injected mapOrigin instead of pagePointToViewport when provided', () => {
+  const objects = [
+    { id: 'o1', pageId: 'p1', type: 'rect', x: 10, y: 20, width: 100, height: 50, color: '#3E7BD8', strokeWidth: 3, fillColor: '#3E7BD8' },
+  ];
+  const mapOrigin = vi.fn(() => ({ x: 500, y: 300 }));
+  render(
+    <PageObjectLayer
+      objects={objects}
+      pageLayout={{ zoom: 2 }}
+      mapOrigin={mapOrigin}
+    />,
+  );
+  expect(mapOrigin).toHaveBeenCalledWith({ zoom: 2 }, 'p1');
+  const node = document.querySelector('[data-object-id="o1"]');
+  expect(node.style.left).toBe('520px'); // 500 + 10*2
+  expect(node.style.top).toBe('340px'); // 300 + 20*2
+});
+
+test('LassoSelectionLayer uses an injected mapOrigin instead of pagePointToViewport when provided', () => {
+  const bounds = { pageId: 'p1', x: 10, y: 20, width: 100, height: 50 };
+  const mapOrigin = vi.fn(() => ({ x: 500, y: 300 }));
+  render(
+    <LassoSelectionLayer bounds={bounds} pageLayout={{ zoom: 2 }} onCommit={vi.fn()} onDelete={vi.fn()} mapOrigin={mapOrigin} />,
+  );
+  expect(mapOrigin).toHaveBeenCalledWith({ zoom: 2 }, 'p1');
+});
 
 test('renders DocumentView with ink canvas and focus box', () => {
   const handleDrag = vi.fn();
