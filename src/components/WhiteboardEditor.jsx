@@ -1,13 +1,16 @@
 // src/components/WhiteboardEditor.jsx
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Undo2, Redo2, PenLine, Eraser, Palette, X } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
-import { screenToWorld } from "../ink/whiteboardCoordinates.js";
+import { screenToWorld, worldToScreen } from "../ink/whiteboardCoordinates.js";
+import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js";
+import { pageObjectsOf } from "../ink/pageObjects.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
+import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 
 function relativePoint(element, event) {
   if (!element) return null;
@@ -75,6 +78,9 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const pinchRef = useRef(null);
   const [isEraser, setIsEraser] = useState(false);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
+  const [isLassoMode, setIsLassoMode] = useState(false);
+  const [lassoDraft, setLassoDraft] = useState(null);
+  const [lassoSelection, setLassoSelection] = useState(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [liveDraft, setLiveDraft] = useState(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
@@ -83,6 +89,13 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const document = inkController.document;
   const pageId = document.pages[0]?.id || "";
   const strokes = document.strokes;
+  const pageObjects = pageObjectsOf(document);
+
+  const mapOrigin = useCallback(
+    () => worldToScreen(camera, { x: 0, y: 0 }),
+    [camera],
+  );
+  const fakePageLayout = { zoom: camera.scale };
 
   const mapPoint = useCallback(
     (event) => {
@@ -144,6 +157,13 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       }
       if (touchesRef.current.size > 2) return;
     }
+    if (isLassoMode) {
+      const point = mapPoint(event);
+      if (!point) return;
+      setLassoSelection(null);
+      setLassoDraft({ pointerId: event.pointerId, points: [{ x: point.x, y: point.y }] });
+      return;
+    }
     inkPointer.onPointerDown(event);
   };
 
@@ -161,6 +181,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       }
       if (touchesRef.current.size >= 2) return;
     }
+    if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
+      const point = mapPoint(event);
+      if (!point) return;
+      setLassoDraft((prev) => ({ ...prev, points: [...prev.points, { x: point.x, y: point.y }] }));
+      return;
+    }
     inkPointer.onPointerMove(event);
   };
 
@@ -168,6 +194,18 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (event.pointerType === "touch") {
       touchesRef.current.delete(event.pointerId);
       if (touchesRef.current.size < 2) pinchRef.current = null;
+    }
+    if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
+      const polygon = lassoDraft.points;
+      if (polygon.length >= 3) {
+        const strokeIds = strokesInLasso(strokes, pageId, polygon);
+        const objectIds = objectsInLasso(pageObjects, pageId, polygon);
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setLassoSelection({ strokeIds, objectIds });
+        }
+      }
+      setLassoDraft(null);
+      return;
     }
     inkPointer.onPointerUp(event);
   };
@@ -198,6 +236,25 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     node.addEventListener("wheel", handleWheel, { passive: false });
     return () => node.removeEventListener("wheel", handleWheel);
   }, [panBy, zoomBy]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      if ((event.key === "Delete" || event.key === "Backspace") && lassoSelection) {
+        event.preventDefault();
+        if (lassoSelection.strokeIds.length > 0) inkController.removeStrokes?.(lassoSelection.strokeIds);
+        if (lassoSelection.objectIds.length > 0) inkController.removeObjects?.(lassoSelection.objectIds);
+        setLassoSelection(null);
+      }
+      if (event.key === "Escape") {
+        if (lassoSelection) setLassoSelection(null);
+        else if (isLassoMode) setIsLassoMode(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lassoSelection, isLassoMode, inkController]);
 
   const railContent = (
     <>
@@ -240,6 +297,16 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       >
         <Palette size={19} />
       </button>
+      <button
+        className={`rail-btn ${isLassoMode ? "active" : ""}`}
+        onClick={() => {
+          setIsLassoMode((mode) => !mode);
+          setLassoSelection(null);
+        }}
+        title="Lasso-Auswahl"
+      >
+        <Lasso size={19} />
+      </button>
     </>
   );
 
@@ -272,6 +339,46 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           height={size.height}
           dpr={globalThis.devicePixelRatio || 1}
         />
+        {lassoDraft && lassoDraft.points.length > 1 && (
+          <svg
+            data-testid="lasso-draft-path"
+            style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}
+          >
+            <polyline
+              points={lassoDraft.points
+                .map((p) => {
+                  const screen = worldToScreen(camera, p);
+                  return `${screen.x},${screen.y}`;
+                })
+                .join(" ")}
+              fill="rgba(62,123,216,0.12)"
+              stroke="#3E7BD8"
+              strokeWidth="1.5"
+              strokeDasharray="5 4"
+            />
+          </svg>
+        )}
+        {lassoSelection && (
+          <LassoSelectionLayer
+            bounds={
+              selectionBounds(strokes, pageObjects, lassoSelection.strokeIds, lassoSelection.objectIds)
+                ? { pageId, ...selectionBounds(strokes, pageObjects, lassoSelection.strokeIds, lassoSelection.objectIds) }
+                : null
+            }
+            pageLayout={fakePageLayout}
+            mapOrigin={mapOrigin}
+            onCommit={(transform) =>
+              inkController.applyCommands?.([
+                { type: "transform-selection", strokeIds: lassoSelection.strokeIds, objectIds: lassoSelection.objectIds, ...transform },
+              ])
+            }
+            onDelete={() => {
+              if (lassoSelection.strokeIds.length > 0) inkController.removeStrokes?.(lassoSelection.strokeIds);
+              if (lassoSelection.objectIds.length > 0) inkController.removeObjects?.(lassoSelection.objectIds);
+              setLassoSelection(null);
+            }}
+          />
+        )}
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}
       {isColorPopoverOpen && (
