@@ -18,12 +18,16 @@ function normalizePageIds(documentId, pages) {
   );
 }
 
-export function createInkDocument(documentId, pages = 1) {
+export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
   const id = String(documentId);
+  const defaults =
+    pageDefaults && typeof pageDefaults === 'object' && !Array.isArray(pageDefaults)
+      ? pageDefaults
+      : {};
   return {
     version: INK_SCHEMA_VERSION,
     documentId: id,
-    pages: normalizePageIds(id, pages).map((pageId) => ({ id: pageId })),
+    pages: normalizePageIds(id, pages).map((pageId) => ({ id: pageId, ...defaults })),
     strokes: [],
     objects: [],
     updatedAt: 0,

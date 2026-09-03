@@ -23,6 +23,16 @@ describe('ink document schema', () => {
     ]);
   });
 
+  it('stamps supplied page defaults onto every created page', () => {
+    expect(createInkDocument('note-8', 1, { kind: 'whiteboard' }).pages).toEqual([
+      { id: 'note-8-page-1', kind: 'whiteboard' },
+    ]);
+  });
+
+  it('keeps existing two-argument calls unaffected', () => {
+    expect(createInkDocument('note-9', 1).pages).toEqual([{ id: 'note-9-page-1' }]);
+  });
+
   it('rejects malformed persisted documents', () => {
     expect(isInkDocument({ version: 1, documentId: 'x', pages: [], strokes: 'bad' })).toBe(false);
   });
