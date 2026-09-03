@@ -42,7 +42,7 @@ function CopyButton({ text }) {
   );
 }
 
-export default function AiChatPanel({ onClose, noteTitle, subject, documentId, inkControllerRef }) {
+export default function AiChatPanel({ active = true, onClose, noteTitle, subject, documentId, inkControllerRef }) {
   const [draft, setDraft] = useState("");
   // Two modes, one conversation: "Agent" hands the model the document tools,
   // "Chat" keeps it to talking. Same rail, no second panel.
@@ -78,7 +78,7 @@ export default function AiChatPanel({ onClose, noteTitle, subject, documentId, i
   };
 
   return (
-    <div className="rail-chat">
+    <div className="rail-chat" hidden={!active} aria-hidden={!active}>
       <div className="rail-chat-head">
         <div className="rail-chat-head-text">
           <span className="rail-chat-title">KI-Assistent</span>

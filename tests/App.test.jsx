@@ -44,6 +44,41 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
+  it('switches one shared editor rail between browser and assistant', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+
+    const rail = screen.getByTestId('editor-sidebar');
+    fireEvent.click(screen.getByTitle('Browser'));
+    expect(rail).toHaveAttribute('data-mode', 'browser');
+    expect(screen.getByTestId('browser-panel')).not.toHaveAttribute('hidden');
+
+    fireEvent.click(screen.getByTitle('KI-Assistent'));
+    expect(rail).toHaveAttribute('data-mode', 'agent');
+    expect(screen.getByTestId('browser-panel')).toHaveAttribute('hidden');
+  });
+
+  it('keeps browser and assistant state while switching modes', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+
+    fireEvent.click(screen.getByTitle('Browser'));
+    fireEvent.change(screen.getByLabelText('Adresse oder Google-Suche'), {
+      target: { value: 'photosynthese lernen' },
+    });
+    fireEvent.click(screen.getByTitle('KI-Assistent'));
+    fireEvent.change(screen.getByLabelText('Nachricht an den KI-Assistenten'), {
+      target: { value: 'Merke diesen Entwurf' },
+    });
+    fireEvent.click(screen.getByTitle('Browser'));
+
+    expect(screen.getByLabelText('Adresse oder Google-Suche')).toHaveValue('photosynthese lernen');
+    fireEvent.click(screen.getByTitle('KI-Assistent'));
+    expect(screen.getByLabelText('Nachricht an den KI-Assistenten')).toHaveValue('Merke diesen Entwurf');
+  });
+
   it('passes a stable generated ID to a newly opened note', () => {
     const { rerender } = render(<App />);
     fireEvent.click(screen.getByTestId('new-note-btn'));

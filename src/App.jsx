@@ -1,10 +1,13 @@
-import React, { useRef, useState } from "react";
-import { ArrowLeft, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
 import Settings from "./components/Settings";
 import AiChatPanel from "./components/AiChatPanel";
+import BrowserPanel from "./components/BrowserPanel";
+import { createBrowserBridge } from "./browser/browserBridge";
+import { createBrowserRepository } from "./browser/browserRepository";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 
 function Editor({ activeNote, onBack }) {
@@ -14,11 +17,18 @@ function Editor({ activeNote, onBack }) {
   // portals its buttons in. Keeping it as a state-backed element rather than a
   // ref means the portal target is available on the render after mount.
   const [railSlot, setRailSlot] = useState(null);
-  const [isChatOpen, setChatOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState(null);
+  const [isBrowserFullscreen, setBrowserFullscreen] = useState(false);
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [isImmersive, setIsImmersive] = useState(false);
   const inkControllerRef = useRef(null);
+  const browserBridge = useMemo(() => createBrowserBridge(), []);
+  const browserRepository = useMemo(
+    () => createBrowserRepository(globalThis.localStorage),
+    [],
+  );
+  const isPanelOpen = panelMode !== null;
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
 
@@ -38,7 +48,7 @@ function Editor({ activeNote, onBack }) {
         </button>
       )}
       <div
-        className={`editor-title-pill ${isChatOpen ? "chat-open" : ""}`}
+        className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""}`}
         data-liquid-glass-control="title"
       >
         {onBack && (
@@ -89,13 +99,15 @@ function Editor({ activeNote, onBack }) {
           control on the page and shows as a page-wide flash) triggers that
           redraw for the rail alone. */}
       <div
-        className={`editor-sidebar ${isChatOpen ? "chat-open" : ""}`}
+        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""}`}
+        data-testid="editor-sidebar"
+        data-mode={panelMode || "closed"}
         data-liquid-glass-control="rail"
         // The glass shader bevels to its own cornerRadius (default 65px,
         // clamped to half the box) regardless of the CSS clip, so the wide
         // open panel needs a smaller radius here or its highlight still
         // arcs like a pill even though the CSS corner is tight.
-        data-config={isChatOpen ? '{"cornerRadius":30}' : undefined}
+        data-config={isPanelOpen ? '{"cornerRadius":30}' : undefined}
         onTransitionEnd={(event) => {
           if (event.propertyName === "width")
             glassInstanceRef.current?.markChanged(event.currentTarget);
@@ -103,23 +115,42 @@ function Editor({ activeNote, onBack }) {
       >
         <div className="rail-tools" ref={setRailSlot}>
           <button
-            className={`rail-btn rail-ai-btn ${isChatOpen ? "active" : ""}`}
-            onClick={() => setChatOpen((open) => !open)}
+            className={`rail-btn rail-ai-btn ${panelMode === "agent" ? "active" : ""}`}
+            onClick={() => {
+              setBrowserFullscreen(false);
+              setPanelMode((mode) => (mode === "agent" ? null : "agent"));
+            }}
             title="KI-Assistent"
           >
             <Sparkles size={19} />
           </button>
+          <button
+            className={`rail-btn rail-browser-btn ${panelMode === "browser" ? "active" : ""}`}
+            onClick={() => setPanelMode((mode) => (mode === "browser" ? null : "browser"))}
+            title="Browser"
+          >
+            <Globe2 size={19} />
+          </button>
           <div className="rail-divider" />
         </div>
-        {isChatOpen && (
-          <AiChatPanel
-            onClose={() => setChatOpen(false)}
-            noteTitle={activeNote?.title}
-            subject={activeNote?.subject}
-            documentId={String(activeNote?.id ?? "default")}
-            inkControllerRef={inkControllerRef}
-          />
-        )}
+        <AiChatPanel
+          active={panelMode === "agent"}
+          onClose={() => setPanelMode(null)}
+          noteTitle={activeNote?.title}
+          subject={activeNote?.subject}
+          documentId={String(activeNote?.id ?? "default")}
+          inkControllerRef={inkControllerRef}
+        />
+        <BrowserPanel
+          active={panelMode === "browser"}
+          bridge={browserBridge}
+          repository={browserRepository}
+          onClose={() => {
+            setBrowserFullscreen(false);
+            setPanelMode(null);
+          }}
+          onFullscreenChange={setBrowserFullscreen}
+        />
       </div>
       <div className="editor-body">
         <SplitLayout

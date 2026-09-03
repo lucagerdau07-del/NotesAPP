@@ -966,10 +966,14 @@ body::after {
 
 /* One glass control grown wider — the tool column keeps a fixed width so
    the buttons never move, the chat fills the rest. */
-.editor-sidebar.chat-open {
-  width: 400px;
+.editor-sidebar.panel-open {
+  width: min(520px, calc(100vw - 24px));
   border-radius: 30px;
   transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editor-sidebar.browser-fullscreen {
+  width: calc(100vw - 16px);
 }
 
 .rail-tools {
@@ -984,7 +988,7 @@ body::after {
 
 /* The open assistant shows the note title in its own header instead — the
    floating title pill would otherwise float disconnected next to it. */
-.editor-title-pill.chat-open {
+.editor-title-pill.panel-open {
   display: none;
 }
 
@@ -2785,6 +2789,19 @@ body::after {
 
 .text-insert-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.rail-browser-btn {
+  color: #8ddce7;
+}
+
+.rail-browser-btn.active {
+  background: linear-gradient(140deg, #1ACEE6, #004D61);
+  color: #F5F2EB;
+}
+
+.rail-chat[hidden] {
+  display: none;
 }
 
 /* Integrated sidebar browser ------------------------------------------------ */
