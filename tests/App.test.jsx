@@ -79,6 +79,24 @@ describe('App Component', () => {
     expect(screen.getByLabelText('Nachricht an den KI-Assistenten')).toHaveValue('Merke diesen Entwurf');
   });
 
+  it('lets the shared rail be resized by its drag handle and remembers the width', () => {
+    render(<App />);
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    fireEvent.click(screen.getByTitle('Browser'));
+
+    const rail = screen.getByTestId('editor-sidebar');
+    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Seitenfenster-Breite ändern' }), {
+      pointerId: 1,
+      clientX: 520,
+    });
+    fireEvent.pointerMove(document, { pointerId: 1, clientX: 640 });
+    fireEvent.pointerUp(document, { pointerId: 1, clientX: 640 });
+
+    expect(rail).toHaveStyle({ width: '632px' });
+    expect(globalThis.localStorage.getItem('notes.editor.rail-width')).toBe('632');
+  });
+
   it('passes a stable generated ID to a newly opened note', () => {
     const { rerender } = render(<App />);
     fireEvent.click(screen.getByTestId('new-note-btn'));

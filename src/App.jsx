@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
@@ -12,6 +12,19 @@ import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 
+const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
+const RAIL_LEFT_INSET = 8;
+
+function constrainedRailWidth(value) {
+  const viewportLimit = Math.max(360, (globalThis.innerWidth || 1024) - 100);
+  return Math.round(Math.min(800, viewportLimit, Math.max(360, value)));
+}
+
+function savedRailWidth() {
+  const stored = Number(globalThis.localStorage?.getItem(RAIL_WIDTH_STORAGE_KEY));
+  return Number.isFinite(stored) ? constrainedRailWidth(stored) : null;
+}
+
 function Editor({ activeNote, onBack }) {
   const glassRootRef = useRef(null);
   // The rail is rendered here so it is a direct child of the glass root (the
@@ -19,6 +32,8 @@ function Editor({ activeNote, onBack }) {
   // portals its buttons in. Keeping it as a state-backed element rather than a
   // ref means the portal target is available on the render after mount.
   const [railSlot, setRailSlot] = useState(null);
+  const [railWidth, setRailWidth] = useState(savedRailWidth);
+  const [isRailResizing, setRailResizing] = useState(false);
   const [panelMode, setPanelMode] = useState(null);
   const [isBrowserFullscreen, setBrowserFullscreen] = useState(false);
   const [browserNavigation, setBrowserNavigation] = useState(null);
@@ -33,6 +48,8 @@ function Editor({ activeNote, onBack }) {
   );
   const isPanelOpen = panelMode !== null;
   const navigationSequenceRef = useRef(0);
+  const railWidthRef = useRef(railWidth);
+  const resizePointerRef = useRef(null);
   const openAppLink = (url) => {
     if (!isInternalBrowserUrl(url)) return;
     navigationSequenceRef.current += 1;
@@ -42,6 +59,34 @@ function Editor({ activeNote, onBack }) {
   };
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
+
+  useEffect(() => {
+    railWidthRef.current = railWidth;
+  }, [railWidth]);
+
+  useEffect(() => {
+    if (!isRailResizing) return undefined;
+    const move = (event) => {
+      if (event.pointerId !== resizePointerRef.current) return;
+      const nextWidth = constrainedRailWidth(event.clientX - RAIL_LEFT_INSET);
+      railWidthRef.current = nextWidth;
+      setRailWidth(nextWidth);
+    };
+    const finish = (event) => {
+      if (event.pointerId !== resizePointerRef.current) return;
+      globalThis.localStorage?.setItem(RAIL_WIDTH_STORAGE_KEY, String(railWidthRef.current));
+      resizePointerRef.current = null;
+      setRailResizing(false);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
+    return () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+    };
+  }, [isRailResizing]);
 
   return (
     <BrowserLinkProvider openLink={openAppLink}>
@@ -111,7 +156,7 @@ function Editor({ activeNote, onBack }) {
           control on the page and shows as a page-wide flash) triggers that
           redraw for the rail alone. */}
       <div
-        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""}`}
+        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""}`}
         data-testid="editor-sidebar"
         data-mode={panelMode || "closed"}
         data-liquid-glass-control="rail"
@@ -120,6 +165,7 @@ function Editor({ activeNote, onBack }) {
         // open panel needs a smaller radius here or its highlight still
         // arcs like a pill even though the CSS corner is tight.
         data-config={isPanelOpen ? '{"cornerRadius":30}' : undefined}
+        style={isPanelOpen && !isBrowserFullscreen && railWidth ? { width: `${railWidth}px` } : undefined}
         onTransitionEnd={(event) => {
           if (event.propertyName === "width")
             glassInstanceRef.current?.markChanged(event.currentTarget);
@@ -164,6 +210,20 @@ function Editor({ activeNote, onBack }) {
           }}
           onFullscreenChange={setBrowserFullscreen}
         />
+        {isPanelOpen && !isBrowserFullscreen && (
+          <div
+            className="rail-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Seitenfenster-Breite ändern"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              resizePointerRef.current = event.pointerId;
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+              setRailResizing(true);
+            }}
+          />
+        )}
       </div>
       <div className="editor-body">
         <SplitLayout

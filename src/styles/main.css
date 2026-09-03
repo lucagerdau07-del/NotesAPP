@@ -976,6 +976,43 @@ body::after {
   width: calc(100vw - 16px);
 }
 
+.editor-sidebar.is-resizing {
+  transition: none;
+  user-select: none;
+}
+
+.rail-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  z-index: 260;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rail-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 3px;
+  height: 46px;
+  transform: translateY(-50%);
+  border-radius: 99px;
+  background: rgba(127, 230, 242, 0.56);
+  box-shadow: 0 0 12px rgba(26, 206, 230, 0.34);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.editor-sidebar:hover .rail-resize-handle::after,
+.editor-sidebar.is-resizing .rail-resize-handle::after,
+.rail-resize-handle:focus-visible::after {
+  opacity: 1;
+}
+
 .rail-tools {
   flex: 0 0 72px;
   width: 72px;
