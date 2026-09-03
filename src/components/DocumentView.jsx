@@ -58,6 +58,7 @@ import { readImageObjectSource } from "../ink/imageObject";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso";
+import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
 const INPUT_MODE_LABELS = {
   stylus: "Stift",
@@ -865,6 +866,7 @@ export default function DocumentView({
   onCurrentPageChange,
   isImmersive,
 }) {
+  const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
     return <WhiteboardEditor inkController={inkController} railSlot={railSlot} />;
   }
@@ -2907,6 +2909,7 @@ export default function DocumentView({
             onSelect={setSelectedObjectId}
             onChange={handleObjectChange}
             onDelete={handleObjectDelete}
+            onOpenLink={openLink}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -2934,6 +2937,7 @@ export default function DocumentView({
             onSelect={setSelectedObjectId}
             onChange={handleObjectChange}
             onDelete={handleObjectDelete}
+            onOpenLink={openLink}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg

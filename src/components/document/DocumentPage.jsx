@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import PdfPageCanvas from "./PdfPageCanvas.jsx";
 import ImagePageCanvas from "./ImagePageCanvas.jsx";
 import InkPageCanvas from "./InkPageCanvas.jsx";
+import PdfLinkLayer from "./PdfLinkLayer.jsx";
+import { useBrowserLink } from "../../browser/BrowserLinkContext.jsx";
 
 export default function DocumentPage({
   page,
@@ -12,6 +14,7 @@ export default function DocumentPage({
   dpr = 1,
   children,
 }) {
+  const openLink = useBrowserLink();
   const logicalWidth = page.width * zoom;
   const logicalHeight = page.height * zoom;
   const containerRef = useRef(null);
@@ -72,6 +75,9 @@ export default function DocumentPage({
               zoom={zoom}
               dpr={dpr}
             />
+          )}
+          {sourceType === "pdf" && sourceHandle && (
+            <PdfLinkLayer page={page} sourceHandle={sourceHandle} zoom={zoom} onOpenLink={openLink} />
           )}
           <InkPageCanvas page={page} strokes={strokes} zoom={zoom} dpr={dpr} />
         </>

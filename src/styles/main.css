@@ -2805,6 +2805,25 @@ body::after {
 }
 
 /* Integrated sidebar browser ------------------------------------------------ */
+.pdf-link-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pdf-link-layer a {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: 3px;
+}
+
+.pdf-link-layer a:focus-visible {
+  outline: 2px solid #1acee6;
+  outline-offset: 2px;
+  background: rgba(26, 206, 230, 0.12);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -1,4 +1,5 @@
 import React from "react";
+import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
 // A small block/inline Markdown renderer. It exists instead of a dependency
 // because chat answers only ever use a handful of constructs, and because
@@ -9,7 +10,7 @@ import React from "react";
 
 const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
 
-export function renderInline(text, keyPrefix = "i") {
+export function renderInline(text, keyPrefix = "i", openLink = null) {
   return String(text)
     .split(INLINE)
     .filter((part) => part !== "" && part !== undefined)
@@ -27,7 +28,9 @@ export function renderInline(text, keyPrefix = "i") {
         // Only http(s): a javascript: URL from model output must never become
         // a clickable link.
         return /^https?:\/\//i.test(href) ? (
-          <a key={key} href={href} target="_blank" rel="noreferrer noopener">
+          <a key={key} href={href} target="_blank" rel="noreferrer noopener" onClick={(event) => {
+            if (openLink?.(href)) event.preventDefault();
+          }}>
             {link[1]}
           </a>
         ) : (
@@ -73,6 +76,7 @@ function tableRow(line) {
 }
 
 export default function Markdown({ text }) {
+  const openLink = useBrowserLink();
   const lines = String(text ?? "").split("\n");
   const blocks = [];
   let index = 0;
@@ -100,7 +104,7 @@ export default function Markdown({ text }) {
       const Tag = `h${Math.min(4, heading[1].length + 2)}`;
       blocks.push(
         <Tag key={blocks.length} className="md-heading">
-          {renderInline(heading[2], `h${index}`)}
+          {renderInline(heading[2], `h${index}`, openLink)}
         </Tag>,
       );
       index += 1;
@@ -118,7 +122,7 @@ export default function Markdown({ text }) {
       blocks.push(
         <List key={blocks.length} className="md-list">
           {items.map((item, itemIndex) => (
-            <li key={itemIndex}>{renderInline(item, `l${index}-${itemIndex}`)}</li>
+            <li key={itemIndex}>{renderInline(item, `l${index}-${itemIndex}`, openLink)}</li>
           ))}
         </List>,
       );
@@ -133,7 +137,7 @@ export default function Markdown({ text }) {
       }
       blocks.push(
         <blockquote key={blocks.length} className="md-quote">
-          {renderInline(quote.join(" "), `q${index}`)}
+          {renderInline(quote.join(" "), `q${index}`, openLink)}
         </blockquote>,
       );
       continue;
@@ -153,7 +157,7 @@ export default function Markdown({ text }) {
             <thead>
               <tr>
                 {header.map((cell, cellIndex) => (
-                  <th key={cellIndex}>{renderInline(cell, `th${cellIndex}`)}</th>
+                  <th key={cellIndex}>{renderInline(cell, `th${cellIndex}`, openLink)}</th>
                 ))}
               </tr>
             </thead>
@@ -161,7 +165,7 @@ export default function Markdown({ text }) {
               {rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, cellIndex) => (
-                    <td key={cellIndex}>{renderInline(cell, `td${rowIndex}-${cellIndex}`)}</td>
+                    <td key={cellIndex}>{renderInline(cell, `td${rowIndex}-${cellIndex}`, openLink)}</td>
                   ))}
                 </tr>
               ))}
@@ -194,7 +198,7 @@ export default function Markdown({ text }) {
     }
     blocks.push(
       <p key={blocks.length} className="md-p">
-        {renderInline(paragraph.join(" "), `p${index}`)}
+        {renderInline(paragraph.join(" "), `p${index}`, openLink)}
       </p>,
     );
   }

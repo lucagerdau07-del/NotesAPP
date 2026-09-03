@@ -372,6 +372,7 @@ export default function PageObjectLayer({
   onSelect,
   onChange,
   onDelete,
+  onOpenLink,
 }) {
   const drag = useDrag(onChange);
   const zoom = pageLayout?.zoom || 1;
@@ -401,6 +402,11 @@ export default function PageObjectLayer({
             data-object-id={object.id}
             data-object-type={object.type}
             onPointerDown={(event) => {
+              if (object.type === "link" && !isSelected && editingId !== object.id && onOpenLink) {
+                event.stopPropagation();
+                onOpenLink(object.href);
+                return;
+              }
               // An empty rect/ellipse only grabs the pointer near its outline —
               // missing that band lets the click fall through to the canvas
               // underneath instead of stopping propagation.
@@ -487,7 +493,7 @@ export default function PageObjectLayer({
                   {object.href && (
                     <IconButton
                       label="Link öffnen"
-                      onClick={() => globalThis.open?.(object.href, "_blank", "noopener")}
+                      onClick={() => onOpenLink?.(object.href) ?? globalThis.open?.(object.href, "_blank", "noopener")}
                     >
                       <ExternalLink size={14} />
                     </IconButton>

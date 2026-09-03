@@ -8,6 +8,8 @@ import AiChatPanel from "./components/AiChatPanel";
 import BrowserPanel from "./components/BrowserPanel";
 import { createBrowserBridge } from "./browser/browserBridge";
 import { createBrowserRepository } from "./browser/browserRepository";
+import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
+import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 
 function Editor({ activeNote, onBack }) {
@@ -19,6 +21,7 @@ function Editor({ activeNote, onBack }) {
   const [railSlot, setRailSlot] = useState(null);
   const [panelMode, setPanelMode] = useState(null);
   const [isBrowserFullscreen, setBrowserFullscreen] = useState(false);
+  const [browserNavigation, setBrowserNavigation] = useState(null);
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [isImmersive, setIsImmersive] = useState(false);
@@ -29,10 +32,19 @@ function Editor({ activeNote, onBack }) {
     [],
   );
   const isPanelOpen = panelMode !== null;
+  const navigationSequenceRef = useRef(0);
+  const openAppLink = (url) => {
+    if (!isInternalBrowserUrl(url)) return;
+    navigationSequenceRef.current += 1;
+    setBrowserNavigation({ id: navigationSequenceRef.current, url });
+    setBrowserFullscreen(false);
+    setPanelMode("browser");
+  };
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
 
   return (
+    <BrowserLinkProvider openLink={openAppLink}>
     <div
       className={`editor-shell ${isImmersive ? "immersive" : ""}`}
       ref={glassRootRef}
@@ -145,6 +157,7 @@ function Editor({ activeNote, onBack }) {
           active={panelMode === "browser"}
           bridge={browserBridge}
           repository={browserRepository}
+          navigationRequest={browserNavigation}
           onClose={() => {
             setBrowserFullscreen(false);
             setPanelMode(null);
@@ -166,6 +179,7 @@ function Editor({ activeNote, onBack }) {
         />
       </div>
     </div>
+    </BrowserLinkProvider>
   );
 }
 
