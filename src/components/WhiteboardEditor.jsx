@@ -1,7 +1,8 @@
 // src/components/WhiteboardEditor.jsx
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Undo2, Redo2, PenLine, Eraser } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, Palette, X } from "lucide-react";
+import { HexColorPicker } from "react-colorful";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
@@ -14,11 +15,66 @@ function relativePoint(element, event) {
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
+function ColorWidthPopover({ color, onColorChange, width, onWidthChange, onClose }) {
+  const popoverRef = useRef(null);
+  React.useEffect(() => {
+    const handleDown = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.(".whiteboard-color-btn")) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      data-testid="whiteboard-color-popover"
+      style={{
+        position: "absolute",
+        left: 60,
+        top: 120,
+        zIndex: 50,
+        width: 220,
+        padding: 16,
+        borderRadius: 14,
+        background: "#18181C",
+        color: "#FFFFFF",
+        boxShadow: "0 20px 48px -12px rgba(0,0,0,.8)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <Palette size={14} /> Farbe & Breite
+        </span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer" }}>
+          <X size={14} />
+        </button>
+      </div>
+      <HexColorPicker color={color} onChange={onColorChange} />
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, opacity: 0.7 }}>Breite</span>
+        <input
+          type="range"
+          min={1}
+          max={20}
+          value={width}
+          onChange={(e) => onWidthChange(Number(e.target.value))}
+          style={{ flex: 1 }}
+        />
+        <span style={{ fontSize: 12, width: 24, textAlign: "right" }}>{width}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function WhiteboardEditor({ inkController, railSlot }) {
   const containerRef = useRef(null);
   const touchesRef = useRef(new Map());
   const pinchRef = useRef(null);
   const [isEraser, setIsEraser] = useState(false);
+  const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [liveDraft, setLiveDraft] = useState(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
@@ -177,6 +233,13 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       >
         <Eraser size={19} />
       </button>
+      <button
+        className="rail-btn whiteboard-color-btn"
+        onClick={() => setIsColorPopoverOpen((open) => !open)}
+        title="Farbe & Breite"
+      >
+        <Palette size={19} />
+      </button>
     </>
   );
 
@@ -211,6 +274,17 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         />
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}
+      {isColorPopoverOpen && (
+        <ColorWidthPopover
+          color={isEraser ? "#FFFFFF" : inkController.color}
+          onColorChange={(c) => inkController.setColor?.(c)}
+          width={isEraser ? inkController.eraserWidth : inkController.penWidth}
+          onWidthChange={(w) =>
+            isEraser ? inkController.setEraserWidth?.(w) : inkController.setPenWidth?.(w)
+          }
+          onClose={() => setIsColorPopoverOpen(false)}
+        />
+      )}
     </div>
   );
 }

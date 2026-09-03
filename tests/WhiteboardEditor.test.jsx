@@ -27,6 +27,9 @@ function createControllerDouble(overrides = {}) {
     redo: vi.fn(),
     canUndo: false,
     canRedo: false,
+    setColor: vi.fn(),
+    setPenWidth: vi.fn(),
+    setEraserWidth: vi.fn(),
     ...overrides,
   };
 }
@@ -100,5 +103,12 @@ describe('WhiteboardEditor', () => {
     expect(eraserBtn).not.toHaveClass('active');
     fireEvent.click(eraserBtn);
     expect(eraserBtn.className).toContain('active');
+  });
+
+  it('opens a color/width popover and updates the ink color', () => {
+    const setColor = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ setColor })} />);
+    fireEvent.click(screen.getByTitle('Farbe & Breite'));
+    expect(screen.getByTestId('whiteboard-color-popover')).toBeInTheDocument();
   });
 });
