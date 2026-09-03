@@ -72,12 +72,18 @@ function useSelectionDrag(bounds, onCommit) {
   return { draft, start, move, end };
 }
 
-export default function LassoSelectionLayer({ bounds, pageLayout, onCommit, onDelete }) {
+export default function LassoSelectionLayer({
+  bounds,
+  pageLayout,
+  onCommit,
+  onDelete,
+  mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
+}) {
   const zoom = pageLayout?.zoom || 1;
   const drag = useSelectionDrag(bounds, onCommit);
   if (!bounds) return null;
   const box = drag.draft || bounds;
-  const origin = pagePointToViewport(pageLayout, bounds.pageId, { x: 0, y: 0 });
+  const origin = mapOrigin(pageLayout, bounds.pageId);
   if (!origin) return null;
 
   return (
