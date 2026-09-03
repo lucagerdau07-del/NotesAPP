@@ -918,3 +918,26 @@ test('renders a custom page format and background instead of the hardcoded defau
   // The content div's inline width should reflect the 900px square format at zoom 1.
   expect(page.style.width).toBe('900px');
 });
+
+test('renders WhiteboardEditor instead of the page-stack view for a whiteboard document', () => {
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'wb-doc',
+      pages: [{ id: 'wb-doc-page-1', kind: 'whiteboard' }],
+      strokes: [],
+      objects: [],
+      updatedAt: 0,
+    },
+  });
+  render(
+    <DocumentView
+      note={{ id: 'wb-doc' }}
+      inkController={controller}
+      toolbarState={toolState()}
+      focusBoxState={{ focusBox: null, setFocusBox: vi.fn() }}
+    />,
+  );
+  expect(screen.getByTestId('whiteboard-surface')).toBeInTheDocument();
+  expect(screen.queryByTestId('document-page')).not.toBeInTheDocument();
+});

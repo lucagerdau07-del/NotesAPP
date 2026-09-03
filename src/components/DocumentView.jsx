@@ -52,6 +52,7 @@ import { INPUT_MODES } from "../ink/inputPolicy";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
+import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
 import { readImageObjectSource } from "../ink/imageObject";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
@@ -864,6 +865,10 @@ export default function DocumentView({
   onCurrentPageChange,
   isImmersive,
 }) {
+  if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
+    return <WhiteboardEditor inkController={inkController} railSlot={railSlot} />;
+  }
+
   const {
     color,
     setColor,
