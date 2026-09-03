@@ -1,0 +1,96 @@
+// tests/WhiteboardEditor.test.jsx
+import '@testing-library/jest-dom';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import WhiteboardEditor from '../src/components/WhiteboardEditor.jsx';
+import * as renderInk from '../src/ink/renderInk.js';
+
+function createControllerDouble(overrides = {}) {
+  return {
+    document: {
+      version: 1,
+      documentId: 'wb-1',
+      pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+      strokes: [],
+      objects: [],
+      updatedAt: 0,
+    },
+    tool: 'pen',
+    color: '#EFECE4',
+    penWidth: 3,
+    eraserWidth: 15,
+    eraserMode: 'pixel',
+    inputMode: 'stylus',
+    commitStroke: vi.fn(),
+    removeStrokes: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    canUndo: false,
+    canRedo: false,
+    ...overrides,
+  };
+}
+
+describe('WhiteboardEditor', () => {
+  it('renders a whiteboard canvas for the document\'s single page', () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    expect(screen.getByTestId('whiteboard-canvas')).toBeInTheDocument();
+  });
+
+  it('draws a stroke on mouse drag and commits it on release', () => {
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+    const stroke = commitStroke.mock.calls[0][0];
+    expect(stroke.pageId).toBe('wb-1-page-1');
+    expect(stroke.points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('repaints the in-progress stroke on pointer move, before pointer up', () => {
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+    renderSpy.mockClear();
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+
+    // Without pointerup, the stroke is not yet committed to the document — the
+    // only way the canvas can show it is by repainting the live draft.
+    expect(renderSpy).toHaveBeenCalled();
+    const draftArg = renderSpy.mock.calls.find((call) => call[1] && call[1].points?.length >= 2);
+    expect(draftArg).toBeTruthy();
+
+    renderSpy.mockRestore();
+  });
+
+  it('wires undo/redo buttons to the controller', () => {
+    const undo = vi.fn();
+    const redo = vi.fn();
+    render(
+      <WhiteboardEditor
+        inkController={createControllerDouble({ undo, redo, canUndo: true, canRedo: true })}
+      />,
+    );
+    fireEvent.click(screen.getByTitle('Rückgängig'));
+    fireEvent.click(screen.getByTitle('Wiederholen'));
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles eraser on and off', () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    const eraserBtn = screen.getByTitle('Radierer');
+    expect(eraserBtn).not.toHaveClass('active');
+    fireEvent.click(eraserBtn);
+    expect(eraserBtn.className).toContain('active');
+  });
+});
