@@ -137,4 +137,24 @@ describe('WhiteboardEditor', () => {
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(removeStrokes).toHaveBeenCalledWith(['s1']);
   });
+
+  it('inserts a shape via the design-tools popover, placed at world coordinates', () => {
+    const addObject = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ addObject })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTitle('Einfügen'));
+    fireEvent.click(screen.getByTestId('insert-rect'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+
+    expect(addObject).toHaveBeenCalledTimes(1);
+    const object = addObject.mock.calls[0][0];
+    expect(object.type).toBe('rect');
+    expect(object.pageId).toBe('wb-1-page-1');
+    expect(object.width).toBeCloseTo(200);
+    expect(object.height).toBeCloseTo(150);
+  });
 });

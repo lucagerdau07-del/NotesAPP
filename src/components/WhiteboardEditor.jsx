@@ -1,16 +1,19 @@
 // src/components/WhiteboardEditor.jsx
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso, Shapes } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { screenToWorld, worldToScreen } from "../ink/whiteboardCoordinates.js";
 import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js";
-import { pageObjectsOf } from "../ink/pageObjects.js";
+import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
+import { readImageObjectSource } from "../ink/imageObject.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
+import PageObjectLayer from "./document/PageObjectLayer.jsx";
+import { DESIGN_TOOLS, TEXT_TOOL, DesignToolsPopover } from "./DocumentView.jsx";
 
 function relativePoint(element, event) {
   if (!element) return null;
@@ -83,6 +86,11 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [lassoSelection, setLassoSelection] = useState(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [liveDraft, setLiveDraft] = useState(null);
+  const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
+  const [placingTool, setPlacingTool] = useState(null);
+  const [draftPlacement, setDraftPlacement] = useState(null);
+  const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const imageInputRef = useRef(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
   const palmGuard = useMemo(() => palmGuardFromProfile(loadPalmProfile()), []);
 
@@ -157,6 +165,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       }
       if (touchesRef.current.size > 2) return;
     }
+    if (placingTool) {
+      const point = mapPoint(event);
+      if (!point) return;
+      setDraftPlacement({ type: placingTool.id, pointerId: event.pointerId, startX: point.x, startY: point.y, width: 0, height: 0 });
+      return;
+    }
     if (isLassoMode) {
       const point = mapPoint(event);
       if (!point) return;
@@ -181,6 +195,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       }
       if (touchesRef.current.size >= 2) return;
     }
+    if (draftPlacement && draftPlacement.pointerId === event.pointerId) {
+      const point = mapPoint(event);
+      if (!point) return;
+      setDraftPlacement((prev) => ({ ...prev, width: point.x - prev.startX, height: point.y - prev.startY }));
+      return;
+    }
     if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
       const point = mapPoint(event);
       if (!point) return;
@@ -194,6 +214,26 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (event.pointerType === "touch") {
       touchesRef.current.delete(event.pointerId);
       if (touchesRef.current.size < 2) pinchRef.current = null;
+    }
+    if (draftPlacement && draftPlacement.pointerId === event.pointerId) {
+      const tool = placingTool;
+      const dragged = Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
+      const object = createPageObject({
+        pageId,
+        type: draftPlacement.type,
+        x: dragged || tool.id === "text" ? draftPlacement.startX : draftPlacement.startX - tool.width / 2,
+        y: dragged || tool.id === "text" ? draftPlacement.startY : draftPlacement.startY - tool.height / 2,
+        width: dragged ? draftPlacement.width : tool.width,
+        height: dragged ? draftPlacement.height : tool.height,
+        color: inkController.color || "#3E7BD8",
+        strokeWidth: inkController.penWidth || 3,
+        text: draftPlacement.type === "text" ? (dragged ? "Text" : "") : undefined,
+      });
+      inkController.addObject?.(object);
+      setSelectedObjectId(object.id);
+      setDraftPlacement(null);
+      setPlacingTool(null);
+      return;
     }
     if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
       const polygon = lassoDraft.points;
@@ -256,6 +296,41 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lassoSelection, isLassoMode, inkController]);
 
+  const handleInsertTool = (item) => {
+    if (item.id === "image") {
+      imageInputRef.current?.click();
+      setIsDesignToolsOpen(false);
+      return;
+    }
+    setPlacingTool(item);
+    setIsDesignToolsOpen(false);
+  };
+
+  const handleImageFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const { src, width, height } = await readImageObjectSource(file);
+      const maxWidth = Math.min(600, width);
+      const scale = maxWidth / width;
+      const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
+      const object = createPageObject({
+        pageId,
+        type: "image",
+        x: center.x - maxWidth / 2,
+        y: center.y - (height * scale) / 2,
+        width: maxWidth,
+        height: height * scale,
+        src,
+      });
+      inkController.addObject?.(object);
+      setSelectedObjectId(object.id);
+    } catch {
+      // A file the browser cannot decode simply inserts nothing.
+    }
+  };
+
   const railContent = (
     <>
       <button
@@ -302,11 +377,40 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         onClick={() => {
           setIsLassoMode((mode) => !mode);
           setLassoSelection(null);
+          setPlacingTool(null);
         }}
         title="Lasso-Auswahl"
       >
         <Lasso size={19} />
       </button>
+      <button
+        className={`rail-btn ${placingTool?.id === "text" ? "active" : ""}`}
+        onClick={() => {
+          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+          setIsLassoMode(false);
+        }}
+        title="Text"
+      >
+        <span style={{ fontSize: 15, fontWeight: 700 }}>T</span>
+      </button>
+      <button
+        className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}
+        onClick={() => {
+          if (placingTool) setPlacingTool(null);
+          else setIsDesignToolsOpen((open) => !open);
+          setIsLassoMode(false);
+        }}
+        title="Einfügen"
+      >
+        <Shapes size={19} />
+      </button>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={handleImageFile}
+      />
     </>
   );
 
@@ -379,8 +483,20 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
             }}
           />
         )}
+        <PageObjectLayer
+          objects={pageObjects}
+          pageLayout={fakePageLayout}
+          mapOrigin={mapOrigin}
+          selectedId={selectedObjectId}
+          onSelect={setSelectedObjectId}
+          onChange={(id, changes) => inkController.updateObject?.(id, changes)}
+          onDelete={(id) => inkController.removeObjects?.([id])}
+        />
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}
+      {isDesignToolsOpen && (
+        <DesignToolsPopover onInsert={handleInsertTool} onClose={() => setIsDesignToolsOpen(false)} />
+      )}
       {isColorPopoverOpen && (
         <ColorWidthPopover
           color={isEraser ? "#FFFFFF" : inkController.color}
