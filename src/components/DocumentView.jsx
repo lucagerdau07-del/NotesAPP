@@ -809,6 +809,8 @@ const emptyDocument = {
   strokes: [],
   updatedAt: 0,
 };
+const DEFAULT_PAGE_BACKGROUND =
+  "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)";
 
 function clampFocusBoxToPage(focusBox) {
   const width = Math.min(baseWidth, Math.max(0, focusBox.width));
@@ -1010,7 +1012,10 @@ export default function DocumentView({
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
   const inkCanvasRef = useRef(null);
-  const documentHeight = pageHeight * pagesCount;
+  const resolvedPageWidth = inkDocument.pages[0]?.width || baseWidth;
+  const resolvedPageHeight = inkDocument.pages[0]?.height || pageHeight;
+  const pageBackground = inkDocument.pages[0]?.background || DEFAULT_PAGE_BACKGROUND;
+  const documentHeight = resolvedPageHeight * pagesCount;
   const pageDescriptors =
     note?.kind === "imported" &&
     Array.isArray(note.pages) &&
@@ -1019,14 +1024,14 @@ export default function DocumentView({
       : pageIds.map((id, index) => ({
           id,
           index,
-          width: baseWidth,
-          height: pageHeight,
+          width: inkDocument.pages[index]?.width || baseWidth,
+          height: inkDocument.pages[index]?.height || pageHeight,
         }));
   const documentMetrics = calculateDocumentMetrics(pageDescriptors);
   const totalDocumentHeight = showPageBreaks
     ? note?.kind === "imported"
       ? documentMetrics.totalHeight * zoom
-      : pagesCount * pageHeight * zoom + (pagesCount - 1) * PAGE_GAP
+      : pagesCount * resolvedPageHeight * zoom + (pagesCount - 1) * PAGE_GAP
     : note?.kind === "imported"
       ? documentMetrics.totalHeight * zoom
       : documentHeight * zoom;
@@ -1348,7 +1353,7 @@ export default function DocumentView({
     if (!canvas) return;
     const context = canvas.getContext("2d");
     if (!context) return;
-    const cssWidth = baseWidth * zoom;
+    const cssWidth = resolvedPageWidth * zoom;
     const cssHeight = totalDocumentHeight;
     const dpr = globalThis.devicePixelRatio || 1;
     resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
@@ -2719,7 +2724,7 @@ export default function DocumentView({
           style={{
             display: "inline-block",
             textAlign: "left",
-            width: `${baseWidth * zoom}px`,
+            width: `${resolvedPageWidth * zoom}px`,
             height: `${totalDocumentHeight}px`,
             position: "relative",
             backgroundColor: "transparent",
@@ -2824,8 +2829,7 @@ export default function DocumentView({
                 width: "100%",
                 height: `${documentHeight * zoom}px`,
                 borderRadius: isFullBleed ? 0 : isFullMode ? "22px 22px 0 0" : "20px",
-                background:
-                  "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
+                background: pageBackground,
                 boxShadow:
                   "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
                 overflow: "hidden",
@@ -2837,7 +2841,7 @@ export default function DocumentView({
                   position: "absolute",
                   top: 0,
                   left: 0,
-                  width: `${baseWidth}px`,
+                  width: `${resolvedPageWidth}px`,
                   height: `${documentHeight}px`,
                   transform: `scale(${zoom})`,
                   transformOrigin: "0 0",
@@ -2849,7 +2853,7 @@ export default function DocumentView({
             </div>
           ) : (
             Array.from({ length: pagesCount }).map((_, i) => {
-              const pageTop = i * (pageHeight * zoom + PAGE_GAP);
+              const pageTop = i * (resolvedPageHeight * zoom + PAGE_GAP);
               return (
                 <div
                   key={i}
@@ -2858,10 +2862,9 @@ export default function DocumentView({
                     top: `${pageTop}px`,
                     left: 0,
                     width: "100%",
-                    height: `${pageHeight * zoom}px`,
+                    height: `${resolvedPageHeight * zoom}px`,
                     borderRadius: isFullBleed ? 0 : "20px",
-                    background:
-                      "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)",
+                    background: pageBackground,
                     boxShadow:
                       "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 24px 50px -16px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
                     overflow: "hidden",
@@ -2873,8 +2876,8 @@ export default function DocumentView({
                       position: "absolute",
                       top: 0,
                       left: 0,
-                      width: `${baseWidth}px`,
-                      height: `${pageHeight}px`,
+                      width: `${resolvedPageWidth}px`,
+                      height: `${resolvedPageHeight}px`,
                       transform: `scale(${zoom})`,
                       transformOrigin: "0 0",
                       ...getStaticBackgroundStyles(),

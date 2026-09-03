@@ -902,3 +902,19 @@ test('writes with the passive stylus while a hand rests on the page', () => {
 
   expect(controller.commitStroke).toHaveBeenCalledTimes(2);
 });
+
+test('renders a custom page format and background instead of the hardcoded default', () => {
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-square',
+      pages: [{ id: 'page-1', width: 900, height: 900, background: '#FFFFFF' }],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  // The content div's inline width should reflect the 900px square format at zoom 1.
+  expect(page.style.width).toBe('900px');
+});
