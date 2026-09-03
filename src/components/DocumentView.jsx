@@ -1029,8 +1029,8 @@ export default function DocumentView({
       : pageIds.map((id, index) => ({
           id,
           index,
-          width: inkDocument.pages[index]?.width || baseWidth,
-          height: inkDocument.pages[index]?.height || pageHeight,
+          width: inkDocument.pages[index]?.width || resolvedPageWidth,
+          height: inkDocument.pages[index]?.height || resolvedPageHeight,
         }));
   const documentMetrics = calculateDocumentMetrics(pageDescriptors);
   const totalDocumentHeight = showPageBreaks

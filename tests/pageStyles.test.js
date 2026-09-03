@@ -15,6 +15,7 @@ describe('resolvePageStyle', () => {
       background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
       ruling: 'lined',
       linesRgb: '255,255,255',
+      inkColor: '#EFECE4',
     });
   });
 
@@ -28,7 +29,12 @@ describe('resolvePageStyle', () => {
       background: '#FFFFFF',
       ruling: 'grid',
       linesRgb: '0,0,0',
+      inkColor: '#1A1A1A',
     });
+  });
+
+  it('picks a readable default ink color for the chosen background', () => {
+    expect(resolvePageStyle({ background: 'white' }).inkColor).toBe('#1A1A1A');
   });
 
   it('falls back to defaults for unknown ids instead of throwing', () => {

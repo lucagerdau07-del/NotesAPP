@@ -919,6 +919,34 @@ test('renders a custom page format and background instead of the hardcoded defau
   expect(page.style.width).toBe('900px');
 });
 
+test('an added page with no format of its own inherits page 1\'s custom size, not the 800/1131.2 default', () => {
+  // page-1 is a 900x900 square format; page-2 has no width/height of its own
+  // (as happens when the user clicks "add page"). It must be treated as
+  // 900x900 too, not fall back to the old 800x1131.2 default.
+  const controller = createControllerDouble({
+    document: {
+      version: 1,
+      documentId: 'note-square-multipage',
+      pages: [
+        { id: 'page-1', width: 900, height: 900, background: '#FFFFFF' },
+        { id: 'page-2' },
+      ],
+      strokes: [],
+      updatedAt: 0,
+    },
+  });
+  render(<DocumentView inkController={controller} toolbarState={toolState({ isSelectMode: true })} />);
+  const page = screen.getByTestId('document-page');
+
+  // page-2 spans y in [928, 1828] when it is correctly 900 tall (page-1's
+  // 900px height + the 28px PAGE_GAP). x=850 is within its 900px width but
+  // beyond the old hardcoded 800px default width, so it only resolves to a
+  // point on page-2 if the fix landed.
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 850, clientY: 1000 });
+
+  expect(screen.getByTestId('draft-focus-box')).toBeTruthy();
+});
+
 test('uses dark ruling lines on a light page background instead of the hardcoded white', () => {
   const controller = createControllerDouble({
     document: {

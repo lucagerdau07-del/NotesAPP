@@ -317,3 +317,32 @@ describe('useInkDocument initialPageStyle', () => {
     expect(result.current.document.pages[0].kind).toBe('page');
   });
 });
+
+describe('useInkDocument initialColor', () => {
+  it('seeds the ink color on a brand-new document', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    const { result } = renderHook(() =>
+      useInkDocument({
+        documentId: 'note-white-bg',
+        initialColor: '#1A1A1A',
+        repository,
+        saveDelay: 0,
+      }),
+    );
+    expect(result.current.color).toBe('#1A1A1A');
+  });
+
+  it('does not override a persisted color preference with initialColor', () => {
+    const repository = createInkRepository(createMemoryStorage());
+    repository.savePreferences('existing-note', preferences({ color: '#3E7BD8' }));
+    const { result } = renderHook(() =>
+      useInkDocument({
+        documentId: 'existing-note',
+        initialColor: '#1A1A1A',
+        repository,
+        saveDelay: 0,
+      }),
+    );
+    expect(result.current.color).toBe('#3E7BD8');
+  });
+});

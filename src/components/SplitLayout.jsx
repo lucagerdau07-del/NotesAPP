@@ -26,12 +26,15 @@ export default function SplitLayout({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [showPageBreaks, setShowPageBreaks] = useState(true);
   const [layoutMode, setLayoutMode] = useState("full"); // 'full' | 'split'
-  const initialPageStyle =
+  const resolvedNoteStyle =
     !note || note?.kind === "imported" ? undefined : resolvePageStyle(note);
+  const initialPageStyle = resolvedNoteStyle;
+  const initialInkColor = resolvedNoteStyle?.inkColor;
   const inkController = useInkDocument({
     documentId,
     initialPageIds,
     initialPageStyle,
+    initialColor: initialInkColor,
   });
   const [paperStyle, setPaperStyle] = useState(
     () => inkController.document.pages[0]?.ruling || "lined",

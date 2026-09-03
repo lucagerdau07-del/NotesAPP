@@ -32,15 +32,30 @@ function createHistoryForDocument(repository, documentId, initialPageIds, initia
   }
 }
 
-function loadPreferences(repository, documentId) {
+function loadPreferences(repository, documentId, initialColor) {
   try {
-    return {
+    const merged = {
       documentId,
       ...defaultPreferences,
       ...repository.loadPreferences(documentId),
     };
+    // repository.loadPreferences never distinguishes "nothing persisted yet"
+    // from "persisted, and it happens to match the hardcoded default" - it
+    // always returns a full object. So: only a color that still equals the
+    // hook's own hardcoded default is treated as unset and gets overridden by
+    // initialColor.
+    // ponytail: misses the (rare) doc that explicitly persisted the exact
+    // default color; fix if that ever needs to survive an initialColor.
+    if (initialColor && merged.color === defaultPreferences.color) {
+      merged.color = initialColor;
+    }
+    return merged;
   } catch {
-    return { documentId, ...defaultPreferences };
+    return {
+      documentId,
+      ...defaultPreferences,
+      ...(initialColor ? { color: initialColor } : {}),
+    };
   }
 }
 
@@ -56,6 +71,7 @@ export default function useInkDocument({
   documentId,
   initialPageIds,
   initialPageStyle,
+  initialColor,
   repository = browserInkRepository,
   saveDelay = 120,
 }) {
@@ -69,7 +85,7 @@ export default function useInkDocument({
     createHistoryForDocument(repository, activeDocumentId, initialPageIds, initialPageStyle),
   );
   const [preferences, setPreferences] = useState(() =>
-    loadPreferences(repository, activeDocumentId),
+    loadPreferences(repository, activeDocumentId, initialColor),
   );
 
   // A render-phase update makes the new note available in this same render,
@@ -80,7 +96,7 @@ export default function useInkDocument({
     );
   }
   if (preferences.documentId !== activeDocumentId) {
-    setPreferences(loadPreferences(repository, activeDocumentId));
+    setPreferences(loadPreferences(repository, activeDocumentId, initialColor));
   }
 
   // The agent needs the document *after* its own commands land, within the same

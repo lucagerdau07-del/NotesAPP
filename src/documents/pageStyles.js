@@ -10,10 +10,11 @@ export const BACKGROUND_PRESETS = [
     label: 'Dunkel',
     css: 'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
     linesRgb: '255,255,255',
+    inkColor: '#EFECE4',
   },
-  { id: 'white', label: 'Weiß', css: '#FFFFFF', linesRgb: '0,0,0' },
-  { id: 'beige', label: 'Beige', css: '#EFECE4', linesRgb: '0,0,0' },
-  { id: 'gray', label: 'Grau', css: '#3A3A3E', linesRgb: '255,255,255' },
+  { id: 'white', label: 'Weiß', css: '#FFFFFF', linesRgb: '0,0,0', inkColor: '#1A1A1A' },
+  { id: 'beige', label: 'Beige', css: '#EFECE4', linesRgb: '0,0,0', inkColor: '#1A1A1A' },
+  { id: 'gray', label: 'Grau', css: '#3A3A3E', linesRgb: '255,255,255', inkColor: '#EFECE4' },
 ];
 
 export const RULING_PRESETS = ['blank', 'lined', 'grid', 'dotted'];
@@ -42,5 +43,6 @@ export function resolvePageStyle(options = {}) {
     background: backgroundPreset.css,
     ruling: resolvedRuling,
     linesRgb: backgroundPreset.linesRgb,
+    inkColor: backgroundPreset.inkColor,
   };
 }
