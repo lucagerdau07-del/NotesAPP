@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BASE_MINUTES,
+  buildPlan,
   dailyBudgets,
   isoDate,
   MAX_MINUTES,
@@ -114,5 +115,98 @@ describe("dailyBudgets", () => {
     const budgets = dailyBudgets(events, { today: MONDAY });
     expect(budgetOn(budgets, MONDAY)).toBe(BASE_MINUTES + 15);
     expect(budgetOn(budgets, "2026-09-08")).toBe(BASE_MINUTES + 15);
+  });
+});
+
+describe("buildPlan", () => {
+  const events = [
+    { kind: "homework", title: "Aufgabe 4", subject: "Mathe", due: "2026-09-08", done: false },
+  ];
+
+  const answerFor = (blocksByDate) => ({
+    content: JSON.stringify({ days: blocksByDate }),
+  });
+
+  it("übernimmt die Blöcke des Modells und behält die berechneten Budgets", async () => {
+    const plan = await buildPlan({
+      events,
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({ [MONDAY]: [{ subject: "Mathe", task: "Aufgabe 4 rechnen", minutes: 40 }] }),
+    });
+
+    expect(plan.generatedFor).toBe(MONDAY);
+    const monday = plan.days.find((day) => day.date === MONDAY);
+    expect(monday.budgetMinutes).toBe(BASE_MINUTES + 15);
+    expect(monday.blocks[0]).toEqual({ subject: "Mathe", task: "Aufgabe 4 rechnen", minutes: 40 });
+  });
+
+  it("kürzt Blöcke, die das Tagesbudget überschreiten", async () => {
+    const plan = await buildPlan({
+      events: [],
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({
+          [MONDAY]: [
+            { subject: "Mathe", task: "Teil 1", minutes: 60 },
+            { subject: "Mathe", task: "Teil 2", minutes: 60 },
+            { subject: "Mathe", task: "Teil 3", minutes: 60 },
+          ],
+        }),
+    });
+
+    const monday = plan.days.find((day) => day.date === MONDAY);
+    const sum = monday.blocks.reduce((total, block) => total + block.minutes, 0);
+    expect(sum).toBe(BASE_MINUTES);
+    expect(monday.blocks).toHaveLength(2);
+    expect(monday.blocks[1].minutes).toBe(10);
+  });
+
+  it("lässt den Mittwoch leer, auch wenn das Modell Blöcke liefert", async () => {
+    const plan = await buildPlan({
+      events: [],
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({ [WEDNESDAY_DATE]: [{ subject: "Mathe", task: "Trotzdem lernen", minutes: 60 }] }),
+    });
+
+    expect(plan.days.find((day) => day.date === WEDNESDAY_DATE).blocks).toEqual([]);
+  });
+
+  it("baut ohne Modell einen Rückfallplan aus den offenen Terminen", async () => {
+    const plan = await buildPlan({
+      events,
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () => {
+        throw new Error("Server nicht erreichbar.");
+      },
+    });
+
+    const monday = plan.days.find((day) => day.date === MONDAY);
+    expect(monday.blocks.length).toBeGreaterThan(0);
+    expect(monday.blocks[0].task).toContain("Aufgabe 4");
+    const sum = monday.blocks.reduce((total, block) => total + block.minutes, 0);
+    expect(sum).toBeLessThanOrEqual(monday.budgetMinutes);
+  });
+
+  it("verwirft Blöcke ohne Aufgabentext", async () => {
+    const plan = await buildPlan({
+      events: [],
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({ [MONDAY]: [{ subject: "Mathe", task: "   ", minutes: 30 }] }),
+    });
+
+    expect(plan.days.find((day) => day.date === MONDAY).blocks).toEqual([]);
   });
 });
