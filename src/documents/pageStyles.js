@@ -12,7 +12,7 @@ export const BACKGROUND_PRESETS = [
     linesRgb: '255,255,255',
     inkColor: '#EFECE4',
   },
-  { id: 'white', label: 'Weiß', css: '#FFFFFF', linesRgb: '0,0,0', inkColor: '#1A1A1A' },
+  { id: 'white', label: 'Weiß', css: '#FFFFFF', linesRgb: '0,0,0', inkColor: '#1A1A1A', lineOpacity: 0.16, gridOpacity: 0.14 },
   { id: 'beige', label: 'Beige', css: '#EFECE4', linesRgb: '0,0,0', inkColor: '#1A1A1A' },
   { id: 'gray', label: 'Grau', css: '#3A3A3E', linesRgb: '255,255,255', inkColor: '#EFECE4' },
 ];
@@ -50,6 +50,8 @@ export function resolvePageStyle(options = {}) {
     background: backgroundPreset.css,
     ruling: resolvedRuling,
     linesRgb: backgroundPreset.linesRgb,
+    lineOpacity: backgroundPreset.lineOpacity ?? 0.07,
+    gridOpacity: backgroundPreset.gridOpacity ?? 0.065,
     inkColor: backgroundPreset.inkColor,
   };
 }

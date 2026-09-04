@@ -1,31 +1,27 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { FONT_STACKS, snapBaselineToRule } from "../ink/textStyle.js";
+import {
+  PAGE_WIDTH,
+  PAGE_HEIGHT,
+  boundsFor,
+  isWhiteboardDocument,
+  clamp,
+  color,
+  newId,
+} from "./agentGeometry.js";
+import { buildTablePreset, buildDiagramPreset, buildMindmapPreset } from "./presets.js";
 
 // Page geometry mirrors DocumentView's baseWidth/pageHeight. Coordinates are
-// page-local: origin top left of the addressed page, unit = page pixel.
-export const PAGE_WIDTH = 800;
-export const PAGE_HEIGHT = Math.round(800 * 1.414);
+// page-local: origin top left of the addressed page, unit = page pixel. A
+// whiteboard page has no fixed size — see agentGeometry.js's boundsFor.
+export { PAGE_WIDTH, PAGE_HEIGHT };
 
 const DRAW_TOOLS = ["pen", "fountain", "pencil", "highlighter"];
 const SHAPE_TYPES = ["rect", "ellipse", "line", "arrow"];
-const HEX = /^#[0-9a-f]{6}$/i;
 const MAX_TEXT = 4000;
 const MAX_PATHS = 200;
 const MAX_POINTS = 2000;
-
-const clamp = (value, min, max, fallback) =>
-  Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
-// The agent writes in whatever ink the user currently has selected unless it
-// asks for a colour itself — dark paper would swallow a hard-coded #1A1A1A.
-const color = (value, fallback = "#1A1A1A") =>
-  typeof value === "string" && HEX.test(value) ? value : fallback;
-
-function newId(prefix) {
-  return typeof globalThis.crypto?.randomUUID === "function"
-    ? globalThis.crypto.randomUUID()
-    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 // The model needs to know where its next block may start. Real wrapping happens
 // in the DOM, so this is a deliberate estimate.
@@ -180,8 +176,94 @@ export const AGENT_TOOLS = [
     type: "function",
     function: {
       name: "add_page",
-      description: "Hängt eine neue leere Seite an und gibt ihre pageId zurück.",
+      description:
+        "Hängt eine neue leere Seite an und gibt ihre pageId zurück. Nicht verfügbar auf einem Whiteboard (eine unbegrenzte Fläche statt mehrerer Seiten).",
       parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_table",
+      description:
+        "Fügt eine Tabelle als Raster aus Zellrechtecken mit Textblöcken ein — schneller als jede Zelle einzeln zu zeichnen. Gibt je Zelle eine id zurück; einzelne Zellen danach mit edit_text anpassen.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          rows: { type: "number", description: "1-20" },
+          cols: { type: "number", description: "1-10" },
+          columnWidth: { type: "number" },
+          rowHeight: { type: "number" },
+          headers: { type: "array", items: { type: "string" }, description: "Kopfzeile, optional" },
+          cellText: {
+            type: "array",
+            items: { type: "array", items: { type: "string" } },
+            description: "Zeilenweise Zellinhalte, optional (Zeile 0 = headers, falls gesetzt)",
+          },
+          color: { type: "string", description: "#rrggbb, Rahmenfarbe" },
+        },
+        required: ["pageId", "x", "y", "rows", "cols"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_diagram",
+      description:
+        "Fügt ein Flussdiagramm ein: Kästen mit Beschriftung in einer Kette, verbunden durch Pfeile. Knoten werden per Index (0-basiert) in der Reihenfolge von nodes referenziert.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          nodes: {
+            type: "array",
+            items: { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+          },
+          edges: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                from: { type: "number", description: "Index in nodes" },
+                to: { type: "number", description: "Index in nodes" },
+                label: { type: "string" },
+              },
+              required: ["from", "to"],
+            },
+          },
+          color: { type: "string", description: "#rrggbb, Kasten- und Pfeilfarbe" },
+        },
+        required: ["pageId", "x", "y", "nodes"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_mindmap",
+      description:
+        "Fügt eine Mindmap ein: eine Wurzel in der Mitte, Zweige im Kreis darum, je mit einer Linie zur Wurzel verbunden.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number", description: "Mittelpunkt der Wurzel" },
+          y: { type: "number", description: "Mittelpunkt der Wurzel" },
+          root: { type: "string" },
+          branches: {
+            type: "array",
+            items: { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+          },
+          color: { type: "string", description: "#rrggbb, Linien- und Rahmenfarbe" },
+        },
+        required: ["pageId", "x", "y", "root", "branches"],
+      },
     },
   },
   {
@@ -217,6 +299,12 @@ export function describeToolCall(name, args = {}) {
       return `${args.strokeIds?.length ?? 0} Strich(e) radieren`;
     case "add_page":
       return "Seite anhängen";
+    case "insert_table":
+      return `Tabelle einfügen (${args.rows || "?"}x${args.cols || "?"})`;
+    case "insert_diagram":
+      return `Diagramm einfügen (${args.nodes?.length ?? 0} Knoten)`;
+    case "insert_mindmap":
+      return `Mindmap einfügen (${args.branches?.length ?? 0} Zweige)`;
     case "done":
       return "Fertig";
     default:
@@ -224,13 +312,13 @@ export function describeToolCall(name, args = {}) {
   }
 }
 
-function textPatch(args, existing, defaultColor) {
+function textPatch(args, existing, defaultColor, bounds) {
   const patch = {};
   if (typeof args.text === "string") patch.text = args.text.slice(0, MAX_TEXT);
-  if (Number.isFinite(args.x)) patch.x = clamp(args.x, 0, PAGE_WIDTH, 0);
-  if (Number.isFinite(args.y)) patch.y = clamp(args.y, 0, PAGE_HEIGHT, 0);
+  if (Number.isFinite(args.x)) patch.x = clamp(args.x, bounds.minX, bounds.maxX, 0);
+  if (Number.isFinite(args.y)) patch.y = clamp(args.y, bounds.minY, bounds.maxY, 0);
   if (Number.isFinite(args.width))
-    patch.width = clamp(args.width, 20, PAGE_WIDTH - (patch.x ?? existing?.x ?? 0), 400);
+    patch.width = clamp(args.width, 20, bounds.maxX - (patch.x ?? existing?.x ?? 0), 400);
   if (args.size !== undefined) patch.fontSize = clamp(args.size, 8, 96, existing?.fontSize ?? 18);
   if (args.color !== undefined) patch.color = color(args.color, defaultColor);
   if (args.bold !== undefined) patch.bold = args.bold === true;
@@ -250,15 +338,24 @@ export function executeTool(name, rawArgs, api) {
   const document = api.getDocument();
   const pageIds = document.pages.map((page) => page.id);
   const objects = pageObjectsOf(document);
-  const needsPage = ["write_text", "add_shape", "draw"].includes(name);
+  const bounds = boundsFor(document);
+  const whiteboard = isWhiteboardDocument(document);
+  const needsPage = [
+    "write_text",
+    "add_shape",
+    "draw",
+    "insert_table",
+    "insert_diagram",
+    "insert_mindmap",
+  ].includes(name);
   if (needsPage && !pageIds.includes(args.pageId))
     return `Fehler: pageId "${args.pageId}" gibt es nicht. Vorhanden: ${pageIds.join(", ")}`;
 
   switch (name) {
     case "read_document":
       return {
-        pageWidth: PAGE_WIDTH,
-        pageHeight: PAGE_HEIGHT,
+        pageWidth: whiteboard ? null : PAGE_WIDTH,
+        pageHeight: whiteboard ? null : PAGE_HEIGHT,
         pages: pageIds.map((pageId) => ({
           pageId,
           strokes: document.strokes.filter((stroke) => stroke.pageId === pageId).length,
@@ -276,7 +373,7 @@ export function executeTool(name, rawArgs, api) {
       };
 
     case "write_text": {
-      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, inkColor);
+      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, inkColor, bounds);
       const text = patch.text ?? "";
       if (!text.trim()) return "Fehler: text ist leer.";
       const width = patch.width ?? 400;
@@ -308,7 +405,7 @@ export function executeTool(name, rawArgs, api) {
     case "edit_text": {
       const existing = objects.find((object) => object.id === args.id);
       if (!existing) return `Fehler: Kein Element mit der ID "${args.id}".`;
-      const patch = textPatch(args, existing, existing.color);
+      const patch = textPatch(args, existing, existing.color, bounds);
       const text = patch.text ?? existing.text;
       const width = patch.width ?? existing.width;
       const fontSize = patch.fontSize ?? existing.fontSize;
@@ -345,10 +442,10 @@ export function executeTool(name, rawArgs, api) {
         id: newId("shape"),
         pageId: args.pageId,
         type: args.type,
-        x: clamp(args.x, 0, PAGE_WIDTH, 0),
-        y: clamp(args.y, 0, PAGE_HEIGHT, 0),
-        width: clamp(args.width, -PAGE_WIDTH, PAGE_WIDTH, 160),
-        height: clamp(args.height, -PAGE_HEIGHT, PAGE_HEIGHT, 90),
+        x: clamp(args.x, bounds.minX, bounds.maxX, 0),
+        y: clamp(args.y, bounds.minY, bounds.maxY, 0),
+        width: clamp(args.width, -(bounds.maxX - bounds.minX), bounds.maxX - bounds.minX, 160),
+        height: clamp(args.height, -(bounds.maxY - bounds.minY), bounds.maxY - bounds.minY, 90),
         color: color(args.color, "#3E7BD8"),
         strokeWidth: clamp(args.strokeWidth, 1, 40, 3),
         fillColor: args.fillColor ? color(args.fillColor, "") : "",
@@ -372,8 +469,8 @@ export function executeTool(name, rawArgs, api) {
             width: style.width,
             opacity: style.opacity,
             points: (Array.isArray(path) ? path : []).slice(0, MAX_POINTS).map((point) => ({
-              x: clamp(point?.x, 0, PAGE_WIDTH, 0),
-              y: clamp(point?.y, 0, PAGE_HEIGHT, 0),
+              x: clamp(point?.x, bounds.minX, bounds.maxX, 0),
+              y: clamp(point?.y, bounds.minY, bounds.maxY, 0),
             })),
           }),
         )
@@ -392,9 +489,32 @@ export function executeTool(name, rawArgs, api) {
     }
 
     case "add_page": {
+      if (whiteboard)
+        return "Fehler: Whiteboard hat nur eine unbegrenzte Fläche, add_page ist hier nicht möglich.";
       api.apply([{ type: "add-page" }]);
       const pages = api.getDocument().pages;
       return { pageId: pages[pages.length - 1]?.id };
+    }
+
+    case "insert_table": {
+      const built = buildTablePreset(args, bounds, inkColor);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
+    }
+
+    case "insert_diagram": {
+      const built = buildDiagramPreset(args, bounds, inkColor);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
+    }
+
+    case "insert_mindmap": {
+      const built = buildMindmapPreset(args, bounds, inkColor);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
     }
 
     case "done":

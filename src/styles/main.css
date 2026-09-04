@@ -830,9 +830,9 @@ body::after {
   border-radius: 23px;
   display: flex;
   align-items: center;
-  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
-  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.94) 0%, rgba(18, 18, 22, 0.96) 48%, rgba(8, 8, 12, 0.98) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow:
     inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
@@ -906,9 +906,9 @@ body::after {
   height: 34px;
   border-radius: 17px;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
-  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
-  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.94) 0%, rgba(18, 18, 22, 0.96) 48%, rgba(8, 8, 12, 0.98) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
   color: #FFFFFF;
   display: flex;
   align-items: center;
@@ -928,7 +928,7 @@ body::after {
 }
 .editor-body .document-view {
   border-radius: 0;
-  background: transparent;
+  background: radial-gradient(ellipse 120% 90% at 85% 100%, rgba(40, 58, 92, 0.55) 0%, rgba(20, 26, 38, 0.4) 35%, rgba(10, 12, 18, 0.9) 70%, rgba(6, 7, 10, 0.98) 100%);
   box-shadow: none;
   /* Ohne dieses Reset blurrt die Vollflächen-Ansicht die Glastextur dahinter weg. */
   backdrop-filter: none;
@@ -1001,8 +1001,8 @@ body::after {
   height: 46px;
   transform: translateY(-50%);
   border-radius: 99px;
-  background: rgba(127, 230, 242, 0.56);
-  box-shadow: 0 0 12px rgba(26, 206, 230, 0.34);
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.34);
   opacity: 0;
   transition: opacity 0.16s ease;
 }
@@ -1030,12 +1030,12 @@ body::after {
 }
 
 .rail-ai-btn {
-  color: #7FE6F2;
+  color: #F1EEE7;
 }
 
 .rail-ai-btn.active {
-  background: linear-gradient(140deg, #1ACEE6, #004D61);
-  color: #F5F2EB;
+  background: linear-gradient(140deg, #FFFFFF, #6B6B72);
+  color: #15151a;
 }
 
 /* Plain flex child of the single glass control — no background of its own,
@@ -1115,7 +1115,7 @@ body::after {
 
 .rail-chat-msg.user {
   align-self: flex-end;
-  background: linear-gradient(140deg, rgba(26, 206, 230, 0.32), rgba(0, 77, 97, 0.42));
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
 }
 
 .rail-chat-input {
@@ -1147,9 +1147,9 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #F5F2EB;
+  color: #15151a;
   cursor: pointer;
-  background: linear-gradient(140deg, #1ACEE6, #004D61);
+  background: linear-gradient(140deg, #FFFFFF, #6B6B72);
 }
 
 .rail-chat-input button:disabled {
@@ -1187,7 +1187,7 @@ body::after {
 }
 
 .rail-chat-modes button.active {
-  background: linear-gradient(140deg, rgba(26, 206, 230, 0.34), rgba(0, 77, 97, 0.44));
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.14));
   color: #F1EEE7;
 }
 
@@ -1258,7 +1258,7 @@ body::after {
   color: rgba(241, 238, 231, 0.6);
 }
 
-.rail-chat-steps li.done { color: rgba(26, 206, 230, 0.9); }
+.rail-chat-steps li.done { color: rgba(255, 255, 255, 0.9); }
 .rail-chat-steps li.failed { color: #E8A0A0; }
 
 .rail-chat-spin { animation: rail-chat-spin 1s linear infinite; }
@@ -1325,7 +1325,7 @@ body::after {
 .md-quote {
   margin: 6px 0;
   padding-left: 9px;
-  border-left: 2px solid rgba(26, 206, 230, 0.5);
+  border-left: 2px solid rgba(255, 255, 255, 0.5);
   color: rgba(241, 238, 231, 0.75);
 }
 .md-rule { border: none; border-top: 1px solid rgba(255, 255, 255, 0.14); margin: 10px 0; }
@@ -2829,13 +2829,9 @@ body::after {
 }
 
 .rail-browser-btn {
-  color: #8ddce7;
+  color: #F1EEE7;
 }
 
-.rail-browser-btn.active {
-  background: linear-gradient(140deg, #1ACEE6, #004D61);
-  color: #F5F2EB;
-}
 
 .rail-chat[hidden] {
   display: none;
@@ -2856,9 +2852,9 @@ body::after {
 }
 
 .pdf-link-layer a:focus-visible {
-  outline: 2px solid #1acee6;
+  outline: 2px solid #ffffff;
   outline-offset: 2px;
-  background: rgba(26, 206, 230, 0.12);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .sr-only {
@@ -2883,12 +2879,19 @@ body::after {
   font-family: Manrope, sans-serif;
   border-left: 1px solid rgba(255, 255, 255, 0.12);
   animation: rail-chat-fade-in 0.22s ease 0.1s both;
+  /* The toolbar's icon buttons are fixed-width and don't shrink, so at a
+     dragged-narrow rail width they must overflow their own panel — this lets
+     the same narrow-layout rules below key off the panel's own width instead
+     of the viewport's, which stayed wide while only the rail got dragged in. */
+  container-type: inline-size;
 }
 
 .rail-browser[hidden] {
   display: none;
 }
 
+/* No background of its own — same single glass control as .rail-chat, so the
+   toolbar reads as real WebGL glass instead of a flat CSS panel on top of it. */
 .browser-toolbar {
   flex: 0 0 54px;
   display: flex;
@@ -2896,7 +2899,6 @@ body::after {
   gap: 3px;
   min-width: 0;
   padding: 8px 8px 7px;
-  background: rgba(14, 15, 18, 0.5);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -2937,7 +2939,7 @@ body::after {
 .browser-dialog button:focus-visible,
 .browser-dialog input:focus-visible,
 .browser-history-search input:focus-visible {
-  outline: 2px solid #1acee6;
+  outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
 
@@ -2957,7 +2959,7 @@ body::after {
 
 .browser-address-form:focus-within {
   background: rgba(255, 255, 255, 0.13);
-  border-color: rgba(26, 206, 230, 0.48);
+  border-color: rgba(255, 255, 255, 0.48);
 }
 
 .browser-address-form input {
@@ -2985,7 +2987,6 @@ body::after {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: rgba(26, 27, 30, 0.64);
 }
 
 .browser-home {
@@ -3067,7 +3068,7 @@ body::after {
 }
 
 .browser-text-action:hover:not(:disabled) {
-  background: rgba(26, 206, 230, 0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .browser-text-action:disabled {
@@ -3366,9 +3367,9 @@ body::after {
 
 .browser-error-actions button:first-child,
 .browser-dialog-actions button[type="submit"] {
-  background: linear-gradient(140deg, #1acee6, #00687c);
-  border-color: rgba(127, 230, 242, 0.38);
-  color: #fff;
+  background: linear-gradient(140deg, #ffffff, #6b6b72);
+  border-color: rgba(255, 255, 255, 0.38);
+  color: #15151a;
 }
 
 .browser-dialog-backdrop {
@@ -3432,7 +3433,9 @@ body::after {
   .editor-sidebar.panel-open {
     width: calc(100vw - 16px);
   }
+}
 
+@container (max-width: 460px) {
   .browser-toolbar {
     gap: 1px;
     padding-inline: 5px;

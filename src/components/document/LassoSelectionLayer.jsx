@@ -7,7 +7,7 @@ const HANDLE = 14;
 // Same move-writes-local-state-commit-once-on-release pattern as
 // PageObjectLayer's useDrag, but for a whole lasso selection at once: one
 // drag is one transform-selection command, not one per stroke/object.
-function useSelectionDrag(bounds, onCommit) {
+function useSelectionDrag(bounds, onCommit, onDragChange) {
   const [draft, setDraft] = useState(null);
   const gesture = useRef(null);
 
@@ -33,11 +33,18 @@ function useSelectionDrag(bounds, onCommit) {
     const dy = (event.clientY - active.startY) / active.zoom;
     if (active.mode === "move") {
       setDraft({ ...active.bounds, x: active.bounds.x + dx, y: active.bounds.y + dy });
+      onDragChange?.({ dx, dy, scaleX: 1, scaleY: 1, originX: 0, originY: 0 });
     } else {
-      setDraft({
-        ...active.bounds,
-        width: Math.max(4, active.bounds.width + dx),
-        height: Math.max(4, active.bounds.height + dy),
+      const width = Math.max(4, active.bounds.width + dx);
+      const height = Math.max(4, active.bounds.height + dy);
+      setDraft({ ...active.bounds, width, height });
+      onDragChange?.({
+        dx: 0,
+        dy: 0,
+        scaleX: width / active.bounds.width,
+        scaleY: height / active.bounds.height,
+        originX: active.bounds.x,
+        originY: active.bounds.y,
       });
     }
   };
@@ -48,6 +55,7 @@ function useSelectionDrag(bounds, onCommit) {
     gesture.current = null;
     const committed = draft;
     setDraft(null);
+    onDragChange?.(null);
     if (!committed) return;
     if (active.mode === "move") {
       const dx = committed.x - active.bounds.x;
@@ -77,10 +85,11 @@ export default function LassoSelectionLayer({
   pageLayout,
   onCommit,
   onDelete,
+  onDragChange,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
   const zoom = pageLayout?.zoom || 1;
-  const drag = useSelectionDrag(bounds, onCommit);
+  const drag = useSelectionDrag(bounds, onCommit, onDragChange);
   if (!bounds) return null;
   const box = drag.draft || bounds;
   const origin = mapOrigin(pageLayout, bounds.pageId);

@@ -44,6 +44,16 @@ export function objectsInLasso(objects, pageId, polygon) {
     .map((object) => object.id);
 }
 
+// Same point mapping as inkDocument.js's transform-selection reducer — used
+// here to preview a lasso drag live, before the gesture commits.
+export function mapLassoPoint(x, y, transform) {
+  const { dx = 0, dy = 0, scaleX = 1, scaleY = 1, originX = 0, originY = 0 } = transform;
+  return {
+    x: originX + (x - originX) * scaleX + dx,
+    y: originY + (y - originY) * scaleY + dy,
+  };
+}
+
 // Combined bounding box of every selected stroke point and object box, in
 // page units — the handle frame is drawn from this.
 export function selectionBounds(strokes, objects, strokeIds, objectIds) {

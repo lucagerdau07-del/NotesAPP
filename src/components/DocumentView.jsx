@@ -10,18 +10,12 @@ import {
   Highlighter,
   PenLine,
   Layers,
-  AlignJustify,
-  File,
-  Grid,
   Columns2,
   X,
   Palette,
   Sliders,
   PenTool,
   Pencil,
-  Sparkles,
-  Infinity,
-  Files,
   Plus,
   Move,
   Pointer,
@@ -57,7 +51,7 @@ import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
-import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso";
+import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
 const INPUT_MODE_LABELS = {
@@ -947,9 +941,31 @@ export default function DocumentView({
   const [isLassoMode, setIsLassoMode] = useState(false);
   const [lassoDraft, setLassoDraft] = useState(null);
   const [lassoSelection, setLassoSelection] = useState(null);
+  // Live transform of the current lasso drag, in page units — null when not
+  // dragging. Applied to the selected strokes/objects at render time so the
+  // actual content moves with the drag, not just the selection outline.
+  const [lassoLiveTransform, setLassoLiveTransform] = useState(null);
+  // While a lasso drag is live, render the selected objects at their
+  // dragged position instead of their stored one — the box moves with them.
+  const livePageObjects =
+    lassoLiveTransform && lassoSelection
+      ? pageObjects.map((object) => {
+          if (
+            object.pageId !== lassoSelection.pageId ||
+            !lassoSelection.objectIds.includes(object.id)
+          )
+            return object;
+          const topLeft = mapLassoPoint(object.x, object.y, lassoLiveTransform);
+          return {
+            ...object,
+            x: topLeft.x,
+            y: topLeft.y,
+            width: object.width * (lassoLiveTransform.scaleX ?? 1),
+            height: object.height * (lassoLiveTransform.scaleY ?? 1),
+          };
+        })
+      : pageObjects;
   const imageInputRef = useRef(null);
-  const [paperToast, setPaperToast] = useState(null);
-  const toastTimeoutRef = useRef(null);
 
   const [zoom, setZoom] = useState(1);
   const pagesCountRef = useRef(1);
@@ -986,37 +1002,6 @@ export default function DocumentView({
   };
   const handleClearCanvas = () => {
     inkController?.clearDocument?.();
-  };
-
-  const cyclePaperStyle = () => {
-    let nextStyle = "lined";
-    let label = "Liniert";
-    if (paperStyle === "lined") {
-      nextStyle = "grid";
-      label = "Kariert";
-    } else if (paperStyle === "grid") {
-      nextStyle = "dotted";
-      label = "Punktiert";
-    } else if (paperStyle === "dotted") {
-      nextStyle = "blank";
-      label = "Blanko";
-    } else {
-      nextStyle = "lined";
-      label = "Liniert";
-    }
-    setPaperStyle?.(nextStyle);
-    setPaperToast(label);
-    clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => {
-      setPaperToast(null);
-    }, 1600);
-  };
-
-  const getPaperStyleIcon = () => {
-    if (paperStyle === "lined") return <AlignJustify size={18} />;
-    if (paperStyle === "grid") return <Grid size={18} />;
-    if (paperStyle === "dotted") return <Sparkles size={18} />;
-    return <File size={18} />;
   };
 
   const [draftFocusBox, setDraftFocusBox] = useState(null);
@@ -1413,13 +1398,27 @@ export default function DocumentView({
     const cssHeight = totalDocumentHeight;
     const dpr = globalThis.devicePixelRatio || 1;
     resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
-    const previewDocument =
+    let previewDocument =
       inkPointer.draftStroke && inkTool !== "stroke-eraser"
         ? {
             ...inkDocument,
             strokes: [...inkDocument.strokes, inkPointer.draftStroke],
           }
         : inkDocument;
+    if (lassoLiveTransform && lassoSelection?.strokeIds.length > 0) {
+      const strokeIdSet = new Set(lassoSelection.strokeIds);
+      previewDocument = {
+        ...previewDocument,
+        strokes: previewDocument.strokes.map((stroke) =>
+          strokeIdSet.has(stroke.id)
+            ? {
+                ...stroke,
+                points: stroke.points.map((point) => mapLassoPoint(point.x, point.y, lassoLiveTransform)),
+              }
+            : stroke,
+        ),
+      };
+    }
     renderInkDocument(context, previewDocument, {
       ...pageLayout,
       cssWidth,
@@ -1447,6 +1446,8 @@ export default function DocumentView({
     showPageBreaks,
     totalDocumentHeight,
     zoom,
+    lassoLiveTransform,
+    lassoSelection,
   ]);
 
   useEffect(() => {
@@ -2597,35 +2598,6 @@ export default function DocumentView({
         />
       ))}
       <div className="rail-divider" />
-      <button
-        className={`rail-btn ${paperStyle !== "blank" ? "active" : ""}`}
-        onClick={cyclePaperStyle}
-        title={`Papierstil: ${paperStyle} (Klicken zum Wechseln)`}
-        data-testid="paper-style-btn"
-      >
-        {getPaperStyleIcon()}
-      </button>
-      {note?.kind !== 'imported' && (
-        <button
-          className={`rail-btn ${showPageBreaks ? "active" : ""}`}
-          onClick={() => {
-            const next = !showPageBreaks;
-            setShowPageBreaks?.(next);
-            setPaperToast(
-              next ? "Einzelseiten aktiv" : "Unendliches Dokument aktiv",
-            );
-            setTimeout(() => setPaperToast(null), 1800);
-          }}
-          title={
-            showPageBreaks
-              ? "Seitenmodus: Einzelseiten (Klicken für unendliches Dokument)"
-              : "Seitenmodus: Unendliches Dokument (Klicken für Einzelseiten)"
-          }
-          data-testid="page-mode-toggle-btn"
-        >
-          {showPageBreaks ? <Files size={18} /> : <Infinity size={18} />}
-        </button>
-      )}
       <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
         <Trash2 size={18} />
       </button>
@@ -2738,12 +2710,6 @@ export default function DocumentView({
           onColorChange={handleColorChange}
           onClose={() => setIsColorPickerOpen(false)}
         />
-      )}
-      {paperToast && (
-        <div className="paper-toast" data-testid="paper-toast">
-          {getPaperStyleIcon()}
-          <span>Papierstil: {paperToast}</span>
-        </div>
       )}
       {zoomToast !== null && (
         <div className="zoom-toast" data-testid="zoom-toast">
@@ -2966,7 +2932,7 @@ export default function DocumentView({
               stay on top of the color wash; every other object type is
               layered above it as before. */}
           <PageObjectLayer
-            objects={pageObjects.filter((o) => o.type === "fill")}
+            objects={livePageObjects.filter((o) => o.type === "fill")}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
             onSelect={setSelectedObjectId}
@@ -2991,7 +2957,7 @@ export default function DocumentView({
             />
           )}
           <PageObjectLayer
-            objects={pageObjects.filter((o) => o.type !== "fill")}
+            objects={livePageObjects.filter((o) => o.type !== "fill")}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
             paperStyle={paperStyle}
@@ -3022,6 +2988,7 @@ export default function DocumentView({
               pageLayout={pageLayout}
               onCommit={handleLassoCommit}
               onDelete={handleLassoDelete}
+              onDragChange={setLassoLiveTransform}
             />
           )}
           {!isFullMode && focusBoxState?.focusBox && focusBoxViewport && (

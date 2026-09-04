@@ -91,6 +91,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
 
       const controllerAtStart = inkControllerRef?.current;
       const canEdit = editDocument && Boolean(controllerAtStart?.applyCommands);
+      const isWhiteboard = controllerAtStart?.document?.pages?.[0]?.kind === "whiteboard";
       const controller = new AbortController();
       abortRef.current = controller;
       setStatus("running");
@@ -107,7 +108,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       };
 
       let conversation = [
-        { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit }) },
+        { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit, isWhiteboard }) },
         ...messages,
         { role: "user", content: task },
       ];

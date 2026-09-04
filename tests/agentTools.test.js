@@ -17,6 +17,18 @@ function createApi(pages = 1) {
   };
 }
 
+function createWhiteboardApi() {
+  let history = createInkHistory(createInkDocument("wb-1", 1, { kind: "whiteboard" }));
+  return {
+    getDocument: () => history.present,
+    apply: (commands) => {
+      history = executeInkCommands(history, commands);
+      return history.present;
+    },
+    undoSteps: () => history.past.length,
+  };
+}
+
 describe("agent tools", () => {
   it("reads pages, text and stroke counts", () => {
     const api = createApi();
@@ -118,5 +130,49 @@ describe("agent tools", () => {
 
     const page = executeTool("add_page", {}, api);
     expect(api.getDocument().pages.map((entry) => entry.id)).toContain(page.pageId);
+  });
+});
+
+describe("agent tools on a whiteboard", () => {
+  it("does not clamp coordinates to the fixed page box", () => {
+    const api = createWhiteboardApi();
+    const result = executeTool(
+      "write_text",
+      { pageId: "wb-1-page-1", x: 5000, y: -3000, width: 500, text: "weit draußen" },
+      api,
+    );
+    const [block] = pageObjectsOf(api.getDocument());
+    expect(block.x).toBe(5000);
+    // Baseline snapping nudges y by less than a line height; the point here
+    // is that it is nowhere near clamped into the fixed 0..1131 page box.
+    expect(block.y).toBeLessThan(-1000);
+    expect(result.id).toBe(block.id);
+  });
+
+  it("does not clamp add_shape to the fixed page box", () => {
+    const api = createWhiteboardApi();
+    executeTool(
+      "add_shape",
+      { pageId: "wb-1-page-1", type: "rect", x: -4000, y: 2000, width: 3000, height: 1500 },
+      api,
+    );
+    const [shape] = pageObjectsOf(api.getDocument());
+    expect(shape.x).toBe(-4000);
+    expect(shape.width).toBe(3000);
+  });
+
+  it("reports unbounded page dimensions", () => {
+    const api = createWhiteboardApi();
+    const report = executeTool("read_document", {}, api);
+    expect(report.pageWidth).toBeNull();
+    expect(report.pageHeight).toBeNull();
+  });
+
+  it("refuses add_page", () => {
+    const api = createWhiteboardApi();
+    const before = api.getDocument().pages.length;
+    const result = executeTool("add_page", {}, api);
+    expect(String(result)).toMatch(/^Fehler/);
+    expect(api.getDocument().pages).toHaveLength(before);
   });
 });
