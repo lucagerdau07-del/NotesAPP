@@ -258,7 +258,18 @@ export const AGENT_TOOLS = [
           root: { type: "string" },
           branches: {
             type: "array",
-            items: { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string" },
+                subs: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "1-4 kurze Unterpunkte, jeder als eigene Box mit Linie am Zweig angehängt — für mehr Tiefe pro Zweig.",
+                },
+              },
+              required: ["label"],
+            },
           },
           color: { type: "string", description: "#rrggbb, Linien- und Rahmenfarbe" },
         },

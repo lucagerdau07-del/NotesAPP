@@ -27,6 +27,7 @@ export function buildSystemPrompt({ noteTitle, subject, canEdit, isWhiteboard = 
       "Größen: Überschrift 28, Zwischenüberschrift 22, Fließtext 18.",
       "Für unterstrichenen Text setze bei write_text/edit_text underline: true statt eine Linie mit add_shape darunter zu zeichnen — der Strich sitzt dann exakt und farblich passend unter der Schrift.",
       "Für eine Tabelle, ein Flussdiagramm oder eine Mindmap nutze insert_table/insert_diagram/insert_mindmap statt die Kästen und Texte einzeln mit add_shape/write_text zusammenzusetzen — danach einzelne Zellen/Knoten bei Bedarf mit edit_text anpassen.",
+      "Für Unterpunkte an Mindmap-Zweigen nutze das `subs`-Array (1-4 Einträge) pro Zweig in insert_mindmap statt separate write_text-Aufrufe — sonst landen die Texte unverbunden irgendwo auf der Seite. Für mehr Tiefe: gib pro Zweig mehrere konkrete Unterpunkte statt nur einem an.",
       "Rufe vor dem Schreiben read_document auf, damit du weißt, was schon auf den Seiten steht, und schreibe nicht über bestehende Inhalte.",
       "Setze den nächsten Block unter den `bottom`-Wert des vorigen, plus etwas Abstand.",
       "Bearbeite das Dokument nur, wenn der Auftrag das verlangt. Reine Fragen beantwortest du im Chat.",

@@ -168,11 +168,28 @@ export function buildDiagramPreset(args, bounds, defaultColor) {
   };
 }
 
-const ROOT_WIDTH = 180;
-const ROOT_HEIGHT = 72;
-const BRANCH_WIDTH = 150;
-const BRANCH_HEIGHT = 56;
-const BRANCH_RADIUS = 260;
+const ROOT_WIDTH = 130;
+const ROOT_HEIGHT = 52;
+const BRANCH_WIDTH = 105;
+const BRANCH_HEIGHT = 38;
+const BRANCH_RADIUS = 170;
+const SUB_WIDTH = 82;
+const SUB_HEIGHT = 24;
+const SUB_GAP = 70;
+const SUB_STACK_GAP = 6;
+const MINDMAP_TEXT_MARGIN = 5;
+
+// Point where a ray from (cx,cy) at the given angle exits a halfWidth x halfHeight
+// box centered on (cx,cy) — so connector lines stop at the border, not the middle.
+function boxEdgePoint(cx, cy, halfWidth, halfHeight, angle) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const scale = Math.min(
+    dx !== 0 ? halfWidth / Math.abs(dx) : Infinity,
+    dy !== 0 ? halfHeight / Math.abs(dy) : Infinity,
+  );
+  return { x: cx + dx * scale, y: cy + dy * scale };
+}
 
 export function buildMindmapPreset(args, bounds, defaultColor) {
   const rawBranches = Array.isArray(args.branches) ? args.branches.slice(0, 10) : [];
@@ -202,12 +219,12 @@ export function buildMindmapPreset(args, bounds, defaultColor) {
       id: rootTextId,
       pageId: args.pageId,
       type: "text",
-      x: centerX - ROOT_WIDTH / 2 + CELL_TEXT_MARGIN,
-      y: centerY - ROOT_HEIGHT / 2 + CELL_TEXT_MARGIN,
-      width: ROOT_WIDTH - CELL_TEXT_MARGIN * 2,
-      height: ROOT_HEIGHT - CELL_TEXT_MARGIN * 2,
+      x: centerX - ROOT_WIDTH / 2 + MINDMAP_TEXT_MARGIN,
+      y: centerY - ROOT_HEIGHT / 2 + MINDMAP_TEXT_MARGIN,
+      width: ROOT_WIDTH - MINDMAP_TEXT_MARGIN * 2,
+      height: ROOT_HEIGHT - MINDMAP_TEXT_MARGIN * 2,
       text: String(args.root ?? ""),
-      fontSize: 17,
+      fontSize: 13,
       bold: true,
       color: defaultColor,
       textAlign: "center",
@@ -220,15 +237,23 @@ export function buildMindmapPreset(args, bounds, defaultColor) {
     const branchCenterY = centerY + BRANCH_RADIUS * Math.sin(angle);
     const boxId = newId("shape");
     const textId = newId("text");
+    const rootEdge = boxEdgePoint(centerX, centerY, ROOT_WIDTH / 2, ROOT_HEIGHT / 2, angle);
+    const branchEdgeToRoot = boxEdgePoint(
+      branchCenterX,
+      branchCenterY,
+      BRANCH_WIDTH / 2,
+      BRANCH_HEIGHT / 2,
+      angle + Math.PI,
+    );
     objects.push(
       createPageObject({
         id: newId("shape"),
         pageId: args.pageId,
         type: "line",
-        x: centerX,
-        y: centerY,
-        width: branchCenterX - centerX,
-        height: branchCenterY - centerY,
+        x: rootEdge.x,
+        y: rootEdge.y,
+        width: branchEdgeToRoot.x - rootEdge.x,
+        height: branchEdgeToRoot.y - rootEdge.y,
         color: lineColor,
         strokeWidth: 1.5,
       }),
@@ -251,16 +276,77 @@ export function buildMindmapPreset(args, bounds, defaultColor) {
         id: textId,
         pageId: args.pageId,
         type: "text",
-        x: branchCenterX - BRANCH_WIDTH / 2 + CELL_TEXT_MARGIN,
-        y: branchCenterY - BRANCH_HEIGHT / 2 + CELL_TEXT_MARGIN,
-        width: BRANCH_WIDTH - CELL_TEXT_MARGIN * 2,
-        height: BRANCH_HEIGHT - CELL_TEXT_MARGIN * 2,
+        x: branchCenterX - BRANCH_WIDTH / 2 + MINDMAP_TEXT_MARGIN,
+        y: branchCenterY - BRANCH_HEIGHT / 2 + MINDMAP_TEXT_MARGIN,
+        width: BRANCH_WIDTH - MINDMAP_TEXT_MARGIN * 2,
+        height: BRANCH_HEIGHT - MINDMAP_TEXT_MARGIN * 2,
         text: String(branch?.label ?? ""),
-        fontSize: 14,
+        fontSize: 11,
         color: defaultColor,
         textAlign: "center",
       }),
     );
+    const subLabels = Array.isArray(branch?.subs)
+      ? branch.subs.map((s) => String(s ?? "")).filter(Boolean).slice(0, 4)
+      : branch?.sub != null && String(branch.sub)
+        ? [String(branch.sub)]
+        : [];
+    const perpAngle = angle + Math.PI / 2;
+    // Stack spacing must match the sub box's footprint along the stacking axis, not
+    // a fixed height — otherwise boxes that stack sideways (top/bottom branches)
+    // overlap since their width is much bigger than their height.
+    const halfExtent = Math.abs(Math.cos(perpAngle)) * (SUB_WIDTH / 2) + Math.abs(Math.sin(perpAngle)) * (SUB_HEIGHT / 2);
+    const stackSpacing = halfExtent * 2 + SUB_STACK_GAP;
+    const spread = (subLabels.length - 1) / 2;
+    subLabels.forEach((subLabel, subIndex) => {
+      const offset = (subIndex - spread) * stackSpacing;
+      const subCenterX = centerX + (BRANCH_RADIUS + SUB_GAP) * Math.cos(angle) + offset * Math.cos(perpAngle);
+      const subCenterY = centerY + (BRANCH_RADIUS + SUB_GAP) * Math.sin(angle) + offset * Math.sin(perpAngle);
+      const subTextId = newId("text");
+      const subAngleFromBranch = Math.atan2(subCenterY - branchCenterY, subCenterX - branchCenterX);
+      const branchEdgeToSub = boxEdgePoint(
+        branchCenterX,
+        branchCenterY,
+        BRANCH_WIDTH / 2,
+        BRANCH_HEIGHT / 2,
+        subAngleFromBranch,
+      );
+      const subEdge = boxEdgePoint(
+        subCenterX,
+        subCenterY,
+        SUB_WIDTH / 2,
+        SUB_HEIGHT / 2,
+        subAngleFromBranch + Math.PI,
+      );
+      objects.push(
+        createPageObject({
+          id: newId("shape"),
+          pageId: args.pageId,
+          type: "line",
+          x: branchEdgeToSub.x,
+          y: branchEdgeToSub.y,
+          width: subEdge.x - branchEdgeToSub.x,
+          height: subEdge.y - branchEdgeToSub.y,
+          color: lineColor,
+          strokeWidth: 1,
+        }),
+      );
+      objects.push(
+        createPageObject({
+          id: subTextId,
+          pageId: args.pageId,
+          type: "text",
+          x: subCenterX - SUB_WIDTH / 2,
+          y: subCenterY - SUB_HEIGHT / 2,
+          width: SUB_WIDTH,
+          height: SUB_HEIGHT,
+          text: subLabel,
+          fontSize: 9,
+          color: defaultColor,
+          textAlign: "center",
+        }),
+      );
+    });
     return { id: boxId, textId, index };
   });
 
