@@ -45,9 +45,11 @@ import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { INPUT_MODES } from "../ink/inputPolicy";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
+import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
+import { resolveInkLayerIndex } from "../ink/inkDocument";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { removeImageBackground } from "../ink/imageBackground";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
@@ -912,6 +914,7 @@ export default function DocumentView({
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
   // Defaults for the next text insert. Editing a selected text writes to the
   // object instead, so the popover always shows what the next edit affects.
   const [textStyle, setTextStyle] = useState({
@@ -953,6 +956,7 @@ export default function DocumentView({
     lassoLiveTransform && lassoSelection
       ? pageObjects.map((object) => {
           if (
+            object.locked ||
             object.pageId !== lassoSelection.pageId ||
             !lassoSelection.objectIds.includes(object.id)
           )
@@ -967,6 +971,16 @@ export default function DocumentView({
           };
         })
       : pageObjects;
+
+  const activeInkLayerIndex = resolveInkLayerIndex(inkDocument);
+  const objectsBelowInk = useMemo(
+    () => livePageObjects.slice(0, activeInkLayerIndex),
+    [livePageObjects, activeInkLayerIndex],
+  );
+  const objectsAboveInk = useMemo(
+    () => livePageObjects.slice(activeInkLayerIndex),
+    [livePageObjects, activeInkLayerIndex],
+  );
   const imageInputRef = useRef(null);
 
   const [zoom, setZoom] = useState(1);
@@ -1410,8 +1424,8 @@ export default function DocumentView({
     mapPoint: (event) =>
       mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
     document: inkDocument,
-    commitStroke: inkController?.commitStroke,
-    removeStrokes: inkController?.removeStrokes,
+    commitStroke: inkController?.inkLayerLocked ? () => {} : inkController?.commitStroke,
+    removeStrokes: inkController?.inkLayerLocked ? () => {} : inkController?.removeStrokes,
     onDraftAppend: drawDraftSegment,
   });
   const redrawInkCanvasRef = useRef(null);
@@ -1623,7 +1637,9 @@ export default function DocumentView({
     const isBlockedTouch = e.pointerType === "touch" && inkPointer.shouldBlockTouch(e);
 
     if (!isSelectMode || isBlockedTouch) {
-      inkPointer.onPointerDown(e, { preventDraw: isBlockedTouch });
+      inkPointer.onPointerDown(e, {
+        preventDraw: isBlockedTouch || inkController?.inkLayerLocked === true,
+      });
       return;
     }
     
@@ -1712,7 +1728,11 @@ export default function DocumentView({
       const polygon = lassoDraft.points;
       if (polygon.length >= 3) {
         const strokeIds = strokesInLasso(inkDocument.strokes, lassoDraft.pageId, polygon);
-        const objectIds = objectsInLasso(pageObjects, lassoDraft.pageId, polygon);
+        const objectIds = objectsInLasso(
+          pageObjects.filter((o) => !o.locked),
+          lassoDraft.pageId,
+          polygon,
+        );
         if (strokeIds.length > 0 || objectIds.length > 0) {
           setLassoSelection({ pageId: lassoDraft.pageId, strokeIds, objectIds });
         }
@@ -2644,10 +2664,11 @@ export default function DocumentView({
         <Columns2 size={18} />
       </button>
       <button
-        className="rail-btn"
+        className={`rail-btn ${isLayersOpen ? "active" : ""}`}
         style={{ marginTop: "auto" }}
-        title="Ebenen (bald verfügbar)"
-        disabled
+        title="Ebenen"
+        data-testid="layers-toggle-btn"
+        onClick={() => setIsLayersOpen((prev) => !prev)}
       >
         <Layers size={19} />
       </button>
@@ -2720,6 +2741,23 @@ export default function DocumentView({
           onClose={() => setIsTextSettingsOpen(false)}
         />
       )}
+      {/* Canva Layer Drawer */}
+      <LayerDrawer
+        isOpen={isLayersOpen}
+        objects={pageObjects}
+        inkLayerIndex={activeInkLayerIndex}
+        inkLayerHidden={inkController?.inkLayerHidden}
+        inkLayerLocked={inkController?.inkLayerLocked}
+        strokeCount={inkDocument.strokes.length}
+        selectedObjectId={selectedObjectId}
+        onSelect={(id) => {
+          setSelectedObjectId(id === "__ink__" ? null : id);
+        }}
+        onToggleLock={inkController?.setLayerLock}
+        onToggleVisibility={inkController?.setLayerVisibility}
+        onReorder={inkController?.reorderLayers}
+        onClose={() => setIsLayersOpen(false)}
+      />
       <input
         ref={imageInputRef}
         type="file"
@@ -2954,17 +2992,24 @@ export default function DocumentView({
               );
             })
           )}
-          {/* Bucket fills sit behind the ink canvas so hand-drawn outlines
-              stay on top of the color wash; every other object type is
-              layered above it as before. */}
+          {/* Layers below ink canvas */}
           <PageObjectLayer
-            objects={livePageObjects.filter((o) => o.type === "fill")}
+            objects={objectsBelowInk}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
+            paperStyle={paperStyle}
+            editingId={editingObjectId}
+            processingObjectId={processingImageId}
+            onEditingChange={setEditingObjectId}
             onSelect={setSelectedObjectId}
             onChange={handleObjectChange}
             onDelete={handleObjectDelete}
             onOpenLink={openLink}
+            onRemoveBackground={handleRemoveBackground}
+            onRestoreBackground={handleRestoreBackground}
+            onToggleLock={inkController?.setLayerLock}
+            onShiftOrder={inkController?.shiftLayerOrder}
+            onOpenLayers={() => setIsLayersOpen(true)}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -2979,11 +3024,13 @@ export default function DocumentView({
                 top: 0,
                 touchAction: "none",
                 pointerEvents: "none",
+                display: inkController?.inkLayerHidden ? "none" : "block",
               }}
             />
           )}
+          {/* Layers above ink canvas */}
           <PageObjectLayer
-            objects={livePageObjects.filter((o) => o.type !== "fill")}
+            objects={objectsAboveInk}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
             paperStyle={paperStyle}
@@ -2996,6 +3043,9 @@ export default function DocumentView({
             onOpenLink={openLink}
             onRemoveBackground={handleRemoveBackground}
             onRestoreBackground={handleRestoreBackground}
+            onToggleLock={inkController?.setLayerLock}
+            onShiftOrder={inkController?.shiftLayerOrder}
+            onOpenLayers={() => setIsLayersOpen(true)}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg

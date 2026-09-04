@@ -1,4 +1,5 @@
 import { browserInkRepository } from "../ink/inkRepository.js";
+import { resolveInkLayerIndex } from "../ink/inkDocument.js";
 import { objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { renderInkStroke } from "../ink/renderInk.js";
 import { fontStackOf } from "../ink/textStyle.js";
@@ -268,14 +269,26 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
 
   inkContext.save();
   applyContentTransform(inkContext);
-  (inkDoc.strokes || [])
-    .filter((stroke) => stroke.pageId === page.id)
-    .forEach((stroke) =>
-      renderInkStroke(inkContext, stroke, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }),
-    );
-  pageObjectsOf(inkDoc)
-    .filter((object) => object.pageId === page.id)
-    .forEach((object) => drawPreviewObject(inkContext, object));
+
+  const objects = pageObjectsOf(inkDoc).filter(
+    (object) => object.pageId === page.id && object.hidden !== true,
+  );
+  const inkIndex = resolveInkLayerIndex(inkDoc);
+  const clampedIndex = Math.max(0, Math.min(objects.length, Math.round(inkIndex)));
+  const below = objects.slice(0, clampedIndex);
+  const above = objects.slice(clampedIndex);
+
+  below.forEach((object) => drawPreviewObject(inkContext, object));
+
+  if (!inkDoc.inkLayerHidden) {
+    (inkDoc.strokes || [])
+      .filter((stroke) => stroke.pageId === page.id)
+      .forEach((stroke) =>
+        renderInkStroke(inkContext, stroke, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }),
+      );
+  }
+
+  above.forEach((object) => drawPreviewObject(inkContext, object));
   inkContext.restore();
 
   context.save();

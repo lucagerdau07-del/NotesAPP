@@ -15,6 +15,8 @@ describe('resolvePageStyle', () => {
       background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
       ruling: 'lined',
       linesRgb: '255,255,255',
+      lineOpacity: 0.07,
+      gridOpacity: 0.065,
       inkColor: '#EFECE4',
     });
   });
@@ -29,6 +31,8 @@ describe('resolvePageStyle', () => {
       background: '#FFFFFF',
       ruling: 'grid',
       linesRgb: '0,0,0',
+      lineOpacity: 0.16,
+      gridOpacity: 0.14,
       inkColor: '#1A1A1A',
     });
   });
