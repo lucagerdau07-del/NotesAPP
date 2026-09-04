@@ -373,6 +373,7 @@ export default function PageObjectLayer({
   onSelect,
   onChange,
   onOpenLink,
+  onDelete,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
   const drag = useDrag(onChange);
