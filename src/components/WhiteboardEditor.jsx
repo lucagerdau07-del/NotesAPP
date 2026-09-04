@@ -11,6 +11,7 @@ import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js
 import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
+import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
@@ -93,6 +94,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [placingTool, setPlacingTool] = useState(null);
   const [draftPlacement, setDraftPlacement] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [processingImageId, setProcessingImageId] = useState(null);
   const imageInputRef = useRef(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
   const palmGuard = useMemo(() => palmGuardFromProfile(loadPalmProfile()), []);
@@ -477,6 +479,30 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     }
   };
 
+  const handleRemoveBackground = async (object) => {
+    if (!object || !object.src || processingImageId === object.id) return;
+    setProcessingImageId(object.id);
+    try {
+      const transparentDataUrl = await removeImageBackground(object.src);
+      inkController?.updateObject?.(object.id, {
+        src: transparentDataUrl,
+        originalSrc: object.originalSrc || object.src,
+      });
+    } catch (error) {
+      console.error("Failed to remove background:", error);
+    } finally {
+      setProcessingImageId(null);
+    }
+  };
+
+  const handleRestoreBackground = (object) => {
+    if (!object || !object.originalSrc) return;
+    inkController?.updateObject?.(object.id, {
+      src: object.originalSrc,
+      originalSrc: null,
+    });
+  };
+
   const railContent = (
     <>
       <button
@@ -649,9 +675,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           pageLayout={fakePageLayout}
           mapOrigin={mapOrigin}
           selectedId={selectedObjectId}
+          processingObjectId={processingImageId}
           onSelect={setSelectedObjectId}
           onChange={(id, changes) => inkController.updateObject?.(id, changes)}
           onDelete={(id) => inkController.removeObjects?.([id])}
+          onRemoveBackground={handleRemoveBackground}
+          onRestoreBackground={handleRestoreBackground}
         />
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}

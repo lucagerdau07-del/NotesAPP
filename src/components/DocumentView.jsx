@@ -49,6 +49,7 @@ import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
+import { removeImageBackground } from "../ink/imageBackground";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
@@ -924,6 +925,7 @@ export default function DocumentView({
     color: "#EFECE4",
   });
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [processingImageId, setProcessingImageId] = useState(null);
   // A text object placed by a plain click (not dragged into size) enters edit
   // mode immediately, so the keyboard opens with the caret already blinking
   // where the user tapped instead of requiring a separate double-click.
@@ -1153,6 +1155,30 @@ export default function DocumentView({
     setSelectedObjectId(null);
     setEditingObjectId((prev) => (prev === objectId ? null : prev));
     inkController?.removeObjects?.([objectId]);
+  };
+
+  const handleRemoveBackground = async (object) => {
+    if (!object || !object.src || processingImageId === object.id) return;
+    setProcessingImageId(object.id);
+    try {
+      const transparentDataUrl = await removeImageBackground(object.src);
+      inkController?.updateObject?.(object.id, {
+        src: transparentDataUrl,
+        originalSrc: object.originalSrc || object.src,
+      });
+    } catch (error) {
+      console.error("Failed to remove background:", error);
+    } finally {
+      setProcessingImageId(null);
+    }
+  };
+
+  const handleRestoreBackground = (object) => {
+    if (!object || !object.originalSrc) return;
+    inkController?.updateObject?.(object.id, {
+      src: object.originalSrc,
+      originalSrc: null,
+    });
   };
 
   const handleLassoCommit = (transform) => {
@@ -2962,11 +2988,14 @@ export default function DocumentView({
             selectedId={selectedObjectId}
             paperStyle={paperStyle}
             editingId={editingObjectId}
+            processingObjectId={processingImageId}
             onEditingChange={setEditingObjectId}
             onSelect={setSelectedObjectId}
             onChange={handleObjectChange}
             onDelete={handleObjectDelete}
             onOpenLink={openLink}
+            onRemoveBackground={handleRemoveBackground}
+            onRestoreBackground={handleRestoreBackground}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg
