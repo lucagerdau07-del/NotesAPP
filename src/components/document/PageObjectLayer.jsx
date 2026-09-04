@@ -524,7 +524,11 @@ export default function PageObjectLayer({
                         disabled={processingObjectId === object.id}
                       >
                         {processingObjectId === object.id ? (
-                          <Loader2 size={14} className="rail-chat-spin" />
+                          <Loader2
+                            size={14}
+                            className="rail-chat-spin"
+                            style={{ display: "block", transformOrigin: "50% 50%" }}
+                          />
                         ) : (
                           <Wand2 size={14} />
                         )}
