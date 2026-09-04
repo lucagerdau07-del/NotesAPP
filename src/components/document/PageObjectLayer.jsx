@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, Trash2, Undo2, Wand2 } from "lucide-react";
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
@@ -105,7 +105,7 @@ function useDrag(onCommit) {
   return { draft, start, move, end };
 }
 
-function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800 }) {
+function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false }) {
   const editableRef = useRef(null);
   const bounds = objectBounds(object);
   const strokeStyle = {
@@ -193,6 +193,8 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
           height: "100%",
           objectFit: "contain",
           pointerEvents: "none",
+          opacity: isProcessing ? 0.5 : 1,
+          transition: "opacity 0.25s ease",
         }}
       />
     );
@@ -337,12 +339,13 @@ function Handle({ position, onPointerDown }) {
   );
 }
 
-function IconButton({ label, onClick, children }) {
+function IconButton({ label, onClick, disabled = false, children }) {
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
+      disabled={disabled}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={onClick}
       style={{
@@ -353,8 +356,8 @@ function IconButton({ label, onClick, children }) {
         border: "none",
         borderRadius: 6,
         background: "transparent",
-        color: "#EFECE4",
-        cursor: "pointer",
+        color: disabled ? "rgba(239, 236, 228, 0.35)" : "#EFECE4",
+        cursor: disabled ? "not-allowed" : "pointer",
         touchAction: "none",
       }}
     >
@@ -369,11 +372,14 @@ export default function PageObjectLayer({
   selectedId = null,
   paperStyle = "lined",
   editingId = null,
+  processingObjectId = null,
   onEditingChange,
   onSelect,
   onChange,
   onOpenLink,
   onDelete,
+  onRemoveBackground,
+  onRestoreBackground,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
   const drag = useDrag(onChange);
@@ -446,6 +452,7 @@ export default function PageObjectLayer({
                 paperStyle={paperStyle}
                 pageWidth={pageLayout?.pageWidth}
                 editable={editingId === object.id}
+                isProcessing={processingObjectId === object.id}
                 onCommitText={(id, text) => {
                   onEditingChange?.(null);
                   // An empty text box has nothing to show and nothing to
@@ -496,6 +503,33 @@ export default function PageObjectLayer({
                     >
                       <ExternalLink size={14} />
                     </IconButton>
+                  )}
+                  {object.type === "image" && (
+                    object.originalSrc ? (
+                      <IconButton
+                        label="Original wiederherstellen"
+                        onClick={() => onRestoreBackground?.(object)}
+                        disabled={processingObjectId === object.id}
+                      >
+                        <Undo2 size={14} />
+                      </IconButton>
+                    ) : (
+                      <IconButton
+                        label={
+                          processingObjectId === object.id
+                            ? "Hintergrund wird entfernt..."
+                            : "Hintergrund entfernen"
+                        }
+                        onClick={() => onRemoveBackground?.(object)}
+                        disabled={processingObjectId === object.id}
+                      >
+                        {processingObjectId === object.id ? (
+                          <Loader2 size={14} className="rail-chat-spin" />
+                        ) : (
+                          <Wand2 size={14} />
+                        )}
+                      </IconButton>
+                    )
                   )}
                   <IconButton label="Löschen" onClick={() => onDelete?.(object.id)}>
                     <Trash2 size={14} />
