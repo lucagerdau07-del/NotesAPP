@@ -114,4 +114,72 @@ describe("PageObjectLayer image background toolbar", () => {
 
     expect(onChange).toHaveBeenCalledWith("img-1", expect.objectContaining({ rotation: expect.any(Number) }));
   });
+
+  it("does not render an object if hidden: true", () => {
+    const hiddenObject = { ...mockImageObject, id: "hidden-1", hidden: true };
+    render(
+      <PageObjectLayer
+        objects={[hiddenObject]}
+        selectedId={null}
+        pageLayout={pageLayout}
+        mapOrigin={mapOrigin}
+      />
+    );
+    expect(screen.queryByTestId("object-container")).toBeNull();
+  });
+
+  it("renders lock badge and suppresses handles when object is locked", () => {
+    const onToggleLock = vi.fn();
+    const lockedObject = { ...mockImageObject, locked: true };
+    render(
+      <PageObjectLayer
+        objects={[lockedObject]}
+        selectedId="img-1"
+        pageLayout={pageLayout}
+        mapOrigin={mapOrigin}
+        onToggleLock={onToggleLock}
+      />
+    );
+
+    // Handles must not be rendered
+    expect(screen.queryByTestId("rotate-handle")).toBeNull();
+
+    // Lock badge should be visible on top-right
+    const lockBadge = screen.getByTestId("lock-badge-btn");
+    expect(lockBadge).toBeInTheDocument();
+
+    fireEvent.click(lockBadge);
+    expect(onToggleLock).toHaveBeenCalledWith("object", "img-1", false);
+  });
+
+  it("renders layers menu in toolbar and triggers shift order commands", () => {
+    const onShiftOrder = vi.fn();
+    const onOpenLayers = vi.fn();
+    render(
+      <PageObjectLayer
+        objects={[mockImageObject]}
+        selectedId="img-1"
+        pageLayout={pageLayout}
+        mapOrigin={mapOrigin}
+        onShiftOrder={onShiftOrder}
+        onOpenLayers={onOpenLayers}
+      />
+    );
+
+    const layersBtn = screen.getByTitle("Ebene anordnen");
+    expect(layersBtn).toBeInTheDocument();
+    fireEvent.click(layersBtn);
+
+    // Dropdown popover should show layer order actions
+    const frontBtn = screen.getByText("Ganz nach vorne");
+    fireEvent.click(frontBtn);
+    expect(onShiftOrder).toHaveBeenCalledWith("img-1", "front");
+
+    // Re-open and test open layers panel
+    fireEvent.click(screen.getByTitle("Ebene anordnen"));
+    const openPanelBtn = screen.getByText(/ebenen-panel öffnen/i);
+    fireEvent.click(openPanelBtn);
+    expect(onOpenLayers).toHaveBeenCalled();
+  });
 });
+

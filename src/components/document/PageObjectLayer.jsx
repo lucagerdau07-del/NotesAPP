@@ -1,5 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2, Trash2, Undo2, Wand2 } from "lucide-react";
+import {
+  ExternalLink,
+  Loader2,
+  Trash2,
+  Undo2,
+  Wand2,
+  Lock,
+  Unlock,
+  Layers,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpToLine,
+  ArrowDownToLine,
+} from "lucide-react";
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
@@ -473,10 +486,19 @@ export default function PageObjectLayer({
   onDelete,
   onRemoveBackground,
   onRestoreBackground,
+  onToggleLock,
+  onShiftOrder,
+  onOpenLayers,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const drag = useDrag(onChange);
   const zoom = pageLayout?.zoom || 1;
+
+  useEffect(() => {
+    setLayersMenuOpen(false);
+  }, [selectedId]);
+
   if (objects.length === 0) return null;
 
   return (
@@ -488,6 +510,7 @@ export default function PageObjectLayer({
       onPointerCancel={drag.end}
     >
       {objects.map((stored) => {
+        if (stored.hidden === true) return null;
         const object = drag.draft?.id === stored.id ? drag.draft : stored;
         const origin = mapOrigin(pageLayout, object.pageId);
         if (!origin) return null;
@@ -497,6 +520,7 @@ export default function PageObjectLayer({
         return (
           <div
             key={object.id}
+            data-testid="object-container"
             data-object-id={object.id}
             data-object-type={object.type}
             onPointerDown={(event) => {
@@ -513,7 +537,7 @@ export default function PageObjectLayer({
               const localY = bounds.y + (event.clientY - rect.top) / zoom;
               if (!hitTestObject(object, localX, localY)) return;
               onSelect?.(object.id);
-              if (editingId !== object.id) drag.start(event, object, "move", zoom);
+              if (!object.locked && editingId !== object.id) drag.start(event, object, "move", zoom);
             }}
             onDoubleClick={() => object.type === "text" && onEditingChange?.(object.id)}
             style={{
@@ -524,7 +548,7 @@ export default function PageObjectLayer({
               height: bounds.height * zoom,
               pointerEvents: "auto",
               touchAction: "none",
-              cursor: "move",
+              cursor: object.locked ? "default" : "move",
               transform: `rotate(${object.rotation || 0}deg)`,
               transformOrigin: "50% 50%",
               outline: isSelected ? "1.5px solid #3E7BD8" : "none",
@@ -560,39 +584,77 @@ export default function PageObjectLayer({
               />
             </div>
 
+            {object.locked && (
+              <button
+                type="button"
+                data-testid="lock-badge-btn"
+                title="Objekt entsperren"
+                aria-label="Objekt entsperren"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLock?.("object", object.id, false);
+                }}
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  right: -10,
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "#f59e0b",
+                  border: "2px solid #ffffff",
+                  color: "#0f172a",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  zIndex: 30,
+                  boxShadow: "0 2px 5px rgba(0,0,0,0.4)",
+                  padding: 0,
+                }}
+              >
+                <Lock size={12} strokeWidth={2.5} />
+              </button>
+            )}
+
             {isSelected && (
               <>
-                {/* Lines resize from both ends; boxes only from the far corner. */}
-                {(object.type === "arrow" || object.type === "line") && (
-                  <Handle
-                    position={{
-                      left: (object.width < 0 ? bounds.width : 0) * zoom,
-                      top: (object.height < 0 ? bounds.height : 0) * zoom,
-                    }}
-                    onPointerDown={(event) => drag.start(event, object, "start", zoom)}
-                  />
+                {/* Resize & rotate handles only visible when not locked */}
+                {!object.locked && (
+                  <>
+                    {(object.type === "arrow" || object.type === "line") && (
+                      <Handle
+                        position={{
+                          left: (object.width < 0 ? bounds.width : 0) * zoom,
+                          top: (object.height < 0 ? bounds.height : 0) * zoom,
+                        }}
+                        onPointerDown={(event) => drag.start(event, object, "start", zoom)}
+                      />
+                    )}
+                    <Handle
+                      position={{
+                        left: (object.width < 0 ? 0 : bounds.width) * zoom,
+                        top: (object.height < 0 ? 0 : bounds.height) * zoom,
+                      }}
+                      onPointerDown={(event) => drag.start(event, object, "end", zoom)}
+                    />
+                    {object.type !== "arrow" && object.type !== "line" && (
+                      <RotateHandle
+                        position={{
+                          left: (bounds.width * zoom) / 2,
+                          top: 0,
+                        }}
+                        onPointerDown={(event) => {
+                          const rect = event.currentTarget.parentElement?.getBoundingClientRect();
+                          const cx = rect ? rect.left + rect.width / 2 : event.clientX;
+                          const cy = rect ? rect.top + rect.height / 2 : event.clientY;
+                          drag.start(event, object, "rotate", zoom, { x: cx, y: cy });
+                        }}
+                      />
+                    )}
+                  </>
                 )}
-                <Handle
-                  position={{
-                    left: (object.width < 0 ? 0 : bounds.width) * zoom,
-                    top: (object.height < 0 ? 0 : bounds.height) * zoom,
-                  }}
-                  onPointerDown={(event) => drag.start(event, object, "end", zoom)}
-                />
-                {object.type !== "arrow" && object.type !== "line" && (
-                  <RotateHandle
-                    position={{
-                      left: (bounds.width * zoom) / 2,
-                      top: 0,
-                    }}
-                    onPointerDown={(event) => {
-                      const rect = event.currentTarget.parentElement?.getBoundingClientRect();
-                      const cx = rect ? rect.left + rect.width / 2 : event.clientX;
-                      const cy = rect ? rect.top + rect.height / 2 : event.clientY;
-                      drag.start(event, object, "rotate", zoom, { x: cx, y: cy });
-                    }}
-                  />
-                )}
+
                 <div
                   style={{
                     position: "absolute",
@@ -604,6 +666,7 @@ export default function PageObjectLayer({
                     borderRadius: 8,
                     background: "rgba(20,20,24,0.92)",
                     border: "1px solid rgba(255,255,255,0.12)",
+                    zIndex: 40,
                   }}
                 >
                   {object.href && (
@@ -645,6 +708,194 @@ export default function PageObjectLayer({
                       </IconButton>
                     )
                   )}
+
+                  <IconButton
+                    label={object.locked ? "Objekt entsperren" : "Objekt sperren"}
+                    onClick={() => onToggleLock?.("object", object.id, !object.locked)}
+                  >
+                    {object.locked ? (
+                      <Lock size={14} style={{ color: "#f59e0b" }} />
+                    ) : (
+                      <Unlock size={14} />
+                    )}
+                  </IconButton>
+
+                  <div style={{ position: "relative" }}>
+                    <IconButton
+                      label="Ebene anordnen"
+                      onClick={() => setLayersMenuOpen((prev) => !prev)}
+                    >
+                      <Layers size={14} />
+                    </IconButton>
+                    {layersMenuOpen && (
+                      <div
+                        className="layer-quick-menu"
+                        style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          marginTop: 6,
+                          background: "rgba(24, 24, 29, 0.96)",
+                          backdropFilter: "blur(20px)",
+                          WebkitBackdropFilter: "blur(20px)",
+                          border: "1px solid rgba(255, 255, 255, 0.12)",
+                          borderRadius: 8,
+                          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.65)",
+                          padding: 4,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 2,
+                          minWidth: 175,
+                          zIndex: 100,
+                          userSelect: "none",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="layer-menu-item"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            background: "none",
+                            border: "none",
+                            color: "#e2e8f0",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            width: "100%",
+                          }}
+                          onClick={() => {
+                            setLayersMenuOpen(false);
+                            onShiftOrder?.(object.id, "front");
+                          }}
+                        >
+                          <ArrowUpToLine size={14} />
+                          <span>Ganz nach vorne</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="layer-menu-item"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            background: "none",
+                            border: "none",
+                            color: "#e2e8f0",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            width: "100%",
+                          }}
+                          onClick={() => {
+                            setLayersMenuOpen(false);
+                            onShiftOrder?.(object.id, "forward");
+                          }}
+                        >
+                          <ChevronUp size={14} />
+                          <span>Eine Ebene nach vorne</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="layer-menu-item"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            background: "none",
+                            border: "none",
+                            color: "#e2e8f0",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            width: "100%",
+                          }}
+                          onClick={() => {
+                            setLayersMenuOpen(false);
+                            onShiftOrder?.(object.id, "backward");
+                          }}
+                        >
+                          <ChevronDown size={14} />
+                          <span>Eine Ebene nach hinten</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="layer-menu-item"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            background: "none",
+                            border: "none",
+                            color: "#e2e8f0",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            width: "100%",
+                          }}
+                          onClick={() => {
+                            setLayersMenuOpen(false);
+                            onShiftOrder?.(object.id, "back");
+                          }}
+                        >
+                          <ArrowDownToLine size={14} />
+                          <span>Ganz nach hinten</span>
+                        </button>
+                        {onOpenLayers && (
+                          <>
+                            <div
+                              style={{
+                                height: 1,
+                                background: "rgba(255, 255, 255, 0.08)",
+                                margin: "3px 2px",
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="layer-menu-item"
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "6px 10px",
+                                background: "none",
+                                border: "none",
+                                color: "#38bdf8",
+                                fontSize: 12,
+                                fontWeight: 500,
+                                borderRadius: 6,
+                                cursor: "pointer",
+                                textAlign: "left",
+                                width: "100%",
+                              }}
+                              onClick={() => {
+                                setLayersMenuOpen(false);
+                                onOpenLayers();
+                              }}
+                            >
+                              <Layers size={14} />
+                              <span>Ebenen-Panel öffnen</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <IconButton label="Löschen" onClick={() => onDelete?.(object.id)}>
                     <Trash2 size={14} />
                   </IconButton>
