@@ -37,7 +37,7 @@ export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
     const src = documentId;
     const id = String(src.documentId || "doc-1");
     const rawObjects = Array.isArray(src.objects) ? src.objects : [];
-    return {
+    const doc = {
       version: INK_SCHEMA_VERSION,
       documentId: id,
       pages: Array.isArray(src.pages)
@@ -45,11 +45,12 @@ export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
         : normalizePageIds(id, 1).map((pageId) => ({ id: pageId })),
       strokes: Array.isArray(src.strokes) ? src.strokes : [],
       objects: rawObjects.map((o) => (isPageObject(o) ? o : createPageObject(o))),
-      inkLayerIndex: src.inkLayerIndex,
-      inkLayerHidden: src.inkLayerHidden === true,
-      inkLayerLocked: src.inkLayerLocked === true,
       updatedAt: src.updatedAt || 0,
     };
+    if (src.inkLayerIndex !== undefined) doc.inkLayerIndex = src.inkLayerIndex;
+    if (src.inkLayerHidden !== undefined) doc.inkLayerHidden = src.inkLayerHidden === true;
+    if (src.inkLayerLocked !== undefined) doc.inkLayerLocked = src.inkLayerLocked === true;
+    return doc;
   }
   const id = String(documentId);
   const defaults =
@@ -62,9 +63,6 @@ export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
     pages: normalizePageIds(id, pages).map((pageId) => ({ id: pageId, ...defaults })),
     strokes: [],
     objects: [],
-    inkLayerIndex: undefined,
-    inkLayerHidden: false,
-    inkLayerLocked: false,
     updatedAt: 0,
   };
 }
