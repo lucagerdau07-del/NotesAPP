@@ -1,4 +1,5 @@
 import { renderNotePagesOf } from "../documents/notePreview.js";
+import { dueNotes, isRunDue } from "./scanQueue.js";
 
 // Der Deckel begrenzt die Kosten eines einzelnen Aufrufs. Längere Notizen
 // werden nur bis zur achten Seite gelesen.
@@ -138,4 +139,45 @@ export async function scanNote(note, { renderPages, complete, today, signal }) {
   const parsed = extractJson(message?.content);
   if (!parsed) throw new Error("Antwort des Modells war kein gültiges JSON.");
   return validateFindings(parsed, { today, fallbackSubject: note.subject || "" });
+}
+
+// Notizen werden nacheinander gescannt, nicht parallel: der Proxy ist eine
+// gemeinsame, ratenbegrenzte Ressource, und ein Lauf hat keine Eile.
+export async function runScan({
+  notes,
+  repository,
+  renderPages,
+  complete,
+  now,
+  today,
+  force = false,
+  signal,
+}) {
+  const { scanState } = repository.read();
+  if (!force && !isRunDue({ now, scanState })) return { scanned: 0, skipped: true, error: null };
+
+  const queue = dueNotes({
+    now,
+    notes,
+    scanState,
+    ...(force ? { quietPeriodMs: 0 } : {}),
+  });
+
+  let scanned = 0;
+  let lastError = null;
+  for (const note of queue) {
+    try {
+      const findings = await scanNote(note, { renderPages, complete, today, signal });
+      repository.mergeFindings({ ...findings, sourceNoteId: note.id });
+      // Erst nach dem erfolgreichen Merge: eine fehlgeschlagene Notiz bleibt
+      // fällig und kommt beim nächsten Lauf wieder dran.
+      repository.markNoteScanned(note.id, now);
+      scanned += 1;
+    } catch (error) {
+      lastError = error?.message || "Unbekannter Fehler beim Auswerten.";
+    }
+  }
+
+  repository.finishRun({ at: now, error: lastError });
+  return { scanned, skipped: false, error: lastError };
 }
