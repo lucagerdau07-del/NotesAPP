@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Loader2, Trash2, Undo2, Wand2 } from "lucide-react";
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
@@ -18,15 +18,16 @@ const readText = (node) => node.innerText ?? node.textContent;
 // wraps — via an offscreen clone, so the real field never flickers or loses
 // its caret while this runs on every keystroke.
 function measureTextBox(node, maxWidth) {
-  const computed = getComputedStyle(node);
   const clone = document.createElement("div");
-  clone.style.position = "fixed";
+  const computed = window.getComputedStyle(node);
+  clone.style.position = "absolute";
   clone.style.visibility = "hidden";
-  clone.style.top = "-9999px";
-  clone.style.left = "-9999px";
-  clone.style.boxSizing = computed.boxSizing;
   clone.style.font = computed.font;
+  clone.style.fontSize = computed.fontSize;
+  clone.style.fontFamily = computed.fontFamily;
+  clone.style.fontWeight = computed.fontWeight;
   clone.style.letterSpacing = computed.letterSpacing;
+  clone.style.lineHeight = computed.lineHeight;
   clone.style.padding = computed.padding;
   clone.style.whiteSpace = "pre";
   clone.style.width = "auto";
@@ -49,7 +50,10 @@ function measureTextBox(node, maxWidth) {
 // undo step instead of one per pointermove.
 function useDrag(onCommit) {
   const [draft, setDraft] = useState(null);
+  const draftRef = useRef(null);
   const gesture = useRef(null);
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
 
   const start = (event, object, mode, zoom, center = null) => {
     event.stopPropagation();
@@ -64,12 +68,14 @@ function useDrag(onCommit) {
       center,
       object,
     };
+    draftRef.current = object;
     setDraft(object);
   };
 
-  const move = (event) => {
+  const move = useCallback((event) => {
     const active = gesture.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+    if (!active) return;
+    if (event.pointerId !== undefined && active.pointerId !== event.pointerId) return;
     const { object, mode } = active;
 
     if (mode === "rotate") {
@@ -87,45 +93,67 @@ function useDrag(onCommit) {
           break;
         }
       }
-      setDraft({ ...object, rotation: Math.round(normalized) });
+      const next = { ...object, rotation: Math.round(normalized) };
+      draftRef.current = next;
+      setDraft(next);
       return;
     }
 
     const dx = (event.clientX - active.startX) / active.zoom;
     const dy = (event.clientY - active.startY) / active.zoom;
-    if (mode === "move")
-      setDraft({ ...object, x: object.x + dx, y: object.y + dy });
-    else if (mode === "start")
-      setDraft({
+    let next;
+    if (mode === "move") {
+      next = { ...object, x: object.x + dx, y: object.y + dy };
+    } else if (mode === "start") {
+      next = {
         ...object,
         x: object.x + dx,
         y: object.y + dy,
         width: object.width - dx,
         height: object.height - dy,
-      });
-    else
-      setDraft({
+      };
+    } else {
+      next = {
         ...object,
         width: object.width + dx,
         height: object.height + dy,
-      });
-  };
+      };
+    }
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
 
-  const end = (event) => {
+  const end = useCallback((event) => {
     const active = gesture.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+    if (!active) return;
+    if (event && event.pointerId !== undefined && active.pointerId !== event.pointerId) return;
     gesture.current = null;
-    const committed = draft;
+    const committed = draftRef.current;
+    draftRef.current = null;
     setDraft(null);
     if (committed) {
       if (active.mode === "rotate") {
-        onCommit?.(active.object.id, { rotation: committed.rotation ?? 0 });
+        onCommitRef.current?.(active.object.id, { rotation: committed.rotation ?? 0 });
       } else {
         const { x, y, width, height } = committed;
-        onCommit?.(active.object.id, { x, y, width, height });
+        onCommitRef.current?.(active.object.id, { x, y, width, height });
       }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!draft) return;
+    const handlePointerMove = (e) => move(e);
+    const handlePointerUp = (e) => end(e);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draft, move, end]);
 
   return { draft, start, move, end };
 }
@@ -501,6 +529,7 @@ export default function PageObjectLayer({
               transformOrigin: "50% 50%",
               outline: isSelected ? "1.5px solid #3E7BD8" : "none",
               outlineOffset: 3,
+              zIndex: isSelected ? 20 : 1,
             }}
           >
             {/* Content is authored in page units and scaled as a whole, so one
