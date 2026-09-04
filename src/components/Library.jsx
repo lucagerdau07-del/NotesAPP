@@ -44,6 +44,7 @@ import {
   previewTextOf,
   renderNotePagesOf,
   renderNotePreviewDataUrl,
+  subscribeToPreviewImages,
 } from "../documents/notePreview.js";
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
@@ -1732,7 +1733,18 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
   const [subject, setSubject] = useState(note?.subject || "");
   const [pageIndex, setPageIndex] = useState(0);
 
-  const pages = useMemo(() => (note ? renderNotePagesOf(note.id) : []), [note?.id]);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  useEffect(
+    () => subscribeToPreviewImages(() => setPreviewVersion((v) => v + 1)),
+    [],
+  );
+  // previewVersion isn't read by renderNotePagesOf - it's a dependency purely
+  // to force this memo to recompute once a page's image finishes decoding
+  // (see notePreview.js's async image cache).
+  const pages = useMemo(
+    () => (note ? renderNotePagesOf(note.id) : []),
+    [note?.id, previewVersion],
+  );
   const { dragX, handlers: swipeHandlers } = usePageSwipe(pages.length, pageIndex, setPageIndex);
 
   useEffect(() => {
@@ -2851,6 +2863,15 @@ export default function Library({
   const [detailNote, setDetailNote] = useState(null);
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
+
+  // Card previews with an image/fill object draw blank on the first pass
+  // (the src decodes async - see notePreview.js) - this re-renders once any
+  // of those decodes finish, so the thumbnail picks it up from cache.
+  const [, setPreviewVersion] = useState(0);
+  useEffect(
+    () => subscribeToPreviewImages(() => setPreviewVersion((v) => v + 1)),
+    [],
+  );
 
   const [untisStatus, setUntisStatus] = useState("idle"); // idle|missing|loading|ready|error
   const [untisLessons, setUntisLessons] = useState([]);

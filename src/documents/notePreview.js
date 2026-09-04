@@ -19,6 +19,37 @@ function firstPageOf(inkDoc) {
   return inkDoc?.pages?.[0]?.id;
 }
 
+// Image/fill objects store a data: URL, so decoding never touches the
+// network - but <img> decode is still async, and every render path here
+// (thumbnails, full pages) draws to a canvas synchronously. Rather than
+// making the whole preview pipeline async for every caller, a small cache
+// keyed by src decodes each image once and, on first miss, simply skips it
+// (matching the old behavior) while decoding in the background; callers that
+// want the image to appear once it's ready subscribe via
+// subscribeToPreviewImages and re-render.
+const imageCache = new Map();
+const imageReadyListeners = new Set();
+
+export function subscribeToPreviewImages(listener) {
+  imageReadyListeners.add(listener);
+  return () => imageReadyListeners.delete(listener);
+}
+
+function getCachedPreviewImage(src) {
+  const cached = imageCache.get(src);
+  if (cached && cached !== "pending" && cached !== "error") return cached;
+  if (cached === "pending" || cached === "error" || typeof Image === "undefined") return null;
+  imageCache.set(src, "pending");
+  const image = new Image();
+  image.onload = () => {
+    imageCache.set(src, image);
+    imageReadyListeners.forEach((listener) => listener());
+  };
+  image.onerror = () => imageCache.set(src, "error");
+  image.src = src;
+  return null;
+}
+
 // The library card's thumbnail needs the note's real paper color behind the
 // ink render - a fixed dark background made a light-paper note's (usually
 // dark) ink invisible against it. The ruling itself is drawn into the
@@ -147,6 +178,20 @@ function drawPreviewObject(context, object) {
   const top = Math.min(object.y, object.y + object.height);
   const w = Math.abs(object.width);
   const h = Math.abs(object.height);
+
+  if (object.type === "image" || object.type === "fill") {
+    const image = getCachedPreviewImage(object.src);
+    if (!image) return;
+    context.save();
+    context.drawImage(image, left, top, w, h);
+    context.restore();
+    return;
+  }
+
+  // A link's pill-shaped label isn't meaningful at thumbnail scale - skipped,
+  // same as before.
+  if (object.type === "link") return;
+
   context.save();
   context.strokeStyle = object.color;
   context.fillStyle = object.fillColor || object.color;
@@ -171,9 +216,6 @@ function drawPreviewObject(context, object) {
     context.lineTo(object.x + object.width, object.y + object.height);
     context.stroke();
   }
-  // "image"/"link"/"fill" objects are skipped - async asset loading isn't
-  // worth it for a small library thumbnail (ponytail: revisit if notes built
-  // mostly from pasted images end up with blank previews).
   context.restore();
 }
 
