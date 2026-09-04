@@ -77,7 +77,7 @@ export async function removeImageBackground(imageSource, options = {}) {
 
   // 1. Instantaneous Smart Canvas Removal for uniform/web backgrounds
   try {
-    const fastResult = await tryFastCanvasRemoval(imageSource, options.tolerance || 42);
+    const fastResult = await tryFastCanvasRemoval(imageSource, options);
     if (fastResult) {
       return fastResult;
     }
@@ -87,7 +87,7 @@ export async function removeImageBackground(imageSource, options = {}) {
   }
 
   // 2. Client-Side AI Model for complex photographic backgrounds
-  const preparedSource = await downscaleForInference(imageSource, options.maxEdge || 640);
+  const preparedSource = await downscaleForInference(imageSource, options.maxEdge || 480);
 
   const config = {
     model: "small",
