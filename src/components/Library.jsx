@@ -38,6 +38,7 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import useKnowledge from "../hooks/useKnowledge.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import {
   notePageStyleOf,
@@ -46,6 +47,7 @@ import {
   renderNotePreviewDataUrl,
 } from "../documents/notePreview.js";
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
+import UpcomingCard from "./UpcomingCard.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
@@ -2948,6 +2950,9 @@ export default function Library({
       previewTextOf(note.id) ||
       (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
   }));
+  const knowledgeNotes = browserNoteRepository.listNotes();
+  const untisSubjects = [...new Set(untisLessons.map((lesson) => lesson.subject).filter(Boolean))];
+  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects });
   const allNotes = [...importedCards, ...createdCards];
 
   // Filter notes by selected subject and search query
@@ -3704,14 +3709,12 @@ export default function Library({
         <div className="lib-glass agent-panel-card">
           <div className="agent-panel-head">
             <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
-              Neuigkeiten
+              Anstehend
             </span>
+            {knowledge.isScanning && <span className="agent-badge">SCAN LÄUFT</span>}
           </div>
           <div className="agent-panel-body">
-            {/* ponytail: placeholder, add real feed later */}
-            <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
-              Noch keine Neuigkeiten.
-            </div>
+            <UpcomingCard events={knowledge.openEvents} onToggle={knowledge.setEventDone} />
           </div>
         </div>
       </div>
