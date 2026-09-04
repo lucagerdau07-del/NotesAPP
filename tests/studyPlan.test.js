@@ -246,4 +246,24 @@ describe("buildPlan", () => {
     expect(monday.blocks[0].task).toContain("Überfällige Bioaufgabe");
     expect(monday.blocks.at(-1).subject).toBe("Bio");
   });
+
+  it("wählt das Wiederholungsfach aus allen offenen Terminen", async () => {
+    const plan = await buildPlan({
+      events: [
+        { kind: "homework", title: "Bioaufgabe", subject: "Bio", due: MONDAY, done: false },
+        { kind: "homework", title: "Bioprotokoll", subject: "Bio", due: "2026-09-08", done: false },
+        { kind: "homework", title: "Matheblatt", subject: "Mathe", due: "2026-09-11", done: false },
+      ],
+      terms: [],
+      subjects: ["Bio", "Mathe"],
+      today: MONDAY,
+      complete: async () => {
+        throw new Error("Server nicht erreichbar.");
+      },
+    });
+
+    const thursday = plan.days.find((day) => day.date === "2026-09-10");
+    expect(thursday.blocks[0].subject).toBe("Mathe");
+    expect(thursday.blocks.at(-1).subject).toBe("Bio");
+  });
 });
