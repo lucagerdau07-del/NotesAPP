@@ -355,6 +355,7 @@ function IconButton({ label, onClick, children }) {
         background: "transparent",
         color: "#EFECE4",
         cursor: "pointer",
+        touchAction: "none",
       }}
     >
       {children}
