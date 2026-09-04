@@ -180,6 +180,36 @@ export default function useInkDocument({
     },
     [applyCommand],
   );
+  const reorderLayers = useCallback(
+    (newObjectIds, inkLayerIndex) => {
+      applyCommand({ type: "reorder-layers", newObjectIds, inkLayerIndex });
+    },
+    [applyCommand],
+  );
+  const setLayerLock = useCallback(
+    (target, objectIdOrLocked, maybeLocked) => {
+      const isInk = target === "ink";
+      const objectId = isInk ? undefined : objectIdOrLocked;
+      const locked = isInk ? objectIdOrLocked === true : maybeLocked === true;
+      applyCommand({ type: "set-layer-lock", target, objectId, locked });
+    },
+    [applyCommand],
+  );
+  const setLayerVisibility = useCallback(
+    (target, objectIdOrHidden, maybeHidden) => {
+      const isInk = target === "ink";
+      const objectId = isInk ? undefined : objectIdOrHidden;
+      const hidden = isInk ? objectIdOrHidden === true : maybeHidden === true;
+      applyCommand({ type: "set-layer-visibility", target, objectId, hidden });
+    },
+    [applyCommand],
+  );
+  const shiftLayerOrder = useCallback(
+    (objectId, direction) => {
+      applyCommand({ type: "shift-layer-order", objectId, direction });
+    },
+    [applyCommand],
+  );
   const undo = useCallback(() => {
     setHistory((current) =>
       current.present.documentId === documentIdRef.current
@@ -283,6 +313,13 @@ export default function useInkDocument({
     addObject,
     updateObject,
     removeObjects,
+    reorderLayers,
+    setLayerLock,
+    setLayerVisibility,
+    shiftLayerOrder,
+    inkLayerIndex: history.present.inkLayerIndex,
+    inkLayerHidden: history.present.inkLayerHidden === true,
+    inkLayerLocked: history.present.inkLayerLocked === true,
     addPage,
     transformSelection,
     undo,

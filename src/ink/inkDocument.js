@@ -18,10 +18,42 @@ function normalizePageIds(documentId, pages) {
   );
 }
 
+export function resolveInkLayerIndex(document) {
+  if (!document) return 0;
+  const objects = pageObjectsOf(document);
+  if (Number.isFinite(document.inkLayerIndex)) {
+    return Math.max(0, Math.min(objects.length, Math.round(document.inkLayerIndex)));
+  }
+  // Legacy default: fills below ink, all other objects above ink
+  let fillCount = 0;
+  for (let i = 0; i < objects.length; i++) {
+    if (objects[i].type === "fill") fillCount++;
+  }
+  return fillCount;
+}
+
 export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
+  if (documentId && typeof documentId === "object") {
+    const src = documentId;
+    const id = String(src.documentId || "doc-1");
+    const rawObjects = Array.isArray(src.objects) ? src.objects : [];
+    return {
+      version: INK_SCHEMA_VERSION,
+      documentId: id,
+      pages: Array.isArray(src.pages)
+        ? src.pages
+        : normalizePageIds(id, 1).map((pageId) => ({ id: pageId })),
+      strokes: Array.isArray(src.strokes) ? src.strokes : [],
+      objects: rawObjects.map((o) => (isPageObject(o) ? o : createPageObject(o))),
+      inkLayerIndex: src.inkLayerIndex,
+      inkLayerHidden: src.inkLayerHidden === true,
+      inkLayerLocked: src.inkLayerLocked === true,
+      updatedAt: src.updatedAt || 0,
+    };
+  }
   const id = String(documentId);
   const defaults =
-    pageDefaults && typeof pageDefaults === 'object' && !Array.isArray(pageDefaults)
+    pageDefaults && typeof pageDefaults === "object" && !Array.isArray(pageDefaults)
       ? pageDefaults
       : {};
   return {
@@ -30,6 +62,9 @@ export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
     pages: normalizePageIds(id, pages).map((pageId) => ({ id: pageId, ...defaults })),
     strokes: [],
     objects: [],
+    inkLayerIndex: undefined,
+    inkLayerHidden: false,
+    inkLayerLocked: false,
     updatedAt: 0,
   };
 }
@@ -139,6 +174,9 @@ export function isInkDocument(value) {
     // reads as "no objects" rather than as a broken document.
     (value.objects === undefined ||
       (Array.isArray(value.objects) && value.objects.every(isPageObject))) &&
+    (value.inkLayerIndex === undefined || Number.isFinite(value.inkLayerIndex)) &&
+    (value.inkLayerHidden === undefined || typeof value.inkLayerHidden === "boolean") &&
+    (value.inkLayerLocked === undefined || typeof value.inkLayerLocked === "boolean") &&
     Number.isFinite(value.updatedAt)
   );
 }
@@ -279,6 +317,85 @@ function applyInkCommand(document, command) {
         ? document
         : withUpdatedAt(document, { pages: [...document.pages, page] });
     }
+    case "reorder-layers": {
+      const objects = pageObjectsOf(document);
+      const idMap = new Map(objects.map((o) => [o.id, o]));
+      const newIds = Array.isArray(command.newObjectIds) ? command.newObjectIds : [];
+      const reordered = [];
+      for (const id of newIds) {
+        const obj = idMap.get(id);
+        if (obj) {
+          reordered.push(obj);
+          idMap.delete(id);
+        }
+      }
+      for (const obj of idMap.values()) {
+        reordered.push(obj);
+      }
+      const rawInkIndex = Number.isFinite(command.inkLayerIndex)
+        ? command.inkLayerIndex
+        : resolveInkLayerIndex(document);
+      const clampedInkIndex = Math.max(0, Math.min(reordered.length, Math.round(rawInkIndex)));
+      return withUpdatedAt(document, {
+        objects: reordered,
+        inkLayerIndex: clampedInkIndex,
+      });
+    }
+    case "set-layer-lock": {
+      if (command.target === "ink") {
+        return withUpdatedAt(document, {
+          inkLayerLocked: command.locked === true,
+        });
+      }
+      const objects = pageObjectsOf(document);
+      const index = objects.findIndex((item) => item.id === command.objectId);
+      if (index < 0) return document;
+      const next = createPageObject({
+        ...objects[index],
+        locked: command.locked === true,
+      });
+      return withUpdatedAt(document, {
+        objects: objects.map((item, i) => (i === index ? next : item)),
+      });
+    }
+    case "set-layer-visibility": {
+      if (command.target === "ink") {
+        return withUpdatedAt(document, {
+          inkLayerHidden: command.hidden === true,
+        });
+      }
+      const objects = pageObjectsOf(document);
+      const index = objects.findIndex((item) => item.id === command.objectId);
+      if (index < 0) return document;
+      const next = createPageObject({
+        ...objects[index],
+        hidden: command.hidden === true,
+      });
+      return withUpdatedAt(document, {
+        objects: objects.map((item, i) => (i === index ? next : item)),
+      });
+    }
+    case "shift-layer-order": {
+      const objects = [...pageObjectsOf(document)];
+      const idx = objects.findIndex((item) => item.id === command.objectId);
+      if (idx < 0) return document;
+      const item = objects[idx];
+      objects.splice(idx, 1);
+      if (command.direction === "front") {
+        objects.push(item);
+      } else if (command.direction === "back") {
+        objects.unshift(item);
+      } else if (command.direction === "forward") {
+        const nextIdx = Math.min(objects.length, idx + 1);
+        objects.splice(nextIdx, 0, item);
+      } else if (command.direction === "backward") {
+        const nextIdx = Math.max(0, idx - 1);
+        objects.splice(nextIdx, 0, item);
+      } else {
+        return document;
+      }
+      return withUpdatedAt(document, { objects });
+    }
     default:
       return document;
   }
@@ -299,6 +416,9 @@ function appendBoundedPast(past, present, limit) {
 }
 
 export function executeInkCommand(history, command) {
+  if (!command) return history;
+  if (command.type === "undo") return undoInkHistory(history);
+  if (command.type === "redo") return redoInkHistory(history);
   return executeInkCommands(history, [command]);
 }
 

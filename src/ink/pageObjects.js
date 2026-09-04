@@ -71,6 +71,8 @@ export function createPageObject(input = {}) {
     // both — no separate fill layer to drift out of sync.
     fillColor: text(source.fillColor),
     rotation: ((finite(source.rotation, 0) % 360) + 360) % 360,
+    locked: source.locked === true,
+    hidden: source.hidden === true,
   };
 }
 
@@ -111,6 +113,7 @@ export function objectBounds(object) {
 const HIT_PAD = 6;
 
 export function hitTestObject(object, x, y) {
+  if (object.hidden) return false;
   const bounds = objectBounds(object);
   const tolerance = HIT_PAD + object.strokeWidth / 2;
 
@@ -197,6 +200,7 @@ export function hitTestObject(object, x, y) {
 // full interior, not just the near-outline band hitTestObject uses for an
 // unfilled shape's move/select hitbox.
 export function isPointInsideObject(object, x, y) {
+  if (object.hidden) return false;
   const bounds = objectBounds(object);
 
   if (object.rotation) {
