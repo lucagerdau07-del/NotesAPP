@@ -262,7 +262,7 @@ function removeNoiseIslands(data, width, height, minSize = 25) {
  */
 export function removeBackgroundCanvas(imageData, options = {}) {
   const userTolerance = typeof options === "number" ? options : options?.tolerance ?? 42;
-  const clearHoles = typeof options === "object" ? (options.clearHoles ?? false) : false;
+  const clearHoles = typeof options === "object" ? (options.clearHoles ?? true) : false;
 
   const { width, height, data } = imageData;
   const bgModel = fitBackgroundGradientPlane(imageData);
