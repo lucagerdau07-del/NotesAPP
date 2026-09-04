@@ -70,6 +70,7 @@ export function createPageObject(input = {}) {
     // fill are the same object then, so moving/resizing/deleting it carries
     // both — no separate fill layer to drift out of sync.
     fillColor: text(source.fillColor),
+    rotation: ((finite(source.rotation, 0) % 360) + 360) % 360,
   };
 }
 
@@ -112,6 +113,18 @@ const HIT_PAD = 6;
 export function hitTestObject(object, x, y) {
   const bounds = objectBounds(object);
   const tolerance = HIT_PAD + object.strokeWidth / 2;
+
+  if (object.rotation) {
+    const cx = bounds.x + bounds.width / 2;
+    const cy = bounds.y + bounds.height / 2;
+    const rad = (-object.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const dx = x - cx;
+    const dy = y - cy;
+    x = cx + dx * cos - dy * sin;
+    y = cy + dx * sin + dy * cos;
+  }
 
   if (object.type === "line" || object.type === "arrow") {
     const x1 = object.x;
@@ -185,6 +198,19 @@ export function hitTestObject(object, x, y) {
 // unfilled shape's move/select hitbox.
 export function isPointInsideObject(object, x, y) {
   const bounds = objectBounds(object);
+
+  if (object.rotation) {
+    const cx = bounds.x + bounds.width / 2;
+    const cy = bounds.y + bounds.height / 2;
+    const rad = (-object.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const dx = x - cx;
+    const dy = y - cy;
+    x = cx + dx * cos - dy * sin;
+    y = cy + dx * sin + dy * cos;
+  }
+
   if (object.type === "rect") {
     return (
       x >= bounds.x &&
