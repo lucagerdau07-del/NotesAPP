@@ -209,4 +209,41 @@ describe("buildPlan", () => {
 
     expect(plan.days.find((day) => day.date === MONDAY).blocks).toEqual([]);
   });
+
+  it.each([
+    ["null", 0],
+    ["negativ", -15],
+    ["nicht numerisch", "viel"],
+  ])("verwirft %s Modellminuten", async (_label, minutes) => {
+    const plan = await buildPlan({
+      events: [],
+      terms: [],
+      subjects: ["Mathe"],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({ [MONDAY]: [{ subject: "Mathe", task: "Ungültiger Block", minutes }] }),
+    });
+
+    expect(plan.days.find((day) => day.date === MONDAY).blocks).toEqual([]);
+  });
+
+  it("plant überfällige offene Termine im Rückfallplan für heute ein", async () => {
+    const plan = await buildPlan({
+      events: [
+        { kind: "homework", title: "Überfällige Bioaufgabe", subject: "Bio", due: "2026-09-01", done: false },
+        { kind: "homework", title: "Überfälliges Bio-Protokoll", subject: "Bio", due: "2026-09-02", done: false },
+        { kind: "homework", title: "Matheblatt", subject: "Mathe", due: "2026-09-11", done: false },
+      ],
+      terms: [],
+      subjects: ["Bio", "Mathe"],
+      today: MONDAY,
+      complete: async () => {
+        throw new Error("Server nicht erreichbar.");
+      },
+    });
+
+    const monday = plan.days.find((day) => day.date === MONDAY);
+    expect(monday.blocks[0].task).toContain("Überfällige Bioaufgabe");
+    expect(monday.blocks.at(-1).subject).toBe("Bio");
+  });
 });

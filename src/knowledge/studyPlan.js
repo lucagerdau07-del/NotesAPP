@@ -129,7 +129,9 @@ function fitBlocks(blocks, budgetMinutes) {
     if (remaining <= 0) break;
     const task = String(block?.task ?? "").trim().slice(0, 200);
     if (!task) continue;
-    const wanted = Math.max(MIN_BLOCK_MINUTES, Math.round(Number(block?.minutes) || 0));
+    const requestedMinutes = Number(block?.minutes);
+    if (!Number.isFinite(requestedMinutes) || requestedMinutes <= 0) continue;
+    const wanted = Math.max(MIN_BLOCK_MINUTES, Math.round(requestedMinutes));
     const minutes = Math.min(remaining, wanted);
     fitted.push({ subject: String(block?.subject ?? "").trim().slice(0, 60), task, minutes });
     remaining -= minutes;
@@ -148,10 +150,14 @@ function mostLoadedSubject(events) {
 
 // Ohne Modellantwort ist der Plan dürftig, aber vorhanden: je fälligem Termin
 // ein Block, der Rest Wiederholung im am stärksten belasteten Fach.
-function fallbackBlocks(date, events, budgetMinutes) {
+function fallbackBlocks(date, events, budgetMinutes, today) {
   if (budgetMinutes <= 0) return [];
-  const open = events.filter((event) => !event.done && event.due >= date);
-  const blocks = open.slice(0, 3).map((event) => ({
+  const open = events.filter((event) => !event.done);
+  const dueOn = (event) => (event.due < today ? today : event.due);
+  const dueFromDate = open
+    .filter((event) => dueOn(event) >= date)
+    .sort((left, right) => dueOn(left).localeCompare(dueOn(right)));
+  const blocks = dueFromDate.slice(0, 3).map((event) => ({
     subject: event.subject,
     task: event.kind === "exam" ? `Vorbereitung: ${event.title}` : event.title,
     minutes: event.kind === "exam" ? 40 : HOMEWORK_MINUTES,
@@ -191,7 +197,7 @@ export async function buildPlan({ events = [], terms = [], subjects = [], today,
       date,
       budgetMinutes,
       blocks: fitBlocks(
-        blocksByDate?.[date] ?? fallbackBlocks(date, events, budgetMinutes),
+        blocksByDate?.[date] ?? fallbackBlocks(date, events, budgetMinutes, today),
         budgetMinutes,
       ),
     })),
