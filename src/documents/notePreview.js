@@ -183,7 +183,7 @@ function drawPreviewObject(context, object) {
 // real page (ruling behind, an ink canvas on top): an eraser stroke uses
 // "destination-out" and would otherwise punch it right through the ruling
 // too if both shared one canvas.
-function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, offsetX, offsetY, view }) {
+function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, offsetX, offsetY, view, mimeType = "image/png", quality }) {
   if (typeof document === "undefined") return "";
   const canvas = document.createElement("canvas");
   canvas.width = pixelWidth;
@@ -221,7 +221,7 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
   context.restore();
   context.drawImage(inkCanvas, 0, 0);
 
-  return canvas.toDataURL("image/png");
+  return canvas.toDataURL(mimeType, quality);
 }
 
 // A real render of a note's own ink strokes and shapes/text - not a
@@ -290,11 +290,11 @@ function fullPageBounds(inkDoc, page) {
 // One full page (the whole page area, not just the top) - used by the note
 // detail view, which has room to show a page in full and to swipe between
 // several of them (see renderNotePagesOf).
-function renderFullPage(inkDoc, page) {
+function renderFullPage(inkDoc, page, { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality } = {}) {
   const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, page);
   const pageWidth = Math.max(1, maxX - minX);
   const pageHeight = Math.max(1, maxY - minY);
-  const scale = FULL_PAGE_MAX_DIMENSION / Math.max(pageWidth, pageHeight);
+  const scale = maxDimension / Math.max(pageWidth, pageHeight);
 
   return renderComposite({
     inkDoc,
@@ -306,12 +306,17 @@ function renderFullPage(inkDoc, page) {
     offsetX: -minX * scale,
     offsetY: -minY * scale,
     view: { minX, minY, maxX, maxY },
+    mimeType,
+    quality,
   });
 }
 
 // Every page of a note, whole (not cropped), each with its own aspect
 // ratio, for the note detail view's swipeable page gallery.
-export function renderNotePagesOf(documentId) {
+// Optionen: die Detailansicht nimmt die Vorgaben (PNG, 640 px), der
+// Dokumentscan fordert JPEG bei 1000 px an - als Base64 in einer HTTP-Anfrage
+// ist PNG bei voller Auflösung rund eine Größenordnung zu groß.
+export function renderNotePagesOf(documentId, options = {}) {
   if (typeof document === "undefined") return [];
   const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
   if (!inkDoc) return [];
@@ -319,7 +324,7 @@ export function renderNotePagesOf(documentId) {
     const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, page);
     return {
       id: page.id,
-      src: renderFullPage(inkDoc, page),
+      src: renderFullPage(inkDoc, page, options),
       background: page.background || "#0e0e12",
       aspectRatio: (maxX - minX) / Math.max(1, maxY - minY),
     };
