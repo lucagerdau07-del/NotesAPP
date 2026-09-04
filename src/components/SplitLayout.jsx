@@ -5,6 +5,7 @@ import useInkDocument from "../hooks/useInkDocument";
 import useFocusBox from "../hooks/useFocusBox";
 import useDocumentSource from "../hooks/useDocumentSource";
 import { resolvePageStyle } from "../documents/pageStyles.js";
+import { browserNoteRepository } from "../storage/noteRepository.js";
 
 export default function SplitLayout({
   activeTab,
@@ -35,6 +36,10 @@ export default function SplitLayout({
     initialPageIds,
     initialPageStyle,
     initialColor: initialInkColor,
+    onPersisted:
+      note?.kind === "imported"
+        ? undefined
+        : () => browserNoteRepository.touchNote(documentId),
   });
   const [paperStyle, setPaperStyle] = useState(
     () => inkController.document.pages[0]?.ruling || "lined",

@@ -11,6 +11,7 @@ import { createBrowserRepository } from "./browser/browserRepository";
 import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
+import { browserNoteRepository } from "./storage/noteRepository.js";
 
 const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
 const RAIL_LEFT_INSET = 8;
@@ -106,7 +107,6 @@ function Editor({ activeNote, onBack }) {
       )}
       <div
         className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""}`}
-        data-liquid-glass-control="title"
       >
         {onBack && (
           <button
@@ -131,7 +131,7 @@ function Editor({ activeNote, onBack }) {
           {activeNote?.subject ? `${activeNote.subject} · ` : ""}{currentPage}/{pageCount}
         </span>
       </div>
-      <div className="editor-actions-pill" data-liquid-glass-control="actions">
+      <div className="editor-actions-pill">
         <button
           className="rail-btn"
           title="Vollbild"
@@ -251,7 +251,15 @@ export default function App() {
     const id = String(
       note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`,
     );
-    setActiveNote({ ...note, id });
+    const fullNote = { ...note, id };
+    // Imported documents (PDF/image) already have their own record in
+    // documentRepository.js - only notes started from scratch need indexing
+    // here so the library can find and re-open them.
+    if (fullNote.kind !== "imported") {
+      const { title, subject, pageKind, format, background, ruling } = fullNote;
+      browserNoteRepository.saveNote({ id, title, subject, pageKind, format, background, ruling });
+    }
+    setActiveNote(fullNote);
     setScreen("editor");
   };
 

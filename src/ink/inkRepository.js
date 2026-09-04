@@ -176,3 +176,5 @@ export function createInkRepository(storage) {
     },
   };
 }
+
+export const browserInkRepository = createInkRepository(globalThis.localStorage);

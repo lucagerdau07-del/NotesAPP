@@ -110,11 +110,19 @@ describe('App Component', () => {
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', documentId);
   });
 
-  it('normalizes an existing note ID to a string', () => {
+  it('reopens an existing note with the same document ID', () => {
     render(<App />);
+    fireEvent.click(screen.getByTestId('new-note-btn'));
+    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
+      target: { value: 'Ableitungsregeln' },
+    });
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    const documentId = screen.getByTestId('document-view').getAttribute('data-document-id');
+
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
     fireEvent.click(screen.getByText('Ableitungsregeln'));
 
-    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', '1');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', documentId);
   });
 
   it('opens the settings screen from the library and navigates through palm settings and advanced view', () => {
@@ -179,17 +187,31 @@ describe('App Component', () => {
   it('filters notes when selecting a subject', () => {
     render(<App />);
 
-    // Click Mathe subject tile
-    const matheTile = screen.getByTestId('subject-tile-mathe');
-    fireEvent.click(matheTile);
+    // Create a Mathe note
+    fireEvent.click(screen.getByTestId('subject-tile-mathe'));
+    fireEvent.click(screen.getByTestId('new-note-btn'));
+    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
+      target: { value: 'Ableitungsregeln' },
+    });
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
 
-    // Only Mathe notes should be shown
+    // Create a Chemie note
+    fireEvent.click(screen.getByTestId('subject-tile-chemie'));
+    fireEvent.click(screen.getByTestId('new-note-btn'));
+    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
+      target: { value: 'Titrationskurve' },
+    });
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+
+    // Click Mathe subject tile - only the Mathe note should be shown
+    fireEvent.click(screen.getByTestId('subject-tile-mathe'));
     expect(screen.getByText('Ableitungsregeln')).toBeInTheDocument();
-    expect(screen.getByText('Integralrechnung & Stammfunktionen')).toBeInTheDocument();
-    expect(screen.queryByText('Titrationskurve & Tafelbild')).not.toBeInTheDocument();
+    expect(screen.queryByText('Titrationskurve')).not.toBeInTheDocument();
 
     // Reset via the close pod
     fireEvent.click(screen.getByTitle('Schließen / Filter leeren'));
-    expect(screen.getByText('Titrationskurve & Tafelbild')).toBeInTheDocument();
+    expect(screen.getByText('Titrationskurve')).toBeInTheDocument();
   });
 });

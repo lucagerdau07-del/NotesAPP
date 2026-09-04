@@ -7,10 +7,9 @@ import {
   redoInkHistory,
   undoInkHistory,
 } from "../ink/inkDocument.js";
-import { createInkRepository } from "../ink/inkRepository.js";
+import { browserInkRepository } from "../ink/inkRepository.js";
 import { INPUT_MODES } from "../ink/inputPolicy.js";
 
-const browserInkRepository = createInkRepository(globalThis.localStorage);
 const supportedTools = new Set(["pen", "fountain", "pencil", "highlighter"]);
 const defaultPreferences = {
   tool: "pen",
@@ -76,6 +75,7 @@ export default function useInkDocument({
   initialColor,
   repository = browserInkRepository,
   saveDelay = 120,
+  onPersisted,
 }) {
   const activeDocumentId = String(documentId);
   const documentIdRef = useRef(activeDocumentId);
@@ -249,9 +249,18 @@ export default function useInkDocument({
     [updatePreference],
   );
 
+  // onPersisted is a fresh closure on every caller render (it usually closes
+  // over the current documentId), so it can't sit in this effect's deps: that
+  // would restart the debounce timer on every unrelated re-render and could
+  // starve the actual save indefinitely. A ref keeps the effect keyed only on
+  // real document changes while still calling the latest callback.
+  const onPersistedRef = useRef(onPersisted);
+  onPersistedRef.current = onPersisted;
+
   useEffect(() => {
     const timer = setTimeout(() => {
       saveSafely(() => repository.saveHistory(activeDocumentId, history));
+      onPersistedRef.current?.(activeDocumentId);
     }, saveDelay);
     return () => clearTimeout(timer);
   }, [activeDocumentId, history, repository, saveDelay]);

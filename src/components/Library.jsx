@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import {
   LayoutGrid,
   Rows3,
@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
   Sparkles as SparklesIcon,
   FileUp,
+  Trash2,
 } from "lucide-react";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
@@ -37,6 +38,13 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import { browserNoteRepository } from "../storage/noteRepository.js";
+import {
+  notePageStyleOf,
+  previewTextOf,
+  renderNotePagesOf,
+  renderNotePreviewDataUrl,
+} from "../documents/notePreview.js";
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
@@ -81,6 +89,32 @@ const SUBJECTS = [
     themeColor: "oklch(0.62 0.22 27)",
   },
 ];
+
+function dotForSubject(subjectName) {
+  const match = SUBJECTS.find(
+    (s) => s.name.toLowerCase() === String(subjectName || "").toLowerCase(),
+  );
+  return match?.themeColor || "#FFFFFF";
+}
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+function formatRelativeWhen(timestamp) {
+  if (!Number.isFinite(timestamp)) return "";
+  const diff = Date.now() - timestamp;
+  if (diff < MINUTE) return "gerade eben";
+  if (diff < HOUR) return `vor ${Math.round(diff / MINUTE)} Min.`;
+  if (diff < DAY) return `vor ${Math.round(diff / HOUR)} Std.`;
+  const days = Math.round(diff / DAY);
+  if (days === 1) return "gestern";
+  if (days < 7) return `vor ${days} Tagen`;
+  return new Date(timestamp).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
 
 // Thematic decor per subject: accent color, decorative top-band pattern, wordmark + motto
 const SUBJECT_THEMES = {
@@ -157,277 +191,9 @@ const DEFAULT_THEME = {
   patternSize: "auto",
 };
 
-const RECENT = [
-  // MATHE
-  {
-    id: 1,
-    type: "math",
-    title: "Ableitungsregeln",
-    subject: "Mathe",
-    dot: "oklch(0.62 0.075 255)",
-    when: "gestern",
-    body: "Produktregel: (u·v)' = u'v + uv' — Kettenregel: äußere × innere Ableitung",
-    tag: "Klausur 14.09.",
-  },
-  {
-    id: 2,
-    type: "math",
-    title: "Integralrechnung & Stammfunktionen",
-    subject: "Mathe",
-    dot: "oklch(0.62 0.075 255)",
-    when: "vor 2 Tagen",
-    body: "Hauptsatz: ∫ f(x)dx = F(b) - F(a). Partielle Integration: ∫ u·v' = u·v - ∫ u'·v",
-    tag: "Analysis",
-  },
-  {
-    id: 3,
-    type: "math",
-    title: "Vektorgeometrie & Skalarprodukt",
-    subject: "Mathe",
-    dot: "oklch(0.62 0.075 255)",
-    when: "Mo",
-    body: "Orthogonalität: a ⊥ b ⇔ a·b = 0. Ebenengleichung: E: x = p + r·u + s·v",
-    tag: "Lineare Algebra",
-  },
-  {
-    id: 4,
-    type: "math",
-    title: "Kurvendiskussion Extrema & Wendepunkte",
-    subject: "Mathe",
-    dot: "oklch(0.62 0.075 255)",
-    when: "letzte Woche",
-    body: "Notwendige Bedingung: f'(x0) = 0. Hinreichende Bedingung: f''(x0) ≠ 0.",
-    tag: "Übungsblatt 4",
-  },
-
-  // CHEMIE
-  {
-    id: 5,
-    type: "inspect",
-    title: "Titrationskurve & Tafelbild",
-    subject: "Chemie",
-    dot: "oklch(0.64 0.06 158)",
-    when: "Mo",
-    body: "Äquivalenzpunkt bei pH 7.0 (starke Säure / starke Base). Wendepunktanalyse.",
-  },
-  {
-    id: 6,
-    type: "math",
-    title: "Redoxreaktionen & Oxidationszahlen",
-    subject: "Chemie",
-    dot: "oklch(0.64 0.06 158)",
-    when: "heute",
-    body: "Oxidation = Elektronenabgabe, Reduktion = Aufnahme. Merksatz: OMA / RIG.",
-  },
-  {
-    id: 7,
-    type: "editorial",
-    title: "Galvanische Zelle & Daniell-Element",
-    subject: "Chemie",
-    dot: "oklch(0.64 0.06 158)",
-    when: "vor 3 Tagen",
-    subtitle: "Zink-Kupfer-Element",
-    body: "Anode (Oxidation): Zn → Zn²⁺ + 2e⁻. Kathode (Reduktion): Cu²⁺ + 2e⁻ → Cu.",
-    body2:
-      "Standardpotential: ΔE° = E°(Kathode) - E°(Anode) = +0.34V - (-0.76V) = 1.10V.",
-    tag: "Elektrochemie",
-    source: "Laborprotokoll Nr. 3",
-  },
-  {
-    id: 8,
-    type: "math",
-    title: "Organische Chemie: Esterbildung",
-    subject: "Chemie",
-    dot: "oklch(0.64 0.06 158)",
-    when: "letzte Woche",
-    body: "Carbonsäure + Alkohol ⇌ Carbonsäureester + Wasser (Säurekatalysiert)",
-    tag: "Organik",
-  },
-
-  // KUNST
-  {
-    id: 9,
-    type: "banner",
-    title: "The Renaissance Edition",
-    subject: "Kunst",
-    dot: "oklch(0.6 0.07 320)",
-    when: "11:42",
-    tag: "Shopify Editions | Winter '26",
-  },
-  {
-    id: 10,
-    type: "gallery",
-    title: "Fotostudie & Perspektive",
-    subject: "Kunst",
-    dot: "oklch(0.6 0.07 320)",
-    when: "Mo",
-    tag: "4 Fotos",
-  },
-  {
-    id: 11,
-    type: "figma",
-    title: "Figma Draw & Vektoren",
-    subject: "Kunst",
-    dot: "#D8615B",
-    when: "Di",
-    tag: "Figma Draw",
-  },
-  {
-    id: 12,
-    type: "editorial",
-    title: "Designing with Clarity",
-    subject: "Kunst",
-    dot: "#0a84ff",
-    when: "heute",
-    subtitle: "Structuring Ideas Before Execution",
-    body: "Designing with clarity means making intentional choices that help users understand what to do and where to go.",
-    body2:
-      "Before jumping into visuals, organize ideas and define structure for maximum aesthetic harmony.",
-    tag: "Farblehre & Komposition",
-    source: "New York Times – Designing with Clarity",
-  },
-
-  // PGW
-  {
-    id: 13,
-    type: "agent",
-    title: "Ursachen der Französischen Revolution",
-    subject: "PGW",
-    dot: "oklch(0.58 0.075 320)",
-    when: "14:02",
-    agent: true,
-    sources: 6,
-    body: "Ständegesellschaft, Staatsbankrott 1788, Aufklärung als Legitimationsbruch — mit Zeitleiste und Quellenliste.",
-  },
-  {
-    id: 14,
-    type: "editorial",
-    title: "Wahlsysteme im Vergleich: BRD vs. USA",
-    subject: "PGW",
-    dot: "oklch(0.58 0.075 320)",
-    when: "gestern",
-    subtitle: "Personalisiertes Verhältniswahlrecht vs. Mehrheitswahl",
-    body: "BRD: Erststimme (Direktmandat) & Zweitstimme (Parteianteil mit 5%-Hürde).",
-    body2:
-      "USA: Winner-takes-all Prinzip im Electoral College mit 538 Wahlleuten.",
-    tag: "Demokratie & Wahlen",
-    source: "Bundeszentrale für politische Bildung",
-  },
-  {
-    id: 15,
-    type: "vehicle",
-    title: "2025 LAND CRUISER",
-    subject: "PGW",
-    dot: "#E27D48",
-    when: "vor 2 Tagen",
-    tag: "Toyota Land Cruiser 250 - Overview",
-  },
-
-  // PHILOSOPHIE
-  {
-    id: 16,
-    type: "serif",
-    title: "Höhlengleichnis",
-    subject: "Philosophie",
-    dot: "oklch(0.7 0.035 78)",
-    when: "Mi",
-    body: "Schatten = Sinneswahrnehmung, Feuer = Sonne des Guten. Aufstieg = Erkenntnisstufen.",
-    question: "Frage: Ist Bildung Zwang?",
-  },
-  {
-    id: 17,
-    type: "serif",
-    title: "Kategorischer Imperativ",
-    subject: "Philosophie",
-    dot: "oklch(0.7 0.035 78)",
-    when: "Do",
-    body: "Handle nur nach derjenigen Maxime, durch die du zugleich wollen kannst, dass sie ein allgemeines Gesetz werde.",
-    question: "Kant: Pflichtethik vs. Utilitarismus",
-  },
-  {
-    id: 18,
-    type: "quote",
-    title: "CLOSED Bar Branding",
-    subject: "Philosophie",
-    dot: "oklch(0.7 0.035 78)",
-    when: "14:20",
-    platform: "X",
-    body: "In crafting a rich, evocative identity for CLOSED bar, how by why serves a lesson in worldbuilding →",
-  },
-
-  // ENGLISCH
-  {
-    id: 19,
-    type: "editorial",
-    title: "Shakespeare: Macbeth Character Analysis",
-    subject: "Englisch",
-    dot: "oklch(0.68 0.09 26)",
-    when: "heute",
-    subtitle: "Ambition, Guilt and the Supernatural",
-    body: "Macbeth's fatal flaw (hamartia) is unchecked ambition driven by the witches' prophecies and Lady Macbeth's manipulation.",
-    body2:
-      'Key motif: "Fair is foul, and foul is fair" — appearance versus reality.',
-    tag: "Drama Analysis",
-    source: "Oxford Literature Guides",
-  },
-  {
-    id: 20,
-    type: "code",
-    title: "CopilotForXcode",
-    repo: "github / CopilotForXcode",
-    subject: "Englisch",
-    dot: "#4FA66B",
-    when: "vor 5 Min",
-    body: "AI coding assistant for Xcode — Technical Documentation Analysis",
-    lang: "Swift",
-    stars: "5,512",
-  },
-  {
-    id: 21,
-    type: "math",
-    title: "Rhetorical Devices & Connectors",
-    subject: "Englisch",
-    dot: "oklch(0.68 0.09 26)",
-    when: "gestern",
-    body: "Metaphor, Alliteration, Oxymoron, Hyperbole. Transitions: Furthermore, Conversely, In light of this.",
-    tag: "Essay Writing",
-  },
-
-  // SPANISCH
-  {
-    id: 22,
-    type: "editorial",
-    title: "Subjuntivo vs. Indicativo: Regla WEIRDO",
-    subject: "Spanisch",
-    dot: "oklch(0.65 0.08 52)",
-    when: "heute",
-    subtitle: "Wishes, Emotions, Impersonal, Recommendations, Doubt, Ojalá",
-    body: "El subjuntivo se utiliza para expresar deseos, dudas y valoraciones personales.",
-    body2: 'Ejemplo: "Espero que tengas un buen día" / "Dudo que sea verdad".',
-    tag: "Gramática C1",
-    source: "Real Academia Española",
-  },
-  {
-    id: 23,
-    type: "math",
-    title: "Vocabulario: Medio Ambiente y Clima",
-    subject: "Spanisch",
-    dot: "oklch(0.65 0.08 52)",
-    when: "Mo",
-    body: "el cambio climático, las energías renovables, la deforestación, la huella de carbono",
-    tag: "Klausurvorbereitung",
-  },
-  {
-    id: 24,
-    type: "serif",
-    title: "El Siglo de Oro & Don Quijote",
-    subject: "Spanisch",
-    dot: "oklch(0.65 0.08 52)",
-    when: "vor 4 Tagen",
-    body: "Miguel de Cervantes Saavedra (1605). La parodia de los libros de caballerías y el idealismo quijotesco.",
-    question: "Pregunta: ¿Quién es el verdadero loco?",
-  },
-];
+// Real notes come from browserNoteRepository (created from scratch) and
+// documentLibrary.importedNotes (imported PDFs/images) - mapped to this same
+// card shape further down, in place of what used to be a hardcoded mock list.
 
 function TileWrap({
   onOpen,
@@ -1894,10 +1660,273 @@ function ThematicSubjectHeader({ subject, onClearFilter, onNewNote }) {
   );
 }
 
-function RecentCard({ n, onOpen }) {
+const LONG_PRESS_MS = 500;
+
+// Fires onLongPress instead of onClick when the pointer is held down past
+// the delay; a normal tap still fires onClick as usual.
+function useLongPress(onLongPress, onClick, delay = LONG_PRESS_MS) {
+  const timerRef = useRef(null);
+  const firedRef = useRef(false);
+  return {
+    onPointerDown: () => {
+      firedRef.current = false;
+      timerRef.current = setTimeout(() => {
+        firedRef.current = true;
+        onLongPress();
+      }, delay);
+    },
+    onPointerUp: () => clearTimeout(timerRef.current),
+    onPointerLeave: () => clearTimeout(timerRef.current),
+    onClick: (event) => {
+      if (firedRef.current) {
+        firedRef.current = false;
+        return;
+      }
+      onClick?.(event);
+    },
+  };
+}
+
+// Opened by a long-press on a card (see useLongPress) into the same slot the
+// Stundenplan/agent panels occupy. Imported documents keep their metadata in
+// documentRepository.js, not here, so they get a read-only view.
+const SWIPE_THRESHOLD_PX = 50;
+
+// Drag-to-swipe between a note's pages, phone-gallery style: live-tracks the
+// finger/pointer while held, snaps to the next/previous page past the
+// threshold, and springs back otherwise.
+function usePageSwipe(pageCount, pageIndex, setPageIndex) {
+  const [dragX, setDragX] = useState(0);
+  const startXRef = useRef(null);
+
+  return {
+    dragX,
+    handlers: {
+      onPointerDown: (event) => {
+        startXRef.current = event.clientX;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      },
+      onPointerMove: (event) => {
+        if (startXRef.current === null) return;
+        setDragX(event.clientX - startXRef.current);
+      },
+      onPointerUp: () => {
+        if (startXRef.current === null) return;
+        if (dragX <= -SWIPE_THRESHOLD_PX && pageIndex < pageCount - 1)
+          setPageIndex(pageIndex + 1);
+        else if (dragX >= SWIPE_THRESHOLD_PX && pageIndex > 0) setPageIndex(pageIndex - 1);
+        startXRef.current = null;
+        setDragX(0);
+      },
+      onPointerCancel: () => {
+        startXRef.current = null;
+        setDragX(0);
+      },
+    },
+  };
+}
+
+function NoteDetailPanel({ note, onClose, onOpen }) {
+  const editable = note?.kind !== "imported";
+  const [title, setTitle] = useState(note?.title || "");
+  const [subject, setSubject] = useState(note?.subject || "");
+  const [pageIndex, setPageIndex] = useState(0);
+
+  const pages = useMemo(() => (note ? renderNotePagesOf(note.id) : []), [note?.id]);
+  const { dragX, handlers: swipeHandlers } = usePageSwipe(pages.length, pageIndex, setPageIndex);
+
+  useEffect(() => {
+    setTitle(note?.title || "");
+    setSubject(note?.subject || "");
+    setPageIndex(0);
+  }, [note?.id]);
+
+  if (!note) return null;
+
+  const save = (changes) => {
+    if (editable) browserNoteRepository.saveNote({ id: note.id, title, subject, ...changes });
+  };
+
+  const handleDelete = () => {
+    if (!globalThis.confirm(`"${note.title}" wirklich löschen?`)) return;
+    browserNoteRepository.removeNote(note.id);
+    onClose();
+  };
+
+  return (
+    <div className="lib-glass agent-panel-card" data-testid="note-detail-panel">
+      <div className="agent-panel-head">
+        <span style={{ font: '700 15px "Bricolage Grotesque",sans-serif', color: "#FFFFFF" }}>
+          Notiz-Details
+        </span>
+        <button
+          className="agent-close"
+          onClick={onClose}
+          title="Schließen"
+          data-testid="note-detail-close-btn"
+        >
+          <X size={14} strokeWidth={2.4} />
+        </button>
+      </div>
+      <div className="agent-panel-body">
+        {pages.length > 0 && (
+          <div>
+            <div
+              {...(pages.length > 1 ? swipeHandlers : {})}
+              data-testid="note-detail-pages"
+              style={{
+                borderRadius: 18,
+                overflow: "hidden",
+                aspectRatio: pages[0].aspectRatio || 0.71,
+                background: pages[0].background,
+                touchAction: "pan-y",
+                cursor: pages.length > 1 ? "grab" : "default",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  height: "100%",
+                  transform: `translateX(calc(${-pageIndex * 100}% + ${dragX}px))`,
+                  transition: dragX === 0 ? "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)" : "none",
+                }}
+              >
+                {pages.map((p) => (
+                  <div key={p.id} style={{ flex: "0 0 100%", height: "100%" }}>
+                    {p.src && (
+                      <img
+                        src={p.src}
+                        alt=""
+                        draggable={false}
+                        style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {pages.length > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}>
+                {pages.map((p, i) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPageIndex(i)}
+                    title={`Seite ${i + 1}`}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      padding: 0,
+                      borderRadius: "50%",
+                      border: "none",
+                      background: i === pageIndex ? "#FFFFFF" : "rgba(255,255,255,.3)",
+                      cursor: "pointer",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div>
+          <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 6 }}>Titel</div>
+          {editable ? (
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => save({ title })}
+              data-testid="note-detail-title-input"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: "rgba(255,255,255,.06)",
+                color: "#FFFFFF",
+                font: "500 13px sans-serif",
+              }}
+            />
+          ) : (
+            <div style={{ color: "#FFFFFF", font: "600 14px sans-serif" }}>{note.title}</div>
+          )}
+        </div>
+
+        {editable && (
+          <div>
+            <div style={{ fontSize: 11, opacity: 0.6, margin: "10px 0 6px" }}>Fach</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {SUBJECTS.map((s) => (
+                <button
+                  key={s.id}
+                  data-testid={`note-detail-subject-${s.id}`}
+                  onClick={() => {
+                    setSubject(s.name);
+                    save({ subject: s.name });
+                  }}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    border: subject === s.name ? "2px solid #3E7BD8" : "1px solid rgba(255,255,255,.15)",
+                    background: subject === s.name ? "rgba(62,123,216,.15)" : "transparent",
+                    color: "#FFFFFF",
+                    cursor: "pointer",
+                  }}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: 4, display: "flex", gap: 8 }}>
+          <button
+            onClick={() => onOpen(editable ? { ...note, title, subject } : note)}
+            data-testid="note-detail-open-btn"
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 10,
+              border: "none",
+              background: "#FFFFFF",
+              color: "#08080A",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Öffnen
+          </button>
+          {editable && (
+            <button
+              onClick={handleDelete}
+              title="Notiz löschen"
+              data-testid="note-detail-delete-btn"
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,69,58,.4)",
+                background: "rgba(255,69,58,.12)",
+                color: "#FF6B60",
+                cursor: "pointer",
+              }}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentCard({ n, onOpen, onLongPress }) {
+  const pressHandlers = useLongPress(() => onLongPress?.(n), onOpen);
   return (
     <div
-      onClick={onOpen}
+      {...pressHandlers}
       className="lib-card"
       style={{
         cursor: "pointer",
@@ -2378,6 +2407,55 @@ function RecentCard({ n, onOpen }) {
       )}
 
       {/* 10. Math Handwriting Card */}
+      {/* Real note: a 1:1 render of the page's own top-left corner, not a
+          description of it - see notePreview.js. */}
+      {n.type === "canvas-preview" && (
+        <div>
+          <div
+            style={{
+              height: 150,
+              position: "relative",
+              overflow: "hidden",
+              ...n.pageStyle,
+            }}
+          >
+            {n.preview && (
+              <img
+                src={n.preview}
+                alt=""
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  objectPosition: "top left",
+                }}
+              />
+            )}
+          </div>
+          <div style={{ padding: "12px 16px 10px" }}>
+            <div
+              style={{
+                font: '700 15px "Bricolage Grotesque",sans-serif',
+                color: "#FFFFFF",
+              }}
+            >
+              {n.title}
+            </div>
+            {!n.preview && (
+              <div
+                style={{
+                  marginTop: 4,
+                  font: "400 12px/1.4 Manrope,sans-serif",
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                {n.pageKind === "whiteboard" ? "Whiteboard" : "Leere Notiz"}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {n.type === "math" && (
         <div
           style={{
@@ -2546,10 +2624,11 @@ function RecentCard({ n, onOpen }) {
   );
 }
 
-function RecentListRow({ n, onOpen }) {
+function RecentListRow({ n, onOpen, onLongPress }) {
+  const pressHandlers = useLongPress(() => onLongPress?.(n), onOpen);
   return (
     <div
-      onClick={onOpen}
+      {...pressHandlers}
       className="lib-list-row"
       data-testid={`list-row-${n.id}`}
     >
@@ -2769,6 +2848,7 @@ export default function Library({
   const [sortToast, setSortToast] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
+  const [detailNote, setDetailNote] = useState(null);
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
 
@@ -2857,7 +2937,18 @@ export default function Library({
     when: "importiert",
     body: `${note.pages?.length || 1} ${(note.pages?.length || 1) === 1 ? "Seite" : "Seiten"} · ${note.source?.type === "pdf" ? "PDF" : "Bild"}`,
   }));
-  const allNotes = [...importedCards, ...RECENT];
+  const createdCards = browserNoteRepository.listNotes().map((note) => ({
+    ...note,
+    type: "canvas-preview",
+    dot: dotForSubject(note.subject),
+    when: formatRelativeWhen(note.updatedAt),
+    preview: renderNotePreviewDataUrl(note.id),
+    pageStyle: notePageStyleOf(note.id),
+    body:
+      previewTextOf(note.id) ||
+      (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
+  }));
+  const allNotes = [...importedCards, ...createdCards];
 
   // Filter notes by selected subject and search query
   const filteredNotes = allNotes.filter((n) => {
@@ -2881,7 +2972,7 @@ export default function Library({
     if (sortBy === "title") return (a.title || "").localeCompare(b.title || "");
     if (sortBy === "subject")
       return (a.subject || "").localeCompare(b.subject || "");
-    return String(a.id).localeCompare(String(b.id));
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
   });
 
   // Dynamic Background Gradient depending on selected subject - Deep almost-black tones with reeded glass
@@ -3555,13 +3646,23 @@ export default function Library({
         {viewMode === "masonry" ? (
           <div className="lib-masonry-grid" data-testid="masonry-grid">
             {sortedRecent.map((n) => (
-              <RecentCard key={n.id} n={n} onOpen={() => onOpenNote?.(n)} />
+              <RecentCard
+                key={n.id}
+                n={n}
+                onOpen={() => onOpenNote?.(n)}
+                onLongPress={setDetailNote}
+              />
             ))}
           </div>
         ) : (
           <div className="lib-list-view" data-testid="list-view">
             {sortedRecent.map((n) => (
-              <RecentListRow key={n.id} n={n} onOpen={() => onOpenNote?.(n)} />
+              <RecentListRow
+                key={n.id}
+                n={n}
+                onOpen={() => onOpenNote?.(n)}
+                onLongPress={setDetailNote}
+              />
             ))}
           </div>
         )}
@@ -3570,7 +3671,7 @@ export default function Library({
       {/* left overview: shown in the space the agent panel occupies once it's collapsed */}
       <div
         className="agent-panel"
-        data-open={!agentOpen}
+        data-open={!agentOpen && !detailNote}
         data-testid="left-overview-panel"
         style={{ top: 82, bottom: 20 }}
       >
@@ -3643,7 +3744,7 @@ export default function Library({
 
       <div
         className="agent-panel"
-        data-open={agentOpen}
+        data-open={agentOpen && !detailNote}
         data-testid="agent-panel"
       >
         <div className="lib-glass agent-panel-card">
@@ -3827,6 +3928,24 @@ export default function Library({
           </div>
         </div>
       </div>
+
+      {/* opened by a long-press on a card - same slot as the panels above */}
+      <div
+        className="agent-panel"
+        data-open={Boolean(detailNote)}
+        data-testid="note-detail-overlay"
+        style={{ top: 82, bottom: 20 }}
+      >
+        <NoteDetailPanel
+          note={detailNote}
+          onClose={() => setDetailNote(null)}
+          onOpen={(note) => {
+            setDetailNote(null);
+            onOpenNote?.(note);
+          }}
+        />
+      </div>
+
       <NewDocumentDialog
         open={isNewDocDialogOpen}
         subject={selectedSubject ? selectedSubject.name : ""}
