@@ -49,7 +49,7 @@ function validDue(due, todayMs) {
   const [year, month, day] = text.split("-").map(Number);
   const time = Date.UTC(year, month - 1, day);
   if (!Number.isFinite(time) || !Number.isFinite(todayMs)) return null;
-  if (Math.abs(time - todayMs) > YEAR_MS) return null;
+  if (time < todayMs || time - todayMs > YEAR_MS) return null;
   return text;
 }
 

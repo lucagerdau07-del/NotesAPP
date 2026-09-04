@@ -90,6 +90,14 @@ describe("validateFindings", () => {
     expect(events).toEqual([]);
   });
 
+  it("verwirft auch ein kürzlich vergangenes Datum", () => {
+    const { events } = validateFindings(
+      { homework: [{ title: "Schon vorbei", due: "2026-09-03" }] },
+      { today, fallbackSubject: "Mathe" },
+    );
+    expect(events).toEqual([]);
+  });
+
   it("nimmt das Fach der Notiz, wenn das Modell keines nennt", () => {
     const { events } = validateFindings(
       { homework: [{ title: "Aufgabe", due: "2026-09-08" }] },
