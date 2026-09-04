@@ -1,4 +1,5 @@
 import { removeBackground } from "@imgly/background-removal";
+import { tryFastCanvasRemoval } from "./canvasBackgroundRemoval.js";
 
 /**
  * Converts a Blob to a base64 Data URL.
@@ -61,7 +62,11 @@ export async function downscaleForInference(imageSource, maxEdge = 640) {
 }
 
 /**
- * Removes the background of an image using client-side AI.
+ * Removes the background of an image.
+ * Uses instantaneous Smart Canvas Removal (<20ms) for web graphics, stamps,
+ * and images with uniform/solid backgrounds.
+ * Falls back to Client-Side AI (U2Net) for complex photographic backgrounds.
+ *
  * @param {string | Blob} imageSource - Image Data URL or Blob.
  * @param {object} [options] - Optional configuration overrides.
  * @returns {Promise<string>} Data URL of the transparent PNG image.
@@ -70,6 +75,18 @@ export async function removeImageBackground(imageSource, options = {}) {
   // Yield to event loop so browser paints the loading spinner first
   await new Promise((resolve) => setTimeout(resolve, 50));
 
+  // 1. Instantaneous Smart Canvas Removal for uniform/web backgrounds
+  try {
+    const fastResult = await tryFastCanvasRemoval(imageSource, options.tolerance || 42);
+    if (fastResult) {
+      return fastResult;
+    }
+  } catch (err) {
+    // If fast canvas removal encounters any error, continue to AI fallback
+    console.warn("Fast canvas removal skipped:", err);
+  }
+
+  // 2. Client-Side AI Model for complex photographic backgrounds
   const preparedSource = await downscaleForInference(imageSource, options.maxEdge || 640);
 
   const config = {
