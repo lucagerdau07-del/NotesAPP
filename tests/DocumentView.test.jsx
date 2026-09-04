@@ -1023,3 +1023,72 @@ test('renders WhiteboardEditor instead of the page-stack view for a whiteboard d
   expect(screen.getByTestId('whiteboard-surface')).toBeInTheDocument();
   expect(screen.queryByTestId('document-page')).not.toBeInTheDocument();
 });
+
+test('drops a browser image at the point it lands on the page', async () => {
+  const OriginalImage = globalThis.Image;
+  class MockImage {
+    set src(_value) {
+      this.naturalWidth = 200;
+      this.naturalHeight = 100;
+      queueMicrotask(() => this.onload?.());
+    }
+  }
+  globalThis.Image = MockImage;
+
+  const addObject = vi.fn();
+  const controller = createControllerDouble({ addObject });
+  const { rerender } = render(
+    <DocumentView inkController={controller} toolbarState={toolState()} />,
+  );
+  const page = screen.getByTestId('document-page');
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+
+  rerender(
+    <DocumentView
+      inkController={controller}
+      toolbarState={toolState()}
+      imageDropRequest={{ id: 'drop-1', dataUrl: 'data:image/png;base64,AA==', x: 100, y: 100 }}
+    />,
+  );
+
+  await vi.waitFor(() => expect(addObject).toHaveBeenCalledTimes(1));
+  expect(addObject.mock.calls[0][0]).toEqual(expect.objectContaining({
+    type: 'image',
+    pageId: 'page-1',
+    src: 'data:image/png;base64,AA==',
+    x: 0,
+    y: 50,
+    width: 200,
+    height: 100,
+  }));
+
+  globalThis.Image = OriginalImage;
+});
+
+test('reports the drop as handled once the image is inserted', async () => {
+  globalThis.Image = class {
+    set src(_value) {
+      this.naturalWidth = 40;
+      this.naturalHeight = 40;
+      queueMicrotask(() => this.onload?.());
+    }
+  };
+
+  const onImageDropHandled = vi.fn();
+  const controller = createControllerDouble({ addObject: vi.fn() });
+  const { rerender } = render(
+    <DocumentView inkController={controller} toolbarState={toolState()} />,
+  );
+  mockRect(screen.getByTestId('document-page'), { left: 0, top: 0, width: 800, height: 1200 });
+
+  rerender(
+    <DocumentView
+      inkController={controller}
+      toolbarState={toolState()}
+      imageDropRequest={{ id: 'drop-2', dataUrl: 'data:image/png;base64,BB==', x: 10, y: 10 }}
+      onImageDropHandled={onImageDropHandled}
+    />,
+  );
+
+  await vi.waitFor(() => expect(onImageDropHandled).toHaveBeenCalledWith('drop-2'));
+});

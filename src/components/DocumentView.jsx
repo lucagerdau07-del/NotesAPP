@@ -54,7 +54,7 @@ import PageObjectLayer from "./document/PageObjectLayer";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
-import { readImageObjectSource } from "../ink/imageObject";
+import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso";
@@ -865,6 +865,8 @@ export default function DocumentView({
   railSlot,
   onCurrentPageChange,
   isImmersive,
+  imageDropRequest,
+  onImageDropHandled,
 }) {
   const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
@@ -1238,15 +1240,15 @@ export default function DocumentView({
     });
   };
 
-  const insertObject = (type, size, extra = {}) => {
-    const anchor = viewportCenterOnPage();
-    if (!anchor) return null;
+  const insertObject = (type, size, extra = {}, anchor = null) => {
+    const point = anchor || viewportCenterOnPage();
+    if (!point) return null;
     const object = {
       id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
       type,
-      pageId: anchor.pageId,
-      x: anchor.x - size.width / 2,
-      y: anchor.y - size.height / 2,
+      pageId: point.pageId,
+      x: point.x - size.width / 2,
+      y: point.y - size.height / 2,
       width: size.width,
       height: size.height,
       color: penColor || "#3E7BD8",
@@ -1257,6 +1259,45 @@ export default function DocumentView({
     setSelectedObjectId(object.id);
     return object;
   };
+
+  // A drop from the internal browser arrives as a plain {id, dataUrl, x, y} —
+  // x/y are already viewport CSS px, the same space a PointerEvent's
+  // clientX/clientY would be in, so the same relativePoint+mapViewportPoint
+  // pipeline that places click-dragged shapes places this too.
+  useEffect(() => {
+    if (!imageDropRequest) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { src, width, height } = await readImageObjectSourceFromDataUrl(
+          imageDropRequest.dataUrl,
+        );
+        if (cancelled) return;
+        const maxWidth = Math.min(baseWidth * 0.8, width);
+        const scale = maxWidth / width;
+        const point = mapViewportPoint(
+          pageLayout,
+          relativePoint(containerRef.current, {
+            clientX: imageDropRequest.x,
+            clientY: imageDropRequest.y,
+          }),
+        );
+        insertObject(
+          "image",
+          { width: maxWidth, height: height * scale },
+          { src },
+          point,
+        );
+      } catch {
+        // An image the browser cannot decode simply inserts nothing.
+      } finally {
+        if (!cancelled) onImageDropHandled?.(imageDropRequest.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageDropRequest]);
 
   // Rasterizes this page's ink + shape outlines as walls, floods out from the
   // click, and drops the cropped result in as a "fill" object sized to match.
@@ -2298,6 +2339,8 @@ export default function DocumentView({
 
   const getStaticBackgroundStyles = () => {
     const linesRgb = inkDocument.pages[0]?.linesRgb || "255,255,255";
+    const lineOpacity = inkDocument.pages[0]?.lineOpacity ?? 0.07;
+    const gridOpacity = inkDocument.pages[0]?.gridOpacity ?? 0.065;
 
     if (paperStyle === "blank") {
       return { backgroundImage: "none" };
@@ -2305,7 +2348,7 @@ export default function DocumentView({
 
     if (paperStyle === "lined") {
       return {
-        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},.07) calc(100% - 1px))`,
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},${lineOpacity}) calc(100% - 1px))`,
         backgroundSize: "100% 34px",
         backgroundPosition: "0 92px",
         backgroundRepeat: "repeat-y",
@@ -2314,7 +2357,7 @@ export default function DocumentView({
 
     if (paperStyle === "grid") {
       return {
-        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},.065) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(${linesRgb},.065) calc(100% - 1px))`,
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},${gridOpacity}) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(${linesRgb},${gridOpacity}) calc(100% - 1px))`,
         backgroundSize: "100% 24px, 24px 100%",
         backgroundPosition: "0 92px, 88px 0",
         backgroundRepeat: "repeat-y, repeat-x",
