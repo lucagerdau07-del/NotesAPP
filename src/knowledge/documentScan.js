@@ -1,3 +1,5 @@
+import { renderNotePagesOf } from "../documents/notePreview.js";
+
 // Der Deckel begrenzt die Kosten eines einzelnen Aufrufs. Längere Notizen
 // werden nur bis zur achten Seite gelesen.
 export const MAX_SCAN_PAGES = 8;
@@ -85,4 +87,55 @@ export function validateFindings(raw, { today, fallbackSubject = "" } = {}) {
     events: events.slice(0, MAX_EVENTS_PER_NOTE),
     terms: terms.slice(0, MAX_TERMS_PER_NOTE),
   };
+}
+
+// JPEG statt PNG und 1000 px statt 1280: für Handschrift gut lesbar, als
+// Base64 in einer HTTP-Anfrage rund eine Größenordnung kleiner.
+const SCAN_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
+
+export function scanImagesOf(documentId) {
+  return renderNotePagesOf(documentId, SCAN_IMAGE_OPTIONS);
+}
+
+export const SCAN_SYSTEM_PROMPT = [
+  "Du wertest die Seiten einer Schulnotiz aus. Du antwortest ausschließlich mit JSON, ohne Fließtext davor oder danach.",
+  "Du suchst drei Dinge: Hausaufgaben, Klausur- und Prüfungstermine, und Fachbegriffe, die in der Notiz erklärt oder eingeführt werden.",
+  "Format:",
+  '{"homework":[{"title":"","subject":"","due":"YYYY-MM-DD"}],"exams":[{"title":"","subject":"","due":"YYYY-MM-DD"}],"terms":[{"term":"","definition":"","subject":""}]}',
+  "Erfinde nichts. Steht in der Notiz keine Hausaufgabe, bleibt homework leer. Ein leeres Ergebnis ist ein richtiges Ergebnis.",
+  "Als Begriff zählt nur ein Fachbegriff mit erkennbarer Bedeutung im Fach, kein Alltagswort.",
+  "Rechne relative Angaben wie \"bis nächsten Freitag\" in ein absolutes Datum um, ausgehend vom genannten heutigen Datum.",
+].join("\n");
+
+function scanContext(note, today) {
+  return [
+    `Heutiges Datum: ${today}.`,
+    `Notiz: "${note.title || "ohne Titel"}"${note.subject ? ` (Fach: ${note.subject})` : ""}.`,
+    "Die folgenden Bilder sind die Seiten dieser Notiz.",
+  ].join("\n");
+}
+
+export async function scanNote(note, { renderPages, complete, today, signal }) {
+  const pages = renderPages(note.id).slice(0, MAX_SCAN_PAGES);
+  if (pages.length === 0) return { events: [], terms: [] };
+
+  const message = await complete({
+    messages: [
+      { role: "system", content: SCAN_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: scanContext(note, today) },
+          // Der Space erkennt diese Teile und routet selbst auf das
+          // Vision-Modell - deshalb ist am Backend nichts zu ändern.
+          ...pages.map((page) => ({ type: "image_url", image_url: { url: page.src } })),
+        ],
+      },
+    ],
+    signal,
+  });
+
+  const parsed = extractJson(message?.content);
+  if (!parsed) throw new Error("Antwort des Modells war kein gültiges JSON.");
+  return validateFindings(parsed, { today, fallbackSubject: note.subject || "" });
 }

@@ -3,6 +3,7 @@ import {
   extractJson,
   MAX_EVENTS_PER_NOTE,
   MAX_TERMS_PER_NOTE,
+  scanNote,
   validateFindings,
 } from "../src/knowledge/documentScan.js";
 
@@ -132,5 +133,79 @@ describe("validateFindings", () => {
   it("übernimmt einen Begriff auch ohne Definition", () => {
     const { terms } = validateFindings({ terms: [{ term: "Katalysator", subject: "Chemie" }] }, { today, fallbackSubject: "Chemie" });
     expect(terms).toEqual([{ term: "Katalysator", definition: "", subject: "Chemie" }]);
+  });
+});
+
+describe("scanNote", () => {
+  const note = { id: "note-1", title: "Ableitungsregeln", subject: "Mathe" };
+  const pages = [{ id: "p1", src: "data:image/jpeg;base64,AAA" }];
+  const answer = JSON.stringify({
+    homework: [{ title: "Aufgabe 4", subject: "Mathe", due: "2026-09-08" }],
+    exams: [],
+    terms: [{ term: "Ableitung", definition: "Steigung", subject: "Mathe" }],
+  });
+
+  it("schickt die Seiten als Bildteile und liefert geprüfte Funde", async () => {
+    let sent = null;
+    const result = await scanNote(note, {
+      renderPages: () => pages,
+      complete: async (payload) => {
+        sent = payload;
+        return { content: answer };
+      },
+      today,
+    });
+
+    expect(sent.messages).toHaveLength(2);
+    expect(sent.messages[0].role).toBe("system");
+    const parts = sent.messages[1].content;
+    expect(parts[0].type).toBe("text");
+    expect(parts[0].text).toContain("2026-09-04");
+    expect(parts[0].text).toContain("Ableitungsregeln");
+    expect(parts[1]).toEqual({
+      type: "image_url",
+      image_url: { url: "data:image/jpeg;base64,AAA" },
+    });
+    expect(result.events).toHaveLength(1);
+    expect(result.terms).toHaveLength(1);
+  });
+
+  it("schickt höchstens acht Seiten", async () => {
+    let sent = null;
+    await scanNote(note, {
+      renderPages: () =>
+        Array.from({ length: 12 }, (_, index) => ({ id: `p${index}`, src: `data:,${index}` })),
+      complete: async (payload) => {
+        sent = payload;
+        return { content: answer };
+      },
+      today,
+    });
+    const images = sent.messages[1].content.filter((part) => part.type === "image_url");
+    expect(images).toHaveLength(8);
+  });
+
+  it("ruft das Modell gar nicht auf, wenn die Notiz keine Seiten hat", async () => {
+    let called = false;
+    const result = await scanNote(note, {
+      renderPages: () => [],
+      complete: async () => {
+        called = true;
+        return { content: answer };
+      },
+      today,
+    });
+    expect(called).toBe(false);
+    expect(result).toEqual({ events: [], terms: [] });
+  });
+
+  it("wirft bei einer Antwort ohne brauchbares JSON", async () => {
+    await expect(
+      scanNote(note, {
+        renderPages: () => pages,
+        complete: async () => ({ content: "Ich kann das Bild nicht lesen." }),
+        today,
+      }),
+    ).rejects.toThrow(/JSON/);
   });
 });
