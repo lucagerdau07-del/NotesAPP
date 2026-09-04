@@ -47,6 +47,18 @@ function Editor({ activeNote, onBack }) {
     () => createBrowserRepository(globalThis.localStorage),
     [],
   );
+  const [imageDropRequest, setImageDropRequest] = useState(null);
+  useEffect(() => {
+    return browserBridge.subscribe((event) => {
+      if (event.type !== "image-drop") return;
+      setImageDropRequest({
+        id: `${Date.now()}-${Math.random()}`,
+        dataUrl: event.dataUrl,
+        x: event.x,
+        y: event.y,
+      });
+    });
+  }, [browserBridge]);
   const isPanelOpen = panelMode !== null;
   const navigationSequenceRef = useRef(0);
   const railWidthRef = useRef(railWidth);
@@ -236,6 +248,10 @@ function Editor({ activeNote, onBack }) {
           onCurrentPageChange={setCurrentPage}
           isImmersive={isImmersive}
           inkControllerRef={inkControllerRef}
+          imageDropRequest={imageDropRequest}
+          onImageDropHandled={(id) =>
+            setImageDropRequest((current) => (current?.id === id ? null : current))
+          }
         />
       </div>
     </div>

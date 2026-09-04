@@ -17,6 +17,8 @@ export default function SplitLayout({
   onCurrentPageChange,
   isImmersive,
   inkControllerRef,
+  imageDropRequest,
+  onImageDropHandled,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -110,6 +112,8 @@ export default function SplitLayout({
           railSlot={railSlot}
           onCurrentPageChange={onCurrentPageChange}
           isImmersive={isImmersive}
+          imageDropRequest={imageDropRequest}
+          onImageDropHandled={onImageDropHandled}
         />
         {layoutMode === "split" && (
           <WritingZone
