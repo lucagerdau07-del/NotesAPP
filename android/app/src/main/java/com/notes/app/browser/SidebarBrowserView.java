@@ -2,6 +2,7 @@ package com.notes.app.browser;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -25,6 +26,9 @@ public final class SidebarBrowserView {
   public interface Events {
     void emit(String type, String url, String title, String message);
   }
+
+  /** Marks a drag as "one of our images", so the drop side ignores unrelated system drags. */
+  static final String IMAGE_DRAG_LABEL = "notes-app-image";
 
   private final Activity activity;
   private final FrameLayout root;
@@ -65,6 +69,18 @@ public final class SidebarBrowserView {
       webView.setWebViewClient(new Client());
       webView.setWebChromeClient(new Chrome());
       webView.setDownloadListener((url, userAgent, disposition, mime, length) -> openExternal(url));
+      webView.setOnLongClickListener(v -> {
+        WebView.HitTestResult result = webView.getHitTestResult();
+        int type = result.getType();
+        if (type != WebView.HitTestResult.IMAGE_TYPE
+            && type != WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+          return false;
+        }
+        String imageUrl = result.getExtra();
+        if (imageUrl == null) return false;
+        ClipData clip = ClipData.newPlainText(IMAGE_DRAG_LABEL, imageUrl);
+        return webView.startDragAndDrop(clip, new ImageDragShadow(webView), null, 0);
+      });
       root.addView(webView);
       installBackHandler();
     }
@@ -152,5 +168,33 @@ public final class SidebarBrowserView {
   private final class Chrome extends WebChromeClient {
     @Override public void onReceivedTitle(WebView view, String title) { events.emit("title", view.getUrl(), title, null); state(); }
     @Override public boolean onCreateWindow(WebView view, boolean dialog, boolean userGesture, android.os.Message resultMsg) { return false; }
+  }
+
+  // ponytail: a plain rounded square, not a thumbnail of the actual dragged
+  // image — decoding the image synchronously on long-press would delay drag
+  // start. Upgrade path: decode a small thumbnail bitmap once HitTestResult
+  // gives us the URL, if the plain square ever feels wrong in practice.
+  private static final class ImageDragShadow extends View.DragShadowBuilder {
+    private static final int SIZE_DP = 72;
+    private final int sizePx;
+
+    ImageDragShadow(View view) {
+      super(view);
+      sizePx = Math.round(SIZE_DP * view.getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    public void onProvideShadowMetrics(android.graphics.Point outShadowSize, android.graphics.Point outShadowTouchPoint) {
+      outShadowSize.set(sizePx, sizePx);
+      outShadowTouchPoint.set(sizePx / 2, sizePx / 2);
+    }
+
+    @Override
+    public void onDrawShadow(android.graphics.Canvas canvas) {
+      android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+      paint.setColor(Color.argb(200, 62, 123, 216));
+      float radius = sizePx * 0.18f;
+      canvas.drawRoundRect(new android.graphics.RectF(0, 0, sizePx, sizePx), radius, radius, paint);
+    }
   }
 }
