@@ -33,6 +33,7 @@ describe('readImageObjectSourceFromDataUrl', () => {
     try {
       const original = 'data:image/png;base64,AAAA';
       const toDataURL = HTMLCanvasElement.prototype.toDataURL;
+      toDataURL.mockClear();
       const result = await readImageObjectSourceFromDataUrl(original);
       expect(result.width).toBe(1400);
       expect(result.height).toBe(700);
@@ -46,6 +47,7 @@ describe('readImageObjectSourceFromDataUrl', () => {
     const restore = stubImage(2000, 1000);
     try {
       const toDataURL = HTMLCanvasElement.prototype.toDataURL;
+      toDataURL.mockClear();
       await readImageObjectSourceFromDataUrl('data:image/jpeg;base64,AAAA');
       expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.85);
     } finally {

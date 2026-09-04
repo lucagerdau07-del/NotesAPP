@@ -75,7 +75,9 @@ public class SidebarBrowserPlugin extends Plugin {
       }
       case DragEvent.ACTION_DROP: {
         if (event.getClipData() == null || event.getClipData().getItemCount() == 0) return false;
-        String imageUrl = event.getClipData().getItemAt(0).getText().toString();
+        CharSequence clipText = event.getClipData().getItemAt(0).getText();
+        if (clipText == null) return false;
+        String imageUrl = clipText.toString();
         float density = getActivity().getResources().getDisplayMetrics().density;
         double x = ImageDropHandler.toCssPixels(event.getX(), density);
         double y = ImageDropHandler.toCssPixels(event.getY(), density);

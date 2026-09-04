@@ -1264,6 +1264,8 @@ export default function DocumentView({
   // x/y are already viewport CSS px, the same space a PointerEvent's
   // clientX/clientY would be in, so the same relativePoint+mapViewportPoint
   // pipeline that places click-dragged shapes places this too.
+  // Deliberately keyed on imageDropRequest alone: it only needs to fire when a
+  // new request identity arrives, and closes over this render's pageLayout/insertObject.
   useEffect(() => {
     if (!imageDropRequest) return undefined;
     let cancelled = false;
