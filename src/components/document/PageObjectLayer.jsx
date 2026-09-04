@@ -51,7 +51,7 @@ function useDrag(onCommit) {
   const [draft, setDraft] = useState(null);
   const gesture = useRef(null);
 
-  const start = (event, object, mode, zoom) => {
+  const start = (event, object, mode, zoom, center = null) => {
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -61,6 +61,7 @@ function useDrag(onCommit) {
       zoom,
       startX: event.clientX,
       startY: event.clientY,
+      center,
       object,
     };
     setDraft(object);
@@ -69,9 +70,29 @@ function useDrag(onCommit) {
   const move = (event) => {
     const active = gesture.current;
     if (!active || active.pointerId !== event.pointerId) return;
+    const { object, mode } = active;
+
+    if (mode === "rotate") {
+      const cx = active.center?.x ?? active.startX;
+      const cy = active.center?.y ?? active.startY;
+      const rawDeg =
+        (Math.atan2(event.clientY - cy, event.clientX - cx) * 180) / Math.PI + 90;
+      let normalized = ((rawDeg % 360) + 360) % 360;
+
+      // Cardinal snapping (+/- 4 degrees)
+      const SNAP_TOLERANCE = 4;
+      for (const cardinal of [0, 90, 180, 270, 360]) {
+        if (Math.abs(normalized - cardinal) <= SNAP_TOLERANCE) {
+          normalized = cardinal % 360;
+          break;
+        }
+      }
+      setDraft({ ...object, rotation: Math.round(normalized) });
+      return;
+    }
+
     const dx = (event.clientX - active.startX) / active.zoom;
     const dy = (event.clientY - active.startY) / active.zoom;
-    const { object, mode } = active;
     if (mode === "move")
       setDraft({ ...object, x: object.x + dx, y: object.y + dy });
     else if (mode === "start")
@@ -97,8 +118,12 @@ function useDrag(onCommit) {
     const committed = draft;
     setDraft(null);
     if (committed) {
-      const { x, y, width, height } = committed;
-      onCommit?.(active.object.id, { x, y, width, height });
+      if (active.mode === "rotate") {
+        onCommit?.(active.object.id, { rotation: committed.rotation ?? 0 });
+      } else {
+        const { x, y, width, height } = committed;
+        onCommit?.(active.object.id, { x, y, width, height });
+      }
     }
   };
 
@@ -339,6 +364,46 @@ function Handle({ position, onPointerDown }) {
   );
 }
 
+function RotateHandle({ position, onPointerDown }) {
+  return (
+    <div
+      data-testid="rotate-handle"
+      onPointerDown={onPointerDown}
+      style={{
+        position: "absolute",
+        left: position.left,
+        top: position.top,
+        transform: "translate(-50%, -100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        pointerEvents: "auto",
+        cursor: "grab",
+        touchAction: "none",
+        zIndex: 10,
+      }}
+    >
+      <div
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: "50%",
+          background: "#fff",
+          border: "2px solid #3E7BD8",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+        }}
+      />
+      <div
+        style={{
+          width: 1.5,
+          height: 14,
+          background: "#3E7BD8",
+        }}
+      />
+    </div>
+  );
+}
+
 function IconButton({ label, onClick, disabled = false, children }) {
   return (
     <button
@@ -432,6 +497,8 @@ export default function PageObjectLayer({
               pointerEvents: "auto",
               touchAction: "none",
               cursor: "move",
+              transform: `rotate(${object.rotation || 0}deg)`,
+              transformOrigin: "50% 50%",
               outline: isSelected ? "1.5px solid #3E7BD8" : "none",
               outlineOffset: 3,
             }}
@@ -483,6 +550,20 @@ export default function PageObjectLayer({
                   }}
                   onPointerDown={(event) => drag.start(event, object, "end", zoom)}
                 />
+                {object.type !== "arrow" && object.type !== "line" && (
+                  <RotateHandle
+                    position={{
+                      left: (bounds.width * zoom) / 2,
+                      top: 0,
+                    }}
+                    onPointerDown={(event) => {
+                      const rect = event.currentTarget.parentElement?.getBoundingClientRect();
+                      const cx = rect ? rect.left + rect.width / 2 : event.clientX;
+                      const cy = rect ? rect.top + rect.height / 2 : event.clientY;
+                      drag.start(event, object, "rotate", zoom, { x: cx, y: cy });
+                    }}
+                  />
+                )}
                 <div
                   style={{
                     position: "absolute",

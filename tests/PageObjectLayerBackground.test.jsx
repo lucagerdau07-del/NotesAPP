@@ -76,4 +76,42 @@ describe("PageObjectLayer image background toolbar", () => {
     expect(wandBtn).toBeInTheDocument();
     expect(wandBtn).toBeDisabled();
   });
+
+  it("renders rotation handle when 2D element is selected", () => {
+    render(
+      <PageObjectLayer
+        objects={[mockImageObject]}
+        selectedId="img-1"
+        pageLayout={pageLayout}
+        mapOrigin={mapOrigin}
+      />
+    );
+
+    const rotateHandle = screen.getByTestId("rotate-handle");
+    expect(rotateHandle).toBeInTheDocument();
+  });
+
+  it("updates object rotation when dragging rotate handle", () => {
+    const onChange = vi.fn();
+    render(
+      <PageObjectLayer
+        objects={[mockImageObject]}
+        selectedId="img-1"
+        pageLayout={pageLayout}
+        mapOrigin={mapOrigin}
+        onChange={onChange}
+      />
+    );
+
+    const layer = screen.getByTestId("page-object-layer");
+    const rotateHandle = screen.getByTestId("rotate-handle");
+
+    // Center of mockImageObject (x: 50, y: 50, w: 200, h: 150) is (150, 125)
+    fireEvent.pointerDown(rotateHandle, { clientX: 150, clientY: 40, pointerId: 1 });
+    // Drag to right of center (e.g. clientX: 250, clientY: 125) -> should be 90 degrees
+    fireEvent.pointerMove(layer, { clientX: 250, clientY: 125, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 250, clientY: 125, pointerId: 1 });
+
+    expect(onChange).toHaveBeenCalledWith("img-1", expect.objectContaining({ rotation: expect.any(Number) }));
+  });
 });
