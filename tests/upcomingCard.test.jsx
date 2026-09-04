@@ -25,6 +25,23 @@ describe("UpcomingCard", () => {
     expect(screen.getByTestId("upcoming-b")).toHaveAttribute("data-kind", "exam");
   });
 
+  it("zeigt die Quellnotiz und den vollständigen Termin-Kontext", () => {
+    render(
+      <UpcomingCard
+        events={[{ ...events[0], sourceNoteId: "note-1" }]}
+        sourceNoteTitles={{ "note-1": "Ableitungsregeln" }}
+        onToggle={() => {}}
+      />,
+    );
+
+    const event = screen.getByTestId("upcoming-a");
+    expect(event).toHaveTextContent("Hausaufgabe · Mathe · Di 8.9.");
+    expect(event).toHaveTextContent("Quelle: Ableitungsregeln");
+    expect(event).toHaveAccessibleName(
+      /Hausaufgabe.*Aufgabe 4a-c.*Mathe.*Di 8\.9\..*Ableitungsregeln.*als erledigt abhaken/i,
+    );
+  });
+
   it("meldet einen Klick als Abhaken", () => {
     const onToggle = vi.fn();
     render(<UpcomingCard events={events} onToggle={onToggle} />);

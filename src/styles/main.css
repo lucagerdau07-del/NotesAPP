@@ -2437,6 +2437,13 @@ body::after {
   text-transform: uppercase;
   white-space: nowrap;
 }
+.upcoming-source {
+  overflow: hidden;
+  font: 500 10px/1.3 Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.58);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .agent-card-new {
   animation: agent-card-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);

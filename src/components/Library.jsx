@@ -2939,7 +2939,8 @@ export default function Library({
     when: "importiert",
     body: `${note.pages?.length || 1} ${(note.pages?.length || 1) === 1 ? "Seite" : "Seiten"} · ${note.source?.type === "pdf" ? "PDF" : "Bild"}`,
   }));
-  const createdCards = browserNoteRepository.listNotes().map((note) => ({
+  const knowledgeNotes = browserNoteRepository.listNotes();
+  const createdCards = knowledgeNotes.map((note) => ({
     ...note,
     type: "canvas-preview",
     dot: dotForSubject(note.subject),
@@ -2950,8 +2951,12 @@ export default function Library({
       previewTextOf(note.id) ||
       (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
   }));
-  const knowledgeNotes = browserNoteRepository.listNotes();
   const untisSubjects = [...new Set(untisLessons.map((lesson) => lesson.subject).filter(Boolean))];
+  const sourceNoteTitles = Object.fromEntries(
+    knowledgeNotes
+      .filter((note) => note.id && note.title)
+      .map((note) => [note.id, note.title]),
+  );
   const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects });
   const allNotes = [...importedCards, ...createdCards];
 
@@ -3714,7 +3719,11 @@ export default function Library({
             {knowledge.isScanning && <span className="agent-badge">SCAN LÄUFT</span>}
           </div>
           <div className="agent-panel-body">
-            <UpcomingCard events={knowledge.openEvents} onToggle={knowledge.setEventDone} />
+            <UpcomingCard
+              events={knowledge.openEvents}
+              sourceNoteTitles={sourceNoteTitles}
+              onToggle={knowledge.setEventDone}
+            />
           </div>
         </div>
       </div>
