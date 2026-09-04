@@ -1,5 +1,8 @@
 package com.notes.app.browser;
 
+import android.content.ClipDescription;
+import android.view.DragEvent;
+import android.view.View;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -56,4 +59,44 @@ public class SidebarBrowserPlugin extends Plugin {
   @Override protected void handleOnPause() { if (host != null) getActivity().runOnUiThread(() -> host.pause()); }
   @Override protected void handleOnResume() { if (host != null) getActivity().runOnUiThread(() -> host.resume()); }
   @Override protected void handleOnDestroy() { if (host != null) { host.destroy(); host = null; } }
+
+  @Override
+  public void load() {
+    super.load();
+    getActivity().runOnUiThread(() -> getBridge().getWebView().setOnDragListener(this::handleDrag));
+  }
+
+  private boolean handleDrag(View view, DragEvent event) {
+    switch (event.getAction()) {
+      case DragEvent.ACTION_DRAG_STARTED: {
+        ClipDescription description = event.getClipDescription();
+        return description != null
+            && SidebarBrowserView.IMAGE_DRAG_LABEL.equals(description.getLabel());
+      }
+      case DragEvent.ACTION_DROP: {
+        if (event.getClipData() == null || event.getClipData().getItemCount() == 0) return false;
+        String imageUrl = event.getClipData().getItemAt(0).getText().toString();
+        float density = getActivity().getResources().getDisplayMetrics().density;
+        double x = ImageDropHandler.toCssPixels(event.getX(), density);
+        double y = ImageDropHandler.toCssPixels(event.getY(), density);
+        new Thread(() -> {
+          String dataUrl = ImageDropHandler.downloadAsDataUrl(imageUrl);
+          if (dataUrl == null) return;
+          getActivity().runOnUiThread(() -> emitImageDrop(dataUrl, x, y));
+        }).start();
+        return true;
+      }
+      default:
+        return true;
+    }
+  }
+
+  private void emitImageDrop(String dataUrl, double x, double y) {
+    JSObject data = new JSObject();
+    data.put("type", "image-drop");
+    data.put("dataUrl", dataUrl);
+    data.put("x", x);
+    data.put("y", y);
+    notifyListeners("browserEvent", data);
+  }
 }
