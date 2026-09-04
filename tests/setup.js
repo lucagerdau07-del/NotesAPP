@@ -148,6 +148,7 @@ function createCanvasContext() {
     beginPath: vi.fn(),
     clearRect: vi.fn(),
     closePath: vi.fn(),
+    drawImage: vi.fn(),
     lineTo: vi.fn(),
     moveTo: vi.fn(),
     scale: vi.fn(),
