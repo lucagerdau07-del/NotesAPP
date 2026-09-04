@@ -32,8 +32,7 @@ function readAsDataUrl(file) {
 
 // PNG keeps transparency for screenshots and diagrams; photos would only bloat
 // as PNG, so anything not already a PNG comes back as JPEG.
-export async function readImageObjectSource(file) {
-  const original = await readAsDataUrl(file);
+async function fitAndEncode(original, preferPng) {
   const image = await loadImage(original);
   const size = fitInside(image.naturalWidth, image.naturalHeight);
   if (size.width === image.naturalWidth && size.height === image.naturalHeight)
@@ -45,6 +44,17 @@ export async function readImageObjectSource(file) {
   const context = canvas.getContext("2d");
   if (!context) return { src: original, ...size };
   context.drawImage(image, 0, 0, size.width, size.height);
-  const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+  const type = preferPng ? "image/png" : "image/jpeg";
   return { src: canvas.toDataURL(type, 0.85), ...size };
+}
+
+export async function readImageObjectSource(file) {
+  const original = await readAsDataUrl(file);
+  return fitAndEncode(original, file.type === "image/png");
+}
+
+// For images that already arrive as a data URL (e.g. downloaded natively from
+// the internal browser) — same fit/encode pipeline, minus the FileReader step.
+export async function readImageObjectSourceFromDataUrl(dataUrl) {
+  return fitAndEncode(dataUrl, /^data:image\/png/i.test(dataUrl));
 }
