@@ -160,8 +160,25 @@ export function previewTextOf(documentId) {
 }
 
 function drawPreviewObject(context, object) {
+  const left = Math.min(object.x, object.x + object.width);
+  const top = Math.min(object.y, object.y + object.height);
+  const w = Math.abs(object.width);
+  const h = Math.abs(object.height);
+
+  if (object.rotation) {
+    context.save();
+    const cx = left + w / 2;
+    const cy = top + h / 2;
+    context.translate(cx, cy);
+    context.rotate((object.rotation * Math.PI) / 180);
+    context.translate(-cx, -cy);
+  }
+
   if (object.type === "text") {
-    if (!object.text.trim()) return;
+    if (!object.text.trim()) {
+      if (object.rotation) context.restore();
+      return;
+    }
     context.save();
     context.fillStyle = object.color;
     context.font = `${object.bold ? "700" : "400"} ${object.italic ? "italic " : ""}${object.fontSize}px ${fontStackOf(object.fontFamily)}`;
@@ -171,26 +188,29 @@ function drawPreviewObject(context, object) {
       .split("\n")
       .forEach((line, index) => context.fillText(line, object.x, object.y + index * lineHeight));
     context.restore();
+    if (object.rotation) context.restore();
     return;
   }
 
-  const left = Math.min(object.x, object.x + object.width);
-  const top = Math.min(object.y, object.y + object.height);
-  const w = Math.abs(object.width);
-  const h = Math.abs(object.height);
-
   if (object.type === "image" || object.type === "fill") {
     const image = getCachedPreviewImage(object.src);
-    if (!image) return;
+    if (!image) {
+      if (object.rotation) context.restore();
+      return;
+    }
     context.save();
     context.drawImage(image, left, top, w, h);
     context.restore();
+    if (object.rotation) context.restore();
     return;
   }
 
   // A link's pill-shaped label isn't meaningful at thumbnail scale - skipped,
   // same as before.
-  if (object.type === "link") return;
+  if (object.type === "link") {
+    if (object.rotation) context.restore();
+    return;
+  }
 
   context.save();
   context.strokeStyle = object.color;
@@ -217,6 +237,7 @@ function drawPreviewObject(context, object) {
     context.stroke();
   }
   context.restore();
+  if (object.rotation) context.restore();
 }
 
 // Renders one page (strokes + shapes/text + ruling) into a PNG data URL at
