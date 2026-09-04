@@ -1,9 +1,9 @@
 .canva-layer-drawer {
   position: absolute;
   left: 68px;
-  top: 14px;
-  bottom: 14px;
-  width: 284px;
+  top: 78px;
+  bottom: 20px;
+  width: 296px;
   background: linear-gradient(170deg, rgba(28, 28, 34, 0.92) 0%, rgba(14, 14, 18, 0.96) 100%);
   backdrop-filter: blur(28px) saturate(1.8);
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
