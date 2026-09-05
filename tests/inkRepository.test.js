@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createInkDocument, createInkHistory } from '../src/ink/inkDocument.js';
+import { createInkDocument, createInkHistory, executeInkCommand } from '../src/ink/inkDocument.js';
 import { createInkRepository } from '../src/ink/inkRepository.js';
 
 function createMemoryStorage(initial = {}) {
@@ -32,14 +32,67 @@ const defaultPreferences = {
   eraserMode: 'pixel',
 };
 
+function strokeOf(id, pageId = 'note-1-page-1', pointCount = 100) {
+  return {
+    id,
+    pageId,
+    tool: 'pen',
+    color: '#111111',
+    width: 3,
+    opacity: 1,
+    points: Array.from({ length: pointCount }, (_, i) => ({ x: i * 1.5237, y: i * 2.7391 })),
+  };
+}
+
 describe('ink repository', () => {
-  it('round-trips a valid bounded history', () => {
+  it('round-trips the current document, keeping it editable', () => {
     const storage = createMemoryStorage();
     const repository = createInkRepository(storage);
     const history = validHistory();
 
     expect(repository.saveHistory('note-1', history)).toBe(true);
-    expect(repository.loadHistory('note-1')).toEqual(history);
+    expect(repository.loadHistory('note-1').present).toEqual(history.present);
+  });
+
+  // The undo stack holds up to `limit` FULL document snapshots, so persisting
+  // it stores ~N^2/2 stroke copies for an N-stroke note. That filled the whole
+  // 5MB origin quota off a single note, after which every document's save
+  // failed with QuotaExceededError - silently, since saveSafely swallows it.
+  it('does not persist the undo stack, so storage stays linear in stroke count', () => {
+    const storage = createMemoryStorage();
+    const repository = createInkRepository(storage);
+    let history = createInkHistory(createInkDocument('note-1'));
+    for (let i = 0; i < 60; i++) {
+      history = executeInkCommand(history, { type: 'commit-stroke', stroke: strokeOf(`s${i}`) });
+    }
+    expect(history.past.length).toBe(60);
+
+    repository.saveHistory('note-1', history);
+    const written = storage.getItem('notes-app:ink:note-1');
+    const oneSnapshot = JSON.stringify(history.present).length;
+
+    // Whole-history serialization would be ~30x a single snapshot here.
+    expect(written.length).toBeLessThan(oneSnapshot * 1.2);
+    expect(repository.loadHistory('note-1').present.strokes).toHaveLength(60);
+  });
+
+  it('reloads a note with an empty undo stack rather than ancient states', () => {
+    const storage = createMemoryStorage();
+    const repository = createInkRepository(storage);
+
+    repository.saveHistory('note-1', validHistory());
+
+    expect(repository.loadHistory('note-1')).toMatchObject({ past: [], future: [] });
+  });
+
+  // Devices already carry bloated whole-history blobs; they must keep opening,
+  // and the next save then rewrites them compactly and frees the quota.
+  it('still loads legacy blobs that contain the whole history', () => {
+    const document = createInkDocument('note-1');
+    const legacy = { past: [document], present: document, future: [document], limit: 100 };
+    const storage = createMemoryStorage({ 'notes-app:ink:note-1': JSON.stringify(legacy) });
+
+    expect(createInkRepository(storage).loadHistory('note-1').present).toEqual(document);
   });
 
   it('returns null for malformed JSON without throwing', () => {
@@ -81,7 +134,9 @@ describe('ink repository', () => {
     expect(createInkRepository(storage).loadHistory('note-1')).toBeNull();
   });
 
-  it.each(['past', 'future'])('rejects malformed documents in the %s history snapshot', slot => {
+  // The undo slots are no longer written or read, so junk left in a legacy
+  // blob must not cost the user the drawing that sits next to it.
+  it.each(['past', 'future'])('keeps the document when the legacy %s slot is malformed', slot => {
     const history = validHistory();
     history[slot] = [{
       ...history[slot][0],
@@ -99,7 +154,7 @@ describe('ink repository', () => {
       'notes-app:ink:note-1': JSON.stringify(history)
     });
 
-    expect(createInkRepository(storage).loadHistory('note-1')).toBeNull();
+    expect(createInkRepository(storage).loadHistory('note-1').present).toEqual(history.present);
   });
 
   it('round-trips full preferences independently for each note', () => {

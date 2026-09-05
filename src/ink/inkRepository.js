@@ -89,6 +89,12 @@ function isValidSnapshot(document, documentId) {
   );
 }
 
+// Only the current document is persisted. The undo stack holds up to `limit`
+// FULL document snapshots, so writing it stored ~N^2/2 stroke copies for an
+// N-stroke note - one 76-stroke note filled the entire 5MB origin quota, after
+// which every note's save threw QuotaExceededError and was swallowed silently.
+// Undo/redo still works in memory for the whole session; it just no longer
+// survives a restart, which nothing relied on.
 function isValidHistory(value, documentId) {
   return (
     value !== null &&
@@ -96,13 +102,7 @@ function isValidHistory(value, documentId) {
     !Array.isArray(value) &&
     Number.isInteger(value.limit) &&
     value.limit >= 0 &&
-    Array.isArray(value.past) &&
-    value.past.length <= value.limit &&
-    Array.isArray(value.future) &&
-    value.future.length <= value.limit &&
-    isValidSnapshot(value.present, documentId) &&
-    value.past.every((snapshot) => isValidSnapshot(snapshot, documentId)) &&
-    value.future.every((snapshot) => isValidSnapshot(snapshot, documentId))
+    isValidSnapshot(value.present, documentId)
   );
 }
 
@@ -111,8 +111,11 @@ export function createInkRepository(storage) {
     loadHistory(documentId) {
       const id = String(documentId);
       try {
-        const history = JSON.parse(storage.getItem(historyKey(id)));
-        return isValidHistory(history, id) ? history : null;
+        const stored = JSON.parse(storage.getItem(historyKey(id)));
+        if (!isValidHistory(stored, id)) return null;
+        // Blobs written before the quota fix carry past/future snapshots too;
+        // they load fine, and the next save rewrites them compactly.
+        return { past: [], present: stored.present, future: [], limit: stored.limit };
       } catch {
         return null;
       }
@@ -122,9 +125,15 @@ export function createInkRepository(storage) {
       const id = String(documentId);
       try {
         if (!isValidHistory(history, id)) return false;
-        storage.setItem(historyKey(id), JSON.stringify(history));
+        storage.setItem(
+          historyKey(id),
+          JSON.stringify({ present: history.present, limit: history.limit }),
+        );
         return true;
-      } catch {
+      } catch (error) {
+        // A full quota used to fail silently here, so a note could look saved
+        // while nothing was written. Keep it visible.
+        console.warn("[ink] saveHistory failed", error);
         return false;
       }
     },
