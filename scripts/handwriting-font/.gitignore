@@ -1,5 +1,6 @@
 .pytest_cache/
 .pytest_tmp/
-handwriting.json
+__pycache__/
+handwriting*.json
 glyphs/
 *.ttf

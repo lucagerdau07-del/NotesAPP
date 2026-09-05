@@ -11,7 +11,7 @@ import sys
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.ttLib import TTFont
 
-from layout import variant_base_names
+from layout import variant_base_names, LIGATURES
 
 VARIANT_COUNT = 3  # 1 = the base/encoded glyph (no substitution), 2 and 3 are extra
 
@@ -25,7 +25,7 @@ def variant_index(prev_name, curr_name):
     return total % VARIANT_COUNT
 
 
-def build_feature_text(letter_names):
+def build_feature_text(letter_names, ligatures=()):
     lines = []
     for prev in letter_names:
         for curr in letter_names:
@@ -34,17 +34,42 @@ def build_feature_text(letter_names):
                 continue
             lines.append(f"    sub {prev} {curr}' by {curr}.v{v + 1};")
     body = "\n".join(lines)
-    return f"feature calt {{\n{body}\n}} calt;\n"
+    calt = f"feature calt {{\n{body}\n}} calt;\n"
+
+    if not ligatures:
+        return calt
+
+    # feaLib compiles a fresh GSUB from this .fea text, replacing the whole
+    # table — so the `liga` feature build_font.py already wrote via
+    # FontForge's native API has to be re-declared here too, or it's lost.
+    liga_lines = "\n".join(
+        f"    sub {' '.join(sequence)} by {lig_name};" for sequence, lig_name in ligatures
+    )
+    liga = f"feature liga {{\n{liga_lines}\n}} liga;\n"
+
+    return liga + "\n" + calt
 
 
-def apply_variant_feature(font_path, letter_names=None):
+def apply_variant_feature(font_path, letter_names=None, ligatures=None):
     letter_names = letter_names if letter_names is not None else variant_base_names()
+    ligatures = ligatures if ligatures is not None else LIGATURES
     font = TTFont(font_path)
     existing_glyphs = set(font.getGlyphOrder())
-    # Only reference variant glyphs that actually exist — captures are
-    # incremental, so v2/v3 may not all be there yet.
-    usable = [name for name in letter_names if f"{name}.v2" in existing_glyphs]
-    fea = build_feature_text(usable)
+    # Only rotate letters that have BOTH extra variants — captures are
+    # incremental, and variant_index() can pick either one.
+    usable = [
+        name
+        for name in letter_names
+        if f"{name}.v2" in existing_glyphs and f"{name}.v3" in existing_glyphs
+    ]
+    # Only re-declare ligatures whose glyphs actually exist in this font
+    # (keeps this function usable against small/synthetic test fonts too).
+    usable_ligatures = [
+        (sequence, lig_name)
+        for sequence, lig_name in ligatures
+        if lig_name in existing_glyphs and all(c in existing_glyphs for c in sequence)
+    ]
+    fea = build_feature_text(usable, usable_ligatures)
     addOpenTypeFeaturesFromString(font, fea)
     font.save(font_path)
     return len(usable)

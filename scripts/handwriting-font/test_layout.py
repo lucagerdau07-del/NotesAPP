@@ -54,6 +54,14 @@ def test_variant_glyph_names_are_unique_and_disjoint_from_cell_names():
     assert not (set(names) & set(cell_names()))
 
 
+def test_no_glyph_name_is_purely_numeric():
+    # A bare-digit glyph name ("0", "1", ...) parses as a CID/number
+    # reference in AFDKO feature syntax, not a glyph name — breaks
+    # generate_variant_feature.py's generated calt rules.
+    for name, _char in GLYPHS:
+        assert not name.isdigit(), name
+
+
 def test_variant_template_size_covers_every_variant_cell():
     names = variant_glyph_names()
     width, height = variant_template_size()

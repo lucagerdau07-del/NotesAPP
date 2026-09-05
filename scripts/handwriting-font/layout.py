@@ -14,6 +14,21 @@ _PUNCTUATION = {
     "quotedbl": '"',
     "hyphen": "-",
 }
+# Standard PostScript digit names — a bare "0".."9" glyph name parses as a
+# CID/number reference in AFDKO feature syntax (used by generate_variant_
+# feature.py), not a glyph name, even when backslash-escaped.
+_DIGITS = {
+    "zero": "0",
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+}
 _GERMAN = {
     "adieresis": "ä",
     "odieresis": "ö",
@@ -30,7 +45,7 @@ _GERMAN = {
 GLYPHS = (
     [(chr(c), chr(c)) for c in range(ord("a"), ord("z") + 1)]
     + [(chr(c) + "_upper", chr(c)) for c in range(ord("A"), ord("Z") + 1)]
-    + [(chr(c), chr(c)) for c in range(ord("0"), ord("9") + 1)]
+    + list(_DIGITS.items())
     + list(_PUNCTUATION.items())
     + list(_GERMAN.items())
 )

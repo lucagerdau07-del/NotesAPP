@@ -44,6 +44,11 @@ def build(svg_dir, output_path):
     glyph_by_char = {}
     for name, char in GLYPHS:
         glyph = font.createMappedChar(ord(char))
+        # createMappedChar renames the glyph to the standard AGL name for its
+        # codepoint (e.g. "A_upper" -> "A") unless we pin it back — variant
+        # glyph names ("A_upper.v2") and the calt feature both key off our
+        # own layout.py names, not FontForge's.
+        glyph.glyphname = name
         import_glyph_from_svg(glyph, f"{svg_dir}/{name}.svg")
         glyph_by_char[char] = glyph
 
