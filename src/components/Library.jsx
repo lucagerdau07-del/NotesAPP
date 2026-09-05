@@ -29,6 +29,7 @@ import {
   FileUp,
   Trash2,
   CalendarDays,
+  Pencil,
 } from "lucide-react";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
@@ -41,6 +42,8 @@ import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
+import { browserFolderRepository } from "../storage/folderRepository.js";
+import { FOLDER_ICONS } from "./folderIcons.js";
 import {
   notePageStyleOf,
   previewTextOf,
@@ -49,6 +52,7 @@ import {
   subscribeToPreviewImages,
 } from "../documents/notePreview.js";
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
+import FolderDialog from "./FolderDialog.jsx";
 import UpcomingCard from "./UpcomingCard.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
@@ -99,6 +103,18 @@ function dotForSubject(subjectName) {
     (s) => s.name.toLowerCase() === String(subjectName || "").toLowerCase(),
   );
   return match?.themeColor || "#FFFFFF";
+}
+
+function matchesFolder(note, folder) {
+  const subject = String(note?.subject || "").toLowerCase();
+  return (
+    !!subject &&
+    (subject === folder.name.toLowerCase() || subject === folder.id.toLowerCase())
+  );
+}
+
+function countInFolder(folder, notes) {
+  return notes.filter((n) => matchesFolder(n, folder)).length;
 }
 
 const MINUTE = 60 * 1000;
@@ -808,6 +824,72 @@ function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
           }}
         >
           {s.count}
+        </span>
+      </div>
+    </TileWrap>
+  );
+}
+
+function GenericFolderTile({ folder, count, onOpen }) {
+  const Icon = FOLDER_ICONS[folder.icon] || FOLDER_ICONS.book;
+  const color = folder.color || "#8AD4FF";
+  return (
+    <TileWrap
+      onOpen={onOpen}
+      w={150}
+      h={148}
+      bg={`linear-gradient(155deg, ${color}33, #0B0C10 75%)`}
+      testId={`folder-tile-${folder.id}`}
+    >
+      <div style={{ position: "absolute", left: 18, top: 16, color }}>
+        <Icon size={22} />
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 18,
+          right: 14,
+          bottom: 44,
+          font: '800 20px "Bricolage Grotesque",sans-serif',
+          color: "#FFFFFF",
+        }}
+      >
+        {folder.name}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 18,
+          bottom: 22,
+          font: "600 9.5px ui-monospace,monospace",
+          letterSpacing: ".1em",
+          color: "#FFFFFF",
+          opacity: 0.7,
+        }}
+      >
+        {count} {count === 1 ? "NOTIZ" : "NOTIZEN"}
+      </div>
+    </TileWrap>
+  );
+}
+
+function AddFolderTile({ onOpen }) {
+  return (
+    <TileWrap onOpen={onOpen} w={150} h={148} bg="rgba(255,255,255,.04)" testId="folder-tile-add">
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+      >
+        <Plus size={22} color="#FFFFFF" />
+        <span style={{ font: "600 11px ui-monospace,monospace", color: "#FFFFFF", opacity: 0.7 }}>
+          NEUER ORDNER
         </span>
       </div>
     </TileWrap>
@@ -2865,6 +2947,7 @@ export default function Library({
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
   const [detailNote, setDetailNote] = useState(null);
+  const [folderDialog, setFolderDialog] = useState(null); // null | "create" | { mode: "rename", folder }
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
 
@@ -2932,14 +3015,39 @@ export default function Library({
     showToast("An den Agenten übergeben");
   };
 
-  const handleToggleSubject = (subject) => {
-    if (selectedSubject?.id === subject.id) {
-      setSelectedSubject(null);
-      showToast("Alle Fächer werden angezeigt");
-    } else {
-      setSelectedSubject(subject);
-      showToast(`Fach ausgewählt: ${subject.name}`);
+  const handleOpenFolder = (folder) => setSelectedSubject(folder);
+
+  const handleCreateFolder = ({ name, color, icon }) => {
+    browserFolderRepository.createFolder({ name, color, icon });
+    setFolderDialog(null);
+  };
+
+  const handleRenameFolder = (folder, { name, color, icon }) => {
+    const updated = browserFolderRepository.renameFolder(folder.id, { name, color, icon });
+    // Notes are matched to a folder by subject name (see matchesFolder), so a
+    // rename must carry existing notes along or they'd silently fall out of
+    // the folder.
+    if (name && name !== folder.name) {
+      knowledgeNotes
+        .filter((n) => matchesFolder(n, folder))
+        .forEach((n) => browserNoteRepository.saveNote({ id: n.id, subject: name }));
     }
+    setSelectedSubject(updated);
+    setFolderDialog(null);
+  };
+
+  const handleDeleteFolder = (folder) => {
+    const count = countInFolder(folder, knowledgeNotes);
+    const message =
+      count > 0
+        ? `Ordner "${folder.name}" und ${count} ${count === 1 ? "Notiz" : "Notizen"} werden endgültig gelöscht. Fortfahren?`
+        : `Ordner "${folder.name}" wirklich löschen?`;
+    if (!globalThis.confirm(message)) return;
+    knowledgeNotes
+      .filter((n) => matchesFolder(n, folder))
+      .forEach((n) => browserNoteRepository.removeNote(n.id));
+    browserFolderRepository.removeFolder(folder.id);
+    setSelectedSubject(null);
   };
 
   const cycleSort = () => {
@@ -2963,6 +3071,7 @@ export default function Library({
     body: `${note.pages?.length || 1} ${(note.pages?.length || 1) === 1 ? "Seite" : "Seiten"} · ${note.source?.type === "pdf" ? "PDF" : "Bild"}`,
   }));
   const knowledgeNotes = browserNoteRepository.listNotes();
+  const folders = browserFolderRepository.listFolders();
   const createdCards = knowledgeNotes.map((note) => ({
     ...note,
     type: "canvas-preview",
@@ -2985,12 +3094,7 @@ export default function Library({
 
   // Filter notes by selected subject and search query
   const filteredNotes = allNotes.filter((n) => {
-    const matchesSubject =
-      !selectedSubject ||
-      (n.subject &&
-        n.subject.toLowerCase() === selectedSubject.name.toLowerCase()) ||
-      (n.subject &&
-        n.subject.toLowerCase() === selectedSubject.id.toLowerCase());
+    const matchesSubject = !selectedSubject || matchesFolder(n, selectedSubject);
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -3610,58 +3714,153 @@ export default function Library({
           transition: "left 0.42s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        {/* Header: Library Title */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-end",
-            gap: 15,
-            margin: "0 0 18px",
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              font: '800 46px/.92 "Bricolage Grotesque",sans-serif',
-              letterSpacing: "-.035em",
-              color: "#FFFFFF",
-            }}
-          >
-            Bibliothek
-          </h2>
-          <span
-            style={{
-              font: "600 10.5px ui-monospace,monospace",
-              letterSpacing: ".11em",
-              color: "#FFFFFF",
-              paddingBottom: 8,
-            }}
-          >
-            {SUBJECTS.length} FÄCHER ·{" "}
-            {SUBJECTS.reduce((a, s) => a + s.count, 0)} NOTIZEN
-          </span>
-        </div>
+        {!selectedSubject && (
+          <>
+            {/* Header: Library Title */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: 15,
+                margin: "0 0 18px",
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  font: '800 46px/.92 "Bricolage Grotesque",sans-serif',
+                  letterSpacing: "-.035em",
+                  color: "#FFFFFF",
+                }}
+              >
+                Bibliothek
+              </h2>
+              <span
+                style={{
+                  font: "600 10.5px ui-monospace,monospace",
+                  letterSpacing: ".11em",
+                  color: "#FFFFFF",
+                  paddingBottom: 8,
+                }}
+              >
+                {folders.length} ORDNER ·{" "}
+                {folders.reduce((a, f) => a + countInFolder(f, allNotes), 0)} NOTIZEN
+              </span>
+            </div>
 
-        {/* Subjects horizontal selector row */}
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            margin: "0 0 28px",
-            padding: "6px 4px 6px 0",
-          }}
-        >
-          {SUBJECTS.map((s) => (
-            <SubjectTile
-              key={s.id}
-              s={s}
-              isSelected={selectedSubject?.id === s.id}
-              isOtherSelected={selectedSubject && selectedSubject.id !== s.id}
-              onToggle={() => handleToggleSubject(s)}
-            />
-          ))}
-        </div>
+            {/* Folders horizontal selector row */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 12,
+                margin: "0 0 28px",
+                padding: "6px 4px 6px 0",
+              }}
+            >
+              {folders.map((folder) =>
+                SUBJECT_THEMES[folder.id] ? (
+                  <SubjectTile
+                    key={folder.id}
+                    s={{
+                      id: folder.id,
+                      name: folder.name,
+                      count: countInFolder(folder, allNotes),
+                      themeColor: SUBJECTS.find((x) => x.id === folder.id)?.themeColor,
+                    }}
+                    isSelected={false}
+                    isOtherSelected={false}
+                    onToggle={() => handleOpenFolder(folder)}
+                  />
+                ) : (
+                  <GenericFolderTile
+                    key={folder.id}
+                    folder={folder}
+                    count={countInFolder(folder, allNotes)}
+                    onOpen={() => handleOpenFolder(folder)}
+                  />
+                ),
+              )}
+              <AddFolderTile onOpen={() => setFolderDialog("create")} />
+            </div>
+          </>
+        )}
+
+        {selectedSubject && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              margin: "0 0 18px",
+            }}
+          >
+            <button
+              onClick={() => setSelectedSubject(null)}
+              title="Zurück zur Übersicht"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                border: "1px solid rgba(255,255,255,.18)",
+                background: "rgba(255,255,255,.06)",
+                color: "#FFFFFF",
+                cursor: "pointer",
+              }}
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <h2
+              style={{
+                margin: 0,
+                font: '800 34px/.92 "Bricolage Grotesque",sans-serif',
+                letterSpacing: "-.035em",
+                color: "#FFFFFF",
+              }}
+            >
+              {selectedSubject.name}
+            </h2>
+            <button
+              onClick={() => setFolderDialog({ mode: "rename", folder: selectedSubject })}
+              title="Ordner umbenennen"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: "transparent",
+                color: "#FFFFFF",
+                cursor: "pointer",
+              }}
+            >
+              <Pencil size={16} />
+            </button>
+            <button
+              onClick={() => handleDeleteFolder(selectedSubject)}
+              title="Ordner löschen"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: "transparent",
+                color: "#FF6B6B",
+                cursor: "pointer",
+              }}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
 
         {/* Section title & count */}
         <div
@@ -4015,6 +4214,19 @@ export default function Library({
         }}
         onClose={() => setIsNewDocDialogOpen(false)}
       />
+
+      {folderDialog && (
+        <FolderDialog
+          mode={folderDialog === "create" ? "create" : "rename"}
+          initial={folderDialog === "create" ? null : folderDialog.folder}
+          onSubmit={(values) =>
+            folderDialog === "create"
+              ? handleCreateFolder(values)
+              : handleRenameFolder(folderDialog.folder, values)
+          }
+          onClose={() => setFolderDialog(null)}
+        />
+      )}
     </div>
   );
 }
