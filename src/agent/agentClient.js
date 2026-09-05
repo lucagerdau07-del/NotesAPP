@@ -43,5 +43,5 @@ export async function requestCompletion({
   const data = await response.json();
   const message = data?.choices?.[0]?.message;
   if (!message) throw new Error(data?.error?.message || "Leere Antwort vom Modell.");
-  return message;
+  return { message, usage: data?.usage ?? null };
 }

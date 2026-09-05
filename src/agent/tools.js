@@ -77,6 +77,11 @@ export const AGENT_TOOLS = [
           y: { type: "number" },
           width: { type: "number", description: "Umbruchbreite in Seitenpixeln" },
           text: { type: "string" },
+          label: {
+            type: "string",
+            description:
+              "Kurze thematische Bezeichnung für den Fortschrittsanzeiger, z.B. 'Einleitung', 'Hauptteil', 'Fazit' — nicht der Text selbst.",
+          },
           size: { type: "number", description: "Schriftgroesse 8-96" },
           color: { type: "string", description: "#rrggbb" },
           bold: { type: "boolean" },
@@ -99,6 +104,11 @@ export const AGENT_TOOLS = [
         properties: {
           id: { type: "string" },
           text: { type: "string" },
+          label: {
+            type: "string",
+            description:
+              "Kurze thematische Bezeichnung für den Fortschrittsanzeiger, z.B. 'Einleitung', 'Hauptteil', 'Fazit' — nicht der Text selbst.",
+          },
           x: { type: "number" },
           y: { type: "number" },
           width: { type: "number" },
@@ -326,9 +336,11 @@ export function describeToolCall(name, args = {}) {
     case "see_document":
       return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":
-      return `Text schreiben: ${String(args.text || "").slice(0, 40)}`;
+      return args.label
+        ? `Schreibe ${args.label}`
+        : `Text schreiben: ${String(args.text || "").slice(0, 40)}`;
     case "edit_text":
-      return "Text ändern";
+      return args.label ? `Überarbeite ${args.label}` : "Text ändern";
     case "delete_objects":
       return `${args.ids?.length ?? 0} Element(e) löschen`;
     case "add_shape":

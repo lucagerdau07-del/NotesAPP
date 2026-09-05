@@ -11,7 +11,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-import Markdown from "./Markdown";
+import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
 
 const SUGGESTIONS = [
@@ -19,6 +19,18 @@ const SUGGESTIONS = [
   "Erstelle mir eine Übersichtsseite dazu",
   "Erkläre mir das Thema Schritt für Schritt",
 ];
+
+// Rounds to the unit Claude Code itself uses in its status line: plain below
+// 1000, "K" from 1000, "M" from 1_000_000.
+function formatTokens(n) {
+  if (n >= 1_000_000) return `${Math.round(n / 1_000_000)}M`;
+  if (n >= 1000) return `${Math.round(n / 1000)}K`;
+  return String(n);
+}
+
+function formatElapsed(ms) {
+  return `${Math.round(ms / 1000)}s`;
+}
 
 function StepList({ steps }) {
   return (
@@ -33,12 +45,12 @@ function StepList({ steps }) {
             ) : (
               <Check size={12} />
             )}
-            <span>{step.label}</span>
+            <span>{renderInline(step.label, `sl${step.id}`)}</span>
           </div>
           {step.detail && (
             <div className="rail-chat-step-detail">
               <span aria-hidden="true">⎿</span>
-              <span>{step.detail}</span>
+              <span>{renderInline(step.detail, `sd${step.id}`)}</span>
             </div>
           )}
         </li>
@@ -77,7 +89,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
 
-  const { messages, steps, isRunning, error, send, stop, clear } = useAgent({
+  const { messages, steps, isRunning, error, tokens, elapsedMs, send, stop, clear } = useAgent({
     documentId,
     noteTitle,
     subject,
@@ -186,10 +198,11 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
         {isRunning && steps.length > 0 && <StepList steps={steps} />}
 
         {isRunning && (
-          <div className="rail-chat-typing" aria-label="Der Assistent arbeitet">
-            <span />
-            <span />
-            <span />
+          <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
+            <span className="rail-chat-status-shimmer">Arbeitet…</span>
+            <span className="rail-chat-status-meta">
+              {formatElapsed(elapsedMs)} · {formatTokens(tokens)} Tokens
+            </span>
           </div>
         )}
 

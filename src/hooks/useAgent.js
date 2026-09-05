@@ -54,8 +54,17 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   const [steps, setSteps] = useState([]);
   const [status, setStatus] = useState("idle"); // idle | running | error
   const [error, setError] = useState(null);
+  const [tokens, setTokens] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const abortRef = useRef(null);
   const loadedFor = useRef(documentId);
+  const startTimeRef = useRef(null);
+
+  useEffect(() => {
+    if (status !== "running") return undefined;
+    const id = setInterval(() => setElapsedMs(Date.now() - startTimeRef.current), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   if (loadedFor.current !== documentId) {
     loadedFor.current = documentId;
@@ -98,6 +107,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       setStatus("running");
       setError(null);
       setSteps([]);
+      setTokens(0);
+      setElapsedMs(0);
+      startTimeRef.current = Date.now();
+      let totalTokens = 0;
 
       // Read through the ref on every call: the controller object is replaced
       // on each render of the editor, and a run outlives many of them.
@@ -118,11 +131,13 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
 
       try {
         for (let step = 0; step < MAX_STEPS; step += 1) {
-          const reply = await requestCompletion({
+          const { message: reply, usage } = await requestCompletion({
             messages: wireMessages(conversation),
             tools: canEdit ? AGENT_TOOLS : canRead ? AGENT_READ_TOOLS : undefined,
             signal: controller.signal,
           });
+          totalTokens += usage?.total_tokens ?? 0;
+          setTokens(totalTokens);
           conversation = [...conversation, reply];
 
           const calls = reply.tool_calls || [];
@@ -249,6 +264,8 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     status,
     isRunning: status === "running",
     error,
+    tokens,
+    elapsedMs,
     send,
     stop,
     clear,
