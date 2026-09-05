@@ -295,6 +295,19 @@ export default function useInkDocument({
     return () => clearTimeout(timer);
   }, [activeDocumentId, history, repository, saveDelay]);
 
+  // A stroke landing faster than saveDelay apart (continuous handwriting, no
+  // pause) never gets a quiet gap to debounce-save - the above effect just
+  // keeps restarting its timer. Without this, closing the note right after
+  // such a run cancels that pending save and silently drops everything since
+  // the last natural pause. Empty deps: this only runs on true unmount, never
+  // on a same-instance document switch (which must NOT persist stale data
+  // under the old key - see the note-switch tests below).
+  useEffect(() => {
+    return () => {
+      saveSafely(() => repositoryRef.current.saveHistory(documentIdRef.current, historyRef.current));
+    };
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       const { documentId, ...values } = preferences;

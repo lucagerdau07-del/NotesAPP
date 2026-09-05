@@ -206,16 +206,23 @@ describe('useInkDocument', () => {
     expect(repository.loadPreferences('note-b').color).toBe('#112233');
   });
 
-  it('cancels pending saves on cleanup', () => {
+  it('flushes the latest history on unmount instead of dropping it', () => {
     vi.useFakeTimers();
     const repository = createInkRepository(createMemoryStorage());
     const { result, unmount } = renderHook(() => useInkDocument({ documentId: 'note', repository, saveDelay: 25 }));
 
-    act(() => result.current.commitStroke(validStroke('a')));
+    // Strokes land faster than saveDelay apart - like continuous handwriting -
+    // so the debounce never gets a quiet gap to fire on its own.
+    act(() => {
+      result.current.commitStroke(validStroke('a'));
+      vi.advanceTimersByTime(10);
+      result.current.commitStroke(validStroke('b'));
+      vi.advanceTimersByTime(10);
+      result.current.commitStroke(validStroke('c'));
+    });
     unmount();
-    act(() => vi.advanceTimersByTime(25));
 
-    expect(repository.loadHistory('note')).toBeNull();
+    expect(repository.loadHistory('note').present.strokes.map(s => s.id)).toEqual(['a', 'b', 'c']);
   });
 
   it('cancels note A debounce before rerendering note B and never saves A state under B key', () => {
