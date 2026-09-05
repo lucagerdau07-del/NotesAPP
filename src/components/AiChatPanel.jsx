@@ -38,6 +38,37 @@ function formatWorked(ms) {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)}m` : `${Math.round(ms / 1000)}s`;
 }
 
+// Eases the displayed number toward `target` instead of jumping straight to
+// it, so a big token update after a slow request still reads as motion.
+function useCountUp(target, duration = 500) {
+  const [value, setValue] = useState(target);
+  const fromRef = useRef(target);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return undefined;
+    // Tokens only ever climb within a run; a drop means a new run reset the
+    // counter, and that should snap, not count down.
+    if (target < from) {
+      fromRef.current = target;
+      setValue(target);
+      return undefined;
+    }
+    const start = performance.now();
+    let frame;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      setValue(Math.round(from + (target - from) * t));
+      if (t < 1) frame = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+
+  return value;
+}
+
 // Same glyph as lucide's PenLine, split in two: the pen tilts (animated
 // group), the paper line underneath stays put.
 function WritingPen() {
@@ -149,6 +180,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
     subject,
     inkControllerRef,
   });
+  const displayedTokens = useCountUp(tokens);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -259,7 +291,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
             <WritingPen />
             <span className="rail-chat-status-shimmer">Arbeitet…</span>
             <span className="rail-chat-status-meta">
-              {formatElapsed(elapsedMs)} · {formatTokens(tokens)} Tokens
+              {formatElapsed(elapsedMs)} · {formatTokens(displayedTokens)} Tokens
             </span>
           </div>
         )}
