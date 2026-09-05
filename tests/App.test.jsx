@@ -163,6 +163,17 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
+  it('opens the plan screen from the library and returns', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('open-plan-btn'));
+    expect(screen.getByTestId('plan-screen')).toBeInTheDocument();
+    expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück zur Bibliothek' }));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
+
   it('switches between masonry grid and list view and handles sorting', () => {
     render(<App />);
 
