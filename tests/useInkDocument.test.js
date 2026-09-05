@@ -225,6 +225,25 @@ describe('useInkDocument', () => {
     expect(repository.loadHistory('note').present.strokes.map(s => s.id)).toEqual(['a', 'b', 'c']);
   });
 
+  it('flushes the latest history when the app is backgrounded, without unmounting', () => {
+    vi.useFakeTimers();
+    const repository = createInkRepository(createMemoryStorage());
+    const { result } = renderHook(() => useInkDocument({ documentId: 'note', repository, saveDelay: 25 }));
+
+    // On a native shell, closing/backgrounding the app pauses the WebView
+    // instead of unmounting React - the component tree stays mounted, so
+    // only a visibility-driven flush (not an unmount effect) can save this.
+    act(() => {
+      result.current.commitStroke(validStroke('a'));
+      vi.advanceTimersByTime(10);
+      result.current.commitStroke(validStroke('b'));
+    });
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    expect(repository.loadHistory('note').present.strokes.map(s => s.id)).toEqual(['a', 'b']);
+  });
+
   it('cancels note A debounce before rerendering note B and never saves A state under B key', () => {
     vi.useFakeTimers();
     const repository = createInkRepository(createMemoryStorage());

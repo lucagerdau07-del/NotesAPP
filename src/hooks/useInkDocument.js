@@ -297,16 +297,31 @@ export default function useInkDocument({
 
   // A stroke landing faster than saveDelay apart (continuous handwriting, no
   // pause) never gets a quiet gap to debounce-save - the above effect just
-  // keeps restarting its timer. Without this, closing the note right after
-  // such a run cancels that pending save and silently drops everything since
-  // the last natural pause. Empty deps: this only runs on true unmount, never
-  // on a same-instance document switch (which must NOT persist stale data
-  // under the old key - see the note-switch tests below).
-  useEffect(() => {
-    return () => {
-      saveSafely(() => repositoryRef.current.saveHistory(documentIdRef.current, historyRef.current));
-    };
+  // keeps restarting its timer. Without a flush, closing the note right
+  // after such a run cancels that pending save and silently drops
+  // everything since the last natural pause.
+  const flushPendingSave = useCallback(() => {
+    saveSafely(() => repositoryRef.current.saveHistory(documentIdRef.current, historyRef.current));
   }, []);
+
+  // Empty deps: this only runs on true unmount, never on a same-instance
+  // document switch (which must NOT persist stale data under the old key -
+  // see the note-switch tests below).
+  useEffect(() => flushPendingSave, [flushPendingSave]);
+
+  // On a native shell (Capacitor/Android), closing or backgrounding the app
+  // pauses the WebView instead of unmounting React - the component tree
+  // stays alive, so the effect above never fires. The OS can then kill the
+  // process without warning once backgrounded, so this has to flush
+  // synchronously the moment the page is hidden, not on some later timer.
+  useEffect(() => {
+    document.addEventListener("visibilitychange", flushPendingSave);
+    globalThis.addEventListener?.("pagehide", flushPendingSave);
+    return () => {
+      document.removeEventListener("visibilitychange", flushPendingSave);
+      globalThis.removeEventListener?.("pagehide", flushPendingSave);
+    };
+  }, [flushPendingSave]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
