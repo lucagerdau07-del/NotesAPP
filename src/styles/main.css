@@ -1335,7 +1335,10 @@ body::after {
 .rail-chat-status-pen {
   flex-shrink: 0;
   color: rgba(241, 238, 231, 0.75);
-  transform-origin: 85% 85%;
+}
+
+.rail-chat-pen-glyph {
+  transform-origin: 4px 20px;
   animation: rail-chat-write 0.6s ease-in-out infinite;
 }
 
