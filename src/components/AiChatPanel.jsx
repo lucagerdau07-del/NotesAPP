@@ -10,6 +10,8 @@ import {
   MessageSquare,
   Loader2,
   AlertTriangle,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -30,6 +32,10 @@ function formatTokens(n) {
 
 function formatElapsed(ms) {
   return `${Math.round(ms / 1000)}s`;
+}
+
+function formatWorked(ms) {
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)}m` : `${Math.round(ms / 1000)}s`;
 }
 
 // Same glyph as lucide's PenLine, split in two: the pen tilts (animated
@@ -55,9 +61,34 @@ function WritingPen() {
   );
 }
 
-function StepList({ steps }) {
+function StepList({ steps, elapsedMs }) {
+  const [expanded, setExpanded] = useState(elapsedMs == null);
+
+  if (elapsedMs != null && !expanded) {
+    return (
+      <button
+        type="button"
+        className="rail-chat-steps-collapsed"
+        onClick={() => setExpanded(true)}
+      >
+        <ChevronRight size={12} />
+        <span>{formatWorked(elapsedMs)} gearbeitet</span>
+      </button>
+    );
+  }
+
   return (
     <ul className="rail-chat-steps">
+      {elapsedMs != null && (
+        <button
+          type="button"
+          className="rail-chat-steps-collapse"
+          onClick={() => setExpanded(false)}
+        >
+          <ChevronDown size={12} />
+          <span>{formatWorked(elapsedMs)} gearbeitet</span>
+        </button>
+      )}
       {steps.map((step) => (
         <li key={step.id} className={step.state}>
           <div className="rail-chat-step-line">
@@ -203,7 +234,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
         {messages.map((message, index) => (
           <React.Fragment key={index}>
             {message.role === "assistant" && message.steps?.length > 0 && (
-              <StepList steps={message.steps} />
+              <StepList steps={message.steps} elapsedMs={message.elapsedMs} />
             )}
             <div className={`rail-chat-msg ${message.role}`}>
               {message.role === "assistant" ? (

@@ -1265,6 +1265,28 @@ body::after {
   color: rgba(241, 238, 231, 0.6);
 }
 
+.rail-chat-steps-collapsed,
+.rail-chat-steps-collapse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  color: rgba(241, 238, 231, 0.45);
+  font: 400 11.5px Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.rail-chat-steps-collapsed:hover,
+.rail-chat-steps-collapse:hover {
+  color: rgba(241, 238, 231, 0.75);
+}
+
+.rail-chat-steps-collapse {
+  padding: 0 10px 3px;
+}
+
 .rail-chat-steps li.done { color: rgba(255, 255, 255, 0.9); }
 .rail-chat-steps li.failed { color: #E8A0A0; }
 

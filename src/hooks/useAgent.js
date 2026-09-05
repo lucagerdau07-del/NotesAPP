@@ -149,6 +149,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                 role: "assistant",
                 content: content || "Ich habe keine Antwort erhalten.",
                 steps: currentSteps,
+                elapsedMs: Date.now() - startTimeRef.current,
               },
             ]);
             setSteps([]);
@@ -225,7 +226,12 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
           if (finished !== null) {
             setMessages((current) => [
               ...current,
-              { role: "assistant", content: finished || "Fertig.", steps: currentSteps },
+              {
+                role: "assistant",
+                content: finished || "Fertig.",
+                steps: currentSteps,
+                elapsedMs: Date.now() - startTimeRef.current,
+              },
             ]);
             setSteps([]);
             break;
@@ -238,6 +244,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                 role: "assistant",
                 content: `Schrittgrenze von ${MAX_STEPS} erreicht. Alles bisher Geschriebene bleibt stehen.`,
                 steps: currentSteps,
+                elapsedMs: Date.now() - startTimeRef.current,
               },
             ]);
             setSteps([]);
