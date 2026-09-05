@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Loader2,
   AlertTriangle,
+  PenLine,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -199,6 +200,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
 
         {isRunning && (
           <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
+            <PenLine size={13} className="rail-chat-status-pen" />
             <span className="rail-chat-status-shimmer">Arbeitet…</span>
             <span className="rail-chat-status-meta">
               {formatElapsed(elapsedMs)} · {formatTokens(tokens)} Tokens

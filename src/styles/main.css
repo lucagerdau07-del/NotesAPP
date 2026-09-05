@@ -1332,6 +1332,18 @@ body::after {
   100% { background-position: -200% 0; }
 }
 
+.rail-chat-status-pen {
+  flex-shrink: 0;
+  color: rgba(241, 238, 231, 0.75);
+  transform-origin: 85% 85%;
+  animation: rail-chat-write 0.6s ease-in-out infinite;
+}
+
+@keyframes rail-chat-write {
+  0%, 100% { transform: rotate(-10deg) translateX(0); }
+  50% { transform: rotate(12deg) translateX(1px); }
+}
+
 .rail-chat-status-meta {
   color: rgba(241, 238, 231, 0.4);
   font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
