@@ -1175,34 +1175,6 @@ body::after {
 }
 
 /* Agent vs. Chat — a segmented control, not two panels. */
-.rail-chat-modes {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.rail-chat-modes button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border: none;
-  border-radius: 9px;
-  background: none;
-  color: rgba(241, 238, 231, 0.55);
-  font: 600 11.5px Manrope, sans-serif;
-  cursor: pointer;
-}
-
-.rail-chat-modes button.active {
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.14));
-  color: #F1EEE7;
-}
-
 .rail-chat-empty-wrap {
   display: flex;
   flex-direction: column;

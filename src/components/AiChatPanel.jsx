@@ -6,8 +6,6 @@ import {
   Trash2,
   Copy,
   Check,
-  Wand2,
-  MessageSquare,
   Loader2,
   AlertTriangle,
   ChevronRight,
@@ -168,9 +166,6 @@ function CopyButton({ text }) {
 
 export default function AiChatPanel({ active = true, onClose, noteTitle, subject, documentId, inkControllerRef }) {
   const [draft, setDraft] = useState("");
-  // Two modes, one conversation: "Agent" hands the model the document tools,
-  // "Chat" keeps it to talking. Same rail, no second panel.
-  const [editDocument, setEditDocument] = useState(true);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -192,7 +187,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
     const text = draft.trim();
     if (!text || isRunning) return;
     setDraft("");
-    send(text, { editDocument });
+    send(text);
   };
 
   const onKeyDown = (event) => {
@@ -225,25 +220,6 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
         </div>
       </div>
 
-      <div className="rail-chat-modes" role="group" aria-label="Modus">
-        <button
-          type="button"
-          className={editDocument ? "active" : ""}
-          onClick={() => setEditDocument(true)}
-          title="Der Agent darf die Notiz selbst bearbeiten"
-        >
-          <Wand2 size={13} /> Agent
-        </button>
-        <button
-          type="button"
-          className={editDocument ? "" : "active"}
-          onClick={() => setEditDocument(false)}
-          title="Nur reden, nichts am Dokument ändern"
-        >
-          <MessageSquare size={13} /> Chat
-        </button>
-      </div>
-
       <div className="rail-chat-messages" ref={scrollRef}>
         {messages.length === 0 && !isRunning && (
           <div className="rail-chat-empty-wrap">
@@ -255,7 +231,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
                 key={suggestion}
                 type="button"
                 className="rail-chat-suggestion"
-                onClick={() => send(suggestion, { editDocument })}
+                onClick={() => send(suggestion)}
               >
                 {suggestion}
               </button>
@@ -311,7 +287,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={editDocument ? "Auftrag an den Agenten…" : "Nachricht…"}
+          placeholder="Frag etwas oder gib einen Auftrag…"
           aria-label="Nachricht an den KI-Assistenten"
         />
         {isRunning ? (
