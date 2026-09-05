@@ -106,6 +106,38 @@ function isValidHistory(value, documentId) {
   );
 }
 
+const serializeHistory = (history) =>
+  JSON.stringify({ present: history.present, limit: history.limit });
+
+// Devices that ran the build which persisted whole histories still carry
+// megabytes of past/future snapshots for notes nobody has reopened since. That
+// dead weight never shrinks on its own, so it keeps the origin at its quota and
+// every write keeps failing. Rewriting those blobs present-only reclaims it in
+// one pass; the drawings themselves are untouched.
+function reclaimLegacyHistorySpace(storage) {
+  if (typeof storage.key !== "function" || typeof storage.length !== "number") return false;
+  const keys = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (typeof key === "string" && key.startsWith(historyKey(""))) keys.push(key);
+  }
+  let reclaimed = false;
+  for (const key of keys) {
+    try {
+      const stored = JSON.parse(storage.getItem(key));
+      const carriesUndoStack =
+        stored?.past?.length > 0 || stored?.future?.length > 0;
+      if (!carriesUndoStack) continue;
+      storage.setItem(key, serializeHistory(stored));
+      reclaimed = true;
+    } catch {
+      // A blob we cannot rewrite is one we simply cannot reclaim; the note it
+      // belongs to must not be dropped over it.
+    }
+  }
+  return reclaimed;
+}
+
 export function createInkRepository(storage) {
   return {
     loadHistory(documentId) {
@@ -123,18 +155,24 @@ export function createInkRepository(storage) {
 
     saveHistory(documentId, history) {
       const id = String(documentId);
+      if (!isValidHistory(history, id)) return false;
+      const payload = serializeHistory(history);
       try {
-        if (!isValidHistory(history, id)) return false;
-        storage.setItem(
-          historyKey(id),
-          JSON.stringify({ present: history.present, limit: history.limit }),
-        );
+        storage.setItem(historyKey(id), payload);
         return true;
-      } catch (error) {
-        // A full quota used to fail silently here, so a note could look saved
-        // while nothing was written. Keep it visible.
-        console.warn("[ink] saveHistory failed", error);
-        return false;
+      } catch {
+        // Out of room: drop the legacy undo stacks still parked in storage and
+        // take one more run at it before giving up on the user's strokes.
+        try {
+          if (!reclaimLegacyHistorySpace(storage)) throw new Error("nothing to reclaim");
+          storage.setItem(historyKey(id), payload);
+          return true;
+        } catch (error) {
+          // This used to fail silently, so a note could look saved while
+          // nothing was written. Keep it visible.
+          console.warn("[ink] saveHistory failed", error);
+          return false;
+        }
       }
     },
 

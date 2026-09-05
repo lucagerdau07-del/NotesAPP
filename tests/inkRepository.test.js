@@ -14,6 +14,48 @@ function createMemoryStorage(initial = {}) {
   };
 }
 
+// Mirrors a real localStorage: a byte budget shared by every key, enumerable,
+// and throwing QuotaExceededError once a write would not fit.
+function createQuotaStorage(budget, initial = {}) {
+  const values = new Map(Object.entries(initial));
+  const used = (skipKey) => {
+    let total = 0;
+    for (const [key, value] of values) if (key !== skipKey) total += key.length + value.length;
+    return total;
+  };
+  return {
+    get length() {
+      return values.size;
+    },
+    key(index) {
+      return [...values.keys()][index] ?? null;
+    },
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      if (used(key) + key.length + value.length > budget) {
+        const error = new Error('quota');
+        error.name = 'QuotaExceededError';
+        throw error;
+      }
+      values.set(key, value);
+    },
+    used: () => used(),
+  };
+}
+
+function historyOf(documentId, strokeCount, pointCount = 100) {
+  let history = createInkHistory(createInkDocument(documentId));
+  for (let i = 0; i < strokeCount; i++) {
+    history = executeInkCommand(history, {
+      type: 'commit-stroke',
+      stroke: strokeOf(`${documentId}-s${i}`, `${documentId}-page-1`, pointCount),
+    });
+  }
+  return history;
+}
+
 function validHistory() {
   const document = createInkDocument('note-1');
   return {
@@ -74,6 +116,28 @@ describe('ink repository', () => {
     // Whole-history serialization would be ~30x a single snapshot here.
     expect(written.length).toBeLessThan(oneSnapshot * 1.2);
     expect(repository.loadHistory('note-1').present.strokes).toHaveLength(60);
+  });
+
+  // Devices that ran the old build still hold megabytes of whole-history blobs
+  // for OTHER notes. Those never shrink on their own - the note being drawn in
+  // saves fine until its payload grows one stroke too far, which is exactly the
+  // "everything but the last stroke survives" report. Reclaim and retry.
+  it('reclaims space from other notes legacy undo stacks instead of losing the write', () => {
+    const legacy = historyOf('old-note', 40);
+    const incoming = historyOf('note-1', 12);
+    // Enough room for both documents, but not for the legacy undo stack.
+    const budget =
+      JSON.stringify(legacy.present).length + JSON.stringify(incoming.present).length + 512;
+    const storage = createQuotaStorage(budget, {
+      'notes-app:ink:old-note': JSON.stringify(legacy),
+    });
+    expect(storage.used()).toBeGreaterThan(budget);
+    const repository = createInkRepository(storage);
+
+    expect(repository.saveHistory('note-1', incoming)).toBe(true);
+    expect(repository.loadHistory('note-1').present.strokes).toHaveLength(12);
+    // The other note keeps its drawing, it only loses undo states nothing reads.
+    expect(repository.loadHistory('old-note').present.strokes).toHaveLength(40);
   });
 
   it('reloads a note with an empty undo stack rather than ancient states', () => {
