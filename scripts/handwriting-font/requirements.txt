@@ -1,0 +1,4 @@
+shapely
+Pillow
+fonttools
+pytest
