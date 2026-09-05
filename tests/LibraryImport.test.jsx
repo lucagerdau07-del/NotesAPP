@@ -3,6 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it,
   vi,
 } from 'vitest';
+
+vi.mock('../src/agent/agentClient.js', () => ({
+  requestCompletion: vi.fn(async () => ({ content: '{"homework":[],"exams":[],"terms":[]}' })),
+}));
+
 import Library from '../src/components/Library.jsx';
 
 vi.mock('../src/hooks/useLiquidGlass.js', () => ({ default: vi.fn() }));

@@ -28,6 +28,7 @@ import {
   Sparkles as SparklesIcon,
   FileUp,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
@@ -38,6 +39,7 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import useKnowledge from "../hooks/useKnowledge.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import {
   notePageStyleOf,
@@ -47,6 +49,7 @@ import {
   subscribeToPreviewImages,
 } from "../documents/notePreview.js";
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
+import UpcomingCard from "./UpcomingCard.jsx";
 import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
@@ -2836,6 +2839,7 @@ function UntisWeekGrid({ lessons }) {
 export default function Library({
   onOpenNote,
   onOpenSettings,
+  onOpenPlan,
   documentLibraryOptions,
 }) {
   const documentLibrary = useDocumentLibrary(documentLibraryOptions);
@@ -2958,7 +2962,8 @@ export default function Library({
     when: "importiert",
     body: `${note.pages?.length || 1} ${(note.pages?.length || 1) === 1 ? "Seite" : "Seiten"} · ${note.source?.type === "pdf" ? "PDF" : "Bild"}`,
   }));
-  const createdCards = browserNoteRepository.listNotes().map((note) => ({
+  const knowledgeNotes = browserNoteRepository.listNotes();
+  const createdCards = knowledgeNotes.map((note) => ({
     ...note,
     type: "canvas-preview",
     dot: dotForSubject(note.subject),
@@ -2969,6 +2974,13 @@ export default function Library({
       previewTextOf(note.id) ||
       (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
   }));
+  const untisSubjects = [...new Set(untisLessons.map((lesson) => lesson.subject).filter(Boolean))];
+  const sourceNoteTitles = Object.fromEntries(
+    knowledgeNotes
+      .filter((note) => note.id && note.title)
+      .map((note) => [note.id, note.title]),
+  );
+  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects });
   const allNotes = [...importedCards, ...createdCards];
 
   // Filter notes by selected subject and search query
@@ -3173,9 +3185,33 @@ export default function Library({
           <Tag size={19} />
         </div>
         <button
-          onClick={onOpenSettings}
+          type="button"
+          onClick={onOpenPlan}
+          className="lib-plan-btn"
+          title="Lernplan & Glossar"
+          aria-label="Lernplan & Glossar öffnen"
+          data-testid="open-plan-btn"
           style={{
             marginTop: "auto",
+            width: 44,
+            height: 44,
+            borderRadius: 15,
+            background: "transparent",
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#FFFFFF",
+            cursor: "pointer",
+            transition: "background-color 0.15s, color 0.15s",
+          }}
+        >
+          <CalendarDays size={19} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          style={{
             width: 44,
             height: 44,
             borderRadius: 15,
@@ -3190,9 +3226,10 @@ export default function Library({
           }}
           className="lib-settings-btn"
           title="Einstellungen"
+          aria-label="Einstellungen öffnen"
           data-testid="settings-nav-btn"
         >
-          <Settings size={20} />
+          <Settings size={20} aria-hidden="true" />
         </button>
       </div>
 
@@ -3725,14 +3762,16 @@ export default function Library({
         <div className="lib-glass agent-panel-card">
           <div className="agent-panel-head">
             <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
-              Neuigkeiten
+              Anstehend
             </span>
+            {knowledge.isScanning && <span className="agent-badge">SCAN LÄUFT</span>}
           </div>
           <div className="agent-panel-body">
-            {/* ponytail: placeholder, add real feed later */}
-            <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
-              Noch keine Neuigkeiten.
-            </div>
+            <UpcomingCard
+              events={knowledge.openEvents}
+              sourceNoteTitles={sourceNoteTitles}
+              onToggle={knowledge.setEventDone}
+            />
           </div>
         </div>
       </div>

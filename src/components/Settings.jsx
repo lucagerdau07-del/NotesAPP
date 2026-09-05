@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   ChevronLeft,
   Plus,
@@ -22,7 +22,9 @@ import {
   saveUntisCredentials,
 } from "../ink/untisSettings.js";
 import { loadAgentConfig, saveAgentConfig } from "../agent/agentSettings.js";
+import useKnowledge from "../hooks/useKnowledge.js";
 import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
+import { browserNoteRepository } from "../storage/noteRepository.js";
 import {
   createProbe,
   deriveProfileFromCalibration,
@@ -37,6 +39,9 @@ const SIDEBAR_GLASS_CONFIG = { cornerRadius: 22, zRadius: 22 };
 
 export default function Settings({ onBack }) {
   const glassRootRef = useRef(null);
+  const knowledgeNotes = useMemo(() => browserNoteRepository.listNotes(), []);
+  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: [] });
+  const scannedNoteCount = Object.keys(knowledge.scanState.notes || {}).length;
   const [activeNav, setActiveNav] = useState("palm");
   const [isAdvanced, setIsAdvanced] = useState(false);
   const [autoImprove, setAutoImprove] = useState(true);
@@ -760,6 +765,59 @@ export default function Settings({ onBack }) {
                 </div>
                 <div className="settings-switch on" />
               </div>
+            </div>
+
+            <div className="settings-section-caption" style={{ marginTop: 20 }}>
+              AUSWERTUNG
+            </div>
+            <p className="settings-detail-copy" style={{ marginBottom: 12 }}>
+              Fertige Notizen werden zweimal täglich gelesen. Gefundene Hausaufgaben und
+              Klausuren landen im Kalender, Fachbegriffe im Glossar.
+            </p>
+            <div className="settings-group">
+              <div className="settings-row">
+                <div className="settings-row-main">
+                  <div className="settings-row-title">Notizen automatisch auswerten</div>
+                  <div className="settings-row-copy">
+                    Nur Notizen, die seit zwei Stunden nicht mehr bearbeitet wurden
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`settings-switch ${knowledge.autoScan ? "on" : ""}`}
+                  data-testid="auto-scan-switch"
+                  aria-label="Notizen automatisch auswerten"
+                  aria-pressed={knowledge.autoScan}
+                  onClick={() => knowledge.setAutoScan(!knowledge.autoScan)}
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Jetzt auswerten</div>
+                  <div className="settings-control-copy">
+                    {knowledge.scanState.lastRunAt
+                      ? `Zuletzt: ${new Date(knowledge.scanState.lastRunAt).toLocaleString("de-DE")} · ${scannedNoteCount} ${scannedNoteCount === 1 ? "Notiz" : "Notizen"} ausgewertet`
+                      : "Noch nicht ausgewertet."}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="settings-action-btn"
+                  data-testid="scan-now-btn"
+                  disabled={knowledge.isScanning}
+                  onClick={() => knowledge.scanNow()}
+                >
+                  {knowledge.isScanning ? "Läuft…" : "Starten"}
+                </button>
+              </div>
+              {knowledge.scanState.lastError && (
+                <div
+                  className="settings-control-row"
+                  style={{ color: "rgba(255,69,58,.85)", font: "500 12px Manrope,sans-serif" }}
+                >
+                  {knowledge.scanState.lastError}
+                </div>
+              )}
             </div>
 
             <div className="settings-section-caption" style={{ marginTop: 20 }}>

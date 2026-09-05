@@ -1,0 +1,183 @@
+import { renderNotePagesOf } from "../documents/notePreview.js";
+import { dueNotes, isRunDue } from "./scanQueue.js";
+
+// Der Deckel begrenzt die Kosten eines einzelnen Aufrufs. Längere Notizen
+// werden nur bis zur achten Seite gelesen.
+export const MAX_SCAN_PAGES = 8;
+export const MAX_EVENTS_PER_NOTE = 20;
+export const MAX_TERMS_PER_NOTE = 40;
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+// Modellantworten enthalten häufig Fließtext oder einen Codeblock um das JSON.
+export function extractJson(text) {
+  const source = String(text ?? "");
+  const fenced = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const first = source.indexOf("{");
+  const last = source.lastIndexOf("}");
+  const candidates = [
+    source.trim(),
+    ...(fenced ? [fenced[1].trim()] : []),
+    ...(first !== -1 && last >= first ? [source.slice(first, last + 1)] : []),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // Try the next representation.
+    }
+  }
+  return null;
+}
+
+function cleanText(value, limit) {
+  return String(value ?? "").trim().slice(0, limit);
+}
+
+function validDateText(text) {
+  if (!DATE_PATTERN.test(text)) return false;
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// Ein Datum weiter als ein Jahr entfernt stammt fast immer aus einer
+// Jahreszahl im Notiztext, nicht aus einem echten Termin.
+function validDue(due, todayMs) {
+  const text = String(due ?? "");
+  if (!validDateText(text)) return null;
+  const [year, month, day] = text.split("-").map(Number);
+  const time = Date.UTC(year, month - 1, day);
+  if (!Number.isFinite(time) || !Number.isFinite(todayMs)) return null;
+  if (time < todayMs || time - todayMs > YEAR_MS) return null;
+  return text;
+}
+
+export function validateFindings(raw, { today, fallbackSubject = "" } = {}) {
+  const [todayYear, todayMonth, todayDay] = String(today ?? "").split("-").map(Number);
+  const todayMs = validDateText(String(today ?? ""))
+    ? Date.UTC(todayYear, todayMonth - 1, todayDay)
+    : NaN;
+  const subjectFallback = cleanText(fallbackSubject, 60);
+  const events = [];
+
+  for (const [kind, list] of [["homework", raw?.homework], ["exam", raw?.exams]]) {
+    for (const entry of Array.isArray(list) ? list : []) {
+      const title = cleanText(entry?.title, 200);
+      const due = validDue(entry?.due, todayMs);
+      if (!title || !due) continue;
+      events.push({ kind, title, subject: cleanText(entry?.subject, 60) || subjectFallback, due });
+    }
+  }
+
+  const terms = [];
+  for (const entry of Array.isArray(raw?.terms) ? raw.terms : []) {
+    const term = cleanText(entry?.term, 200);
+    if (!term) continue;
+    terms.push({
+      term,
+      definition: cleanText(entry?.definition, 500),
+      subject: cleanText(entry?.subject, 60) || subjectFallback,
+    });
+  }
+
+  return {
+    events: events.slice(0, MAX_EVENTS_PER_NOTE),
+    terms: terms.slice(0, MAX_TERMS_PER_NOTE),
+  };
+}
+
+// JPEG statt PNG und 1000 px statt 1280: für Handschrift gut lesbar, als
+// Base64 in einer HTTP-Anfrage rund eine Größenordnung kleiner.
+const SCAN_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
+
+export function scanImagesOf(documentId) {
+  return renderNotePagesOf(documentId, SCAN_IMAGE_OPTIONS);
+}
+
+export const SCAN_SYSTEM_PROMPT = [
+  "Du wertest die Seiten einer Schulnotiz aus. Du antwortest ausschließlich mit JSON, ohne Fließtext davor oder danach.",
+  "Du suchst drei Dinge: Hausaufgaben, Klausur- und Prüfungstermine, und Fachbegriffe, die in der Notiz erklärt oder eingeführt werden.",
+  "Format:",
+  '{"homework":[{"title":"","subject":"","due":"YYYY-MM-DD"}],"exams":[{"title":"","subject":"","due":"YYYY-MM-DD"}],"terms":[{"term":"","definition":"","subject":""}]}',
+  "Erfinde nichts. Steht in der Notiz keine Hausaufgabe, bleibt homework leer. Ein leeres Ergebnis ist ein richtiges Ergebnis.",
+  "Als Begriff zählt nur ein Fachbegriff mit erkennbarer Bedeutung im Fach, kein Alltagswort.",
+  "Rechne relative Angaben wie \"bis nächsten Freitag\" in ein absolutes Datum um, ausgehend vom genannten heutigen Datum.",
+].join("\n");
+
+function scanContext(note, today) {
+  return [
+    `Heutiges Datum: ${today}.`,
+    `Notiz: "${note.title || "ohne Titel"}"${note.subject ? ` (Fach: ${note.subject})` : ""}.`,
+    "Die folgenden Bilder sind die Seiten dieser Notiz.",
+  ].join("\n");
+}
+
+export async function scanNote(note, { renderPages, complete, today, signal }) {
+  const pages = renderPages(note.id).slice(0, MAX_SCAN_PAGES);
+  if (pages.length === 0) return { events: [], terms: [] };
+
+  const message = await complete({
+    messages: [
+      { role: "system", content: SCAN_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: scanContext(note, today) },
+          // Der Space erkennt diese Teile und routet selbst auf das
+          // Vision-Modell - deshalb ist am Backend nichts zu ändern.
+          ...pages.map((page) => ({ type: "image_url", image_url: { url: page.src } })),
+        ],
+      },
+    ],
+    signal,
+  });
+
+  const parsed = extractJson(message?.content);
+  if (!parsed) throw new Error("Antwort des Modells war kein gültiges JSON.");
+  return validateFindings(parsed, { today, fallbackSubject: note.subject || "" });
+}
+
+// Notizen werden nacheinander gescannt, nicht parallel: der Proxy ist eine
+// gemeinsame, ratenbegrenzte Ressource, und ein Lauf hat keine Eile.
+export async function runScan({
+  notes,
+  repository,
+  renderPages,
+  complete,
+  now,
+  today,
+  force = false,
+  signal,
+}) {
+  const { scanState } = repository.read();
+  if (!force && !isRunDue({ now, scanState })) return { scanned: 0, skipped: true, error: null };
+
+  const queue = dueNotes({
+    now,
+    notes,
+    scanState,
+    ...(force ? { quietPeriodMs: 0 } : {}),
+  });
+
+  let scanned = 0;
+  let lastError = null;
+  for (const note of queue) {
+    try {
+      const findings = await scanNote(note, { renderPages, complete, today, signal });
+      repository.mergeFindings({ ...findings, sourceNoteId: note.id });
+      // Erst nach dem erfolgreichen Merge: eine fehlgeschlagene Notiz bleibt
+      // fällig und kommt beim nächsten Lauf wieder dran.
+      repository.markNoteScanned(note.id, now);
+      scanned += 1;
+    } catch (error) {
+      lastError = error?.message || "Unbekannter Fehler beim Auswerten.";
+    }
+  }
+
+  repository.finishRun({ at: now, error: lastError });
+  return { scanned, skipped: false, error: lastError };
+}

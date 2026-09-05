@@ -2,6 +2,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 
+vi.mock('../src/agent/agentClient.js', () => ({
+  requestCompletion: vi.fn(async () => ({ content: '{"homework":[],"exams":[],"terms":[]}' })),
+}));
+
 vi.mock('@ybouane/liquidglass', () => ({
   LiquidGlass: { init: vi.fn(() => Promise.resolve({ destroy: vi.fn(), markChanged: vi.fn() })) },
 }))
@@ -156,6 +160,17 @@ describe('App Component', () => {
 
     // Return back to Library with Fertig button
     fireEvent.click(screen.getByText('Fertig'));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
+
+  it('opens the plan screen from the library and returns', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('open-plan-btn'));
+    expect(screen.getByTestId('plan-screen')).toBeInTheDocument();
+    expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück zur Bibliothek' }));
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
