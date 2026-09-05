@@ -1120,10 +1120,13 @@ body::after {
   border-radius: 14px;
   max-width: 88%;
   background: rgba(255, 255, 255, 0.08);
+  user-select: text;
 }
 
 .rail-chat-msg.user {
+  position: relative;
   align-self: flex-end;
+  padding-right: 26px;
   background: linear-gradient(140deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
 }
 
@@ -1241,7 +1244,8 @@ body::after {
   transition: opacity 0.15s ease;
 }
 
-.rail-chat-msg.assistant:hover .rail-chat-copy {
+.rail-chat-msg.assistant:hover .rail-chat-copy,
+.rail-chat-msg.user:hover .rail-chat-copy {
   opacity: 1;
 }
 

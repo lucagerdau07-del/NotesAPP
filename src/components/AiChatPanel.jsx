@@ -243,7 +243,10 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
                   <CopyButton text={message.content} />
                 </>
               ) : (
-                message.content
+                <>
+                  {message.content}
+                  <CopyButton text={message.content} />
+                </>
               )}
             </div>
           </React.Fragment>
