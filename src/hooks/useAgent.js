@@ -108,6 +108,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         getPaperStyle: () => inkControllerRef.current.paperStyle,
       };
 
+      let currentSteps = [];
       let conversation = [
         { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit, canRead, isWhiteboard }) },
         ...messages,
@@ -132,8 +133,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               {
                 role: "assistant",
                 content: content || "Ich habe keine Antwort erhalten.",
+                steps: currentSteps,
               },
             ]);
+            setSteps([]);
             break;
           }
 
@@ -142,7 +145,8 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             const name = call.function?.name;
             const args = parseArguments(call.function?.arguments);
             const label = describeToolCall(name, args || {});
-            setSteps((current) => [...current, { id: call.id, label, state: "running" }]);
+            currentSteps = [...currentSteps, { id: call.id, label, state: "running" }];
+            setSteps(currentSteps);
 
             let result;
             if (args === null) {
@@ -156,18 +160,17 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             }
             const failed = typeof result === "string" && result.startsWith("Fehler");
             const sawPages = name === "see_document" && !failed && Array.isArray(result?.pages);
-            setSteps((current) =>
-              current.map((entry) =>
-                entry.id === call.id
-                  ? {
-                      ...entry,
-                      state: failed ? "failed" : "done",
-                      ...(failed ? { detail: result } : {}),
-                      ...(sawPages ? { detail: `${result.pages.length} Bild(er)` } : {}),
-                    }
-                  : entry,
-              ),
+            currentSteps = currentSteps.map((entry) =>
+              entry.id === call.id
+                ? {
+                    ...entry,
+                    state: failed ? "failed" : "done",
+                    ...(failed ? { detail: result } : {}),
+                    ...(sawPages ? { detail: `${result.pages.length} Bild(er)` } : {}),
+                  }
+                : entry,
             );
+            setSteps(currentSteps);
             if (name === "done" && !failed) finished = result.summary;
 
             // A tool result must stay a string on the wire (see wireMessages),
@@ -207,8 +210,9 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
           if (finished !== null) {
             setMessages((current) => [
               ...current,
-              { role: "assistant", content: finished || "Fertig." },
+              { role: "assistant", content: finished || "Fertig.", steps: currentSteps },
             ]);
+            setSteps([]);
             break;
           }
 
@@ -218,8 +222,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               {
                 role: "assistant",
                 content: `Schrittgrenze von ${MAX_STEPS} erreicht. Alles bisher Geschriebene bleibt stehen.`,
+                steps: currentSteps,
               },
             ]);
+            setSteps([]);
           }
         }
         setStatus("idle");

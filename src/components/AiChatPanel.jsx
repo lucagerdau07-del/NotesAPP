@@ -20,6 +20,33 @@ const SUGGESTIONS = [
   "Erkläre mir das Thema Schritt für Schritt",
 ];
 
+function StepList({ steps }) {
+  return (
+    <ul className="rail-chat-steps">
+      {steps.map((step) => (
+        <li key={step.id} className={step.state}>
+          <div className="rail-chat-step-line">
+            {step.state === "running" ? (
+              <Loader2 size={12} className="rail-chat-spin" />
+            ) : step.state === "failed" ? (
+              <AlertTriangle size={12} />
+            ) : (
+              <Check size={12} />
+            )}
+            <span>{step.label}</span>
+          </div>
+          {step.detail && (
+            <div className="rail-chat-step-detail">
+              <span aria-hidden="true">⎿</span>
+              <span>{step.detail}</span>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -139,42 +166,24 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
         )}
 
         {messages.map((message, index) => (
-          <div key={index} className={`rail-chat-msg ${message.role}`}>
-            {message.role === "assistant" ? (
-              <>
-                <Markdown text={message.content} />
-                <CopyButton text={message.content} />
-              </>
-            ) : (
-              message.content
+          <React.Fragment key={index}>
+            {message.role === "assistant" && message.steps?.length > 0 && (
+              <StepList steps={message.steps} />
             )}
-          </div>
+            <div className={`rail-chat-msg ${message.role}`}>
+              {message.role === "assistant" ? (
+                <>
+                  <Markdown text={message.content} />
+                  <CopyButton text={message.content} />
+                </>
+              ) : (
+                message.content
+              )}
+            </div>
+          </React.Fragment>
         ))}
 
-        {steps.length > 0 && (
-          <ul className="rail-chat-steps">
-            {steps.map((step) => (
-              <li key={step.id} className={step.state}>
-                <div className="rail-chat-step-line">
-                  {step.state === "running" ? (
-                    <Loader2 size={12} className="rail-chat-spin" />
-                  ) : step.state === "failed" ? (
-                    <AlertTriangle size={12} />
-                  ) : (
-                    <Check size={12} />
-                  )}
-                  <span>{step.label}</span>
-                </div>
-                {step.detail && (
-                  <div className="rail-chat-step-detail">
-                    <span aria-hidden="true">⎿</span>
-                    <span>{step.detail}</span>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        {isRunning && steps.length > 0 && <StepList steps={steps} />}
 
         {isRunning && (
           <div className="rail-chat-typing" aria-label="Der Assistent arbeitet">
