@@ -13,7 +13,7 @@ from pathlib import Path
 from shapely.geometry import LineString
 from shapely.ops import unary_union
 
-from layout import cell_names, cell_bbox, template_size
+from layout import cell_names, cell_bbox, _grid_size
 
 
 def load_document(path):
@@ -45,9 +45,9 @@ def stroke_centroid(points):
     return sum(xs) / len(xs), sum(ys) / len(ys)
 
 
-def assign_strokes_to_cells(document, image_obj):
-    template_w, template_h = template_size()
-    names = cell_names()
+def assign_strokes_to_cells(document, image_obj, names=None):
+    names = names if names is not None else cell_names()
+    template_w, template_h = _grid_size(len(names))
     bboxes = [cell_bbox(i) for i in range(len(names))]
 
     by_cell = {name: [] for name in names}
@@ -106,11 +106,11 @@ def write_glyph_svg(name, geometry, bbox, out_dir):
     return out_path
 
 
-def extract(document_path, out_dir):
+def extract(document_path, out_dir, names=None):
+    names = names if names is not None else cell_names()
     document = load_document(document_path)
     image_obj = find_template_image(document)
-    by_cell = assign_strokes_to_cells(document, image_obj)
-    names = cell_names()
+    by_cell = assign_strokes_to_cells(document, image_obj, names=names)
     bboxes = {name: cell_bbox(i) for i, name in enumerate(names)}
 
     Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -125,10 +125,15 @@ def extract(document_path, out_dir):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python extract_glyphs.py <exported-document.json> <out-dir>")
+    if len(sys.argv) not in (3, 4):
+        print("Usage: python extract_glyphs.py <exported-document.json> <out-dir> [--variants]")
         sys.exit(1)
-    written, empty = extract(sys.argv[1], sys.argv[2])
+    names = None
+    if "--variants" in sys.argv:
+        from layout import variant_glyph_names
+
+        names = variant_glyph_names()
+    written, empty = extract(sys.argv[1], sys.argv[2], names=names)
     print(f"Wrote {len(written)} glyph SVGs to {sys.argv[2]}")
     if empty:
         print(f"No strokes found for: {', '.join(empty)}")

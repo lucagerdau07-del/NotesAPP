@@ -55,3 +55,26 @@ or `build_font.py` will fail looking for that file).
 Double-click `handwriting.ttf` and choose Install. Then, in any app, type:
 `Regen`, `mein`, `Feuer`, `er` — the en/ei/eu/er pairs should render as
 your single connected glyph; everything else as individual letters.
+
+## 9. Optional: extra handwriting variants (more natural look)
+
+Every letter/digit/umlaut so far renders with the exact same glyph every
+time it repeats. To rotate between 3 slightly different versions of each
+letter instead (the standard trick real handwriting fonts use — OpenType
+has no true randomness, so it's a deterministic rotation keyed by the
+preceding letter, not a dice roll):
+
+    python make_template.py template_variants.png --variants
+
+Write 2 *more* versions of each letter (labeled `<name>.v2` / `<name>.v3`
+— your original capture already is variant 1) the same way as step 3, then:
+
+    python extract_glyphs.py handwriting_variants.json glyphs/ --variants
+
+This writes into the *same* `glyphs/` folder as before, so re-run step 6
+(`build_font.py`) to bake them in, then apply the rotation rule:
+
+    python generate_variant_feature.py handwriting.ttf
+
+You can capture variants incrementally — any letter without a `.v2`/`.v3`
+SVG yet is simply left out of the rotation and keeps rendering as before.
