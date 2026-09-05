@@ -12,6 +12,13 @@ function dayLabel(iso) {
   return `${WEEKDAYS[date.getDay()]}, ${date.getDate()}.${date.getMonth() + 1}.`;
 }
 
+function freeDayLabel(iso) {
+  const date = new Date(`${iso}T00:00:00`);
+  return date.getDay() === 3
+    ? "Freier Tag — Lernzeit in der Schule"
+    : "Freier Tag — keine Lernzeit eingeplant";
+}
+
 export default function PlanScreen({ onBack }) {
   const notes = useMemo(() => browserNoteRepository.listNotes(), []);
   const knowledge = useKnowledge({ notes, subjects: [] });
@@ -89,7 +96,7 @@ export default function PlanScreen({ onBack }) {
                 <span className="plan-day-budget">{day.budgetMinutes} min</span>
               </div>
               {day.budgetMinutes === 0 ? (
-                <div className="plan-block plan-block-free">Freier Tag — Lernzeit in der Schule</div>
+                <div className="plan-block plan-block-free">{freeDayLabel(day.date)}</div>
               ) : (
                 day.blocks.map((block, index) => (
                   <div className="plan-block" key={`${day.date}-${index}`}>
