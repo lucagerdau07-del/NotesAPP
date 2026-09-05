@@ -7,17 +7,28 @@ extract_glyphs.py) plus the 4 ligature glyphs, and emits a .ttf with a
 import sys
 
 import fontforge
+import psMat
 
 from layout import GLYPHS, LIGATURES
 
-# Matches layout.CELL_SIZE — a single flat advance width for every glyph in
-# this first pass. Per-glyph spacing can be tuned later in the FontForge GUI.
-ADVANCE = 220
+# Fallback advance for a glyph with no ink (shouldn't happen — empty cells
+# are skipped during extraction). Matches layout.CELL_SIZE.
+FALLBACK_ADVANCE = 220
+LEFT_BEARING = 15
+RIGHT_BEARING = 25
 
 
 def import_glyph_from_svg(glyph, svg_path):
     glyph.importOutlines(str(svg_path))
-    glyph.width = ADVANCE
+    xmin, _ymin, xmax, _ymax = glyph.boundingBox()
+    if xmax <= xmin:
+        glyph.width = FALLBACK_ADVANCE
+        return
+    # Advance width tracks each glyph's actual ink width instead of a flat
+    # cell-sized advance, so narrow letters ("i", "l", "1") sit closer to
+    # their neighbors and wide ones ("m", "w") keep their natural spacing.
+    glyph.transform(psMat.translate(-xmin + LEFT_BEARING, 0))
+    glyph.width = int(xmax - xmin) + LEFT_BEARING + RIGHT_BEARING
 
 
 def build(svg_dir, output_path):
