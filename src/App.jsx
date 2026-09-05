@@ -4,6 +4,7 @@ import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
 import Settings from "./components/Settings";
+import PlanScreen from "./components/PlanScreen";
 import AiChatPanel from "./components/AiChatPanel";
 import BrowserPanel from "./components/BrowserPanel";
 import { createBrowserBridge } from "./browser/browserBridge";
@@ -283,11 +284,16 @@ export default function App() {
     return <Settings onBack={() => setScreen("library")} />;
   }
 
+  if (screen === "plan") {
+    return <PlanScreen onBack={() => setScreen("library")} />;
+  }
+
   if (screen === "library") {
     return (
       <Library
         onOpenNote={openNote}
         onOpenSettings={() => setScreen("settings")}
+        onOpenPlan={() => setScreen("plan")}
       />
     );
   }

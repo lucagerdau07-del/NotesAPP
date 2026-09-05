@@ -28,6 +28,7 @@ import {
   Sparkles as SparklesIcon,
   FileUp,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
@@ -2826,6 +2827,7 @@ function UntisWeekGrid({ lessons }) {
 export default function Library({
   onOpenNote,
   onOpenSettings,
+  onOpenPlan,
   documentLibraryOptions,
 }) {
   const documentLibrary = useDocumentLibrary(documentLibraryOptions);
@@ -3162,9 +3164,33 @@ export default function Library({
           <Tag size={19} />
         </div>
         <button
-          onClick={onOpenSettings}
+          type="button"
+          onClick={onOpenPlan}
+          className="lib-plan-btn"
+          title="Lernplan & Glossar"
+          aria-label="Lernplan & Glossar öffnen"
+          data-testid="open-plan-btn"
           style={{
             marginTop: "auto",
+            width: 44,
+            height: 44,
+            borderRadius: 15,
+            background: "transparent",
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#FFFFFF",
+            cursor: "pointer",
+            transition: "background-color 0.15s, color 0.15s",
+          }}
+        >
+          <CalendarDays size={19} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          style={{
             width: 44,
             height: 44,
             borderRadius: 15,
@@ -3179,9 +3205,10 @@ export default function Library({
           }}
           className="lib-settings-btn"
           title="Einstellungen"
+          aria-label="Einstellungen öffnen"
           data-testid="settings-nav-btn"
         >
-          <Settings size={20} />
+          <Settings size={20} aria-hidden="true" />
         </button>
       </div>
 

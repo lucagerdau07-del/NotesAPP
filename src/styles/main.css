@@ -213,6 +213,15 @@ body {
   color: #F1EEE7 !important;
   transform: rotate(25deg);
 }
+.lib-plan-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #F1EEE7 !important;
+}
+.lib-plan-btn:focus-visible,
+.lib-settings-btn:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: 2px;
+}
 .lib-agent-done:hover {
   background: rgba(255,255,255,.07);
 }
