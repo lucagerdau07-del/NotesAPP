@@ -6,24 +6,59 @@ import { buildSystemPrompt } from "../agent/systemPrompt.js";
 const MAX_STEPS = 30;
 const MAX_HISTORY = 40;
 const STORAGE_PREFIX = "notes.chat.";
+const CHAT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-function loadChat(documentId) {
+export function loadChat(documentId) {
   try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_PREFIX + documentId);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed : [];
+    const key = STORAGE_PREFIX + documentId;
+    const raw = globalThis.localStorage?.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Legacy shape (plain array, no timestamp): keep it, its 30 days start now.
+    if (Array.isArray(parsed)) return parsed;
+    if (Date.now() - parsed.savedAt > CHAT_TTL_MS) {
+      globalThis.localStorage?.removeItem(key);
+      return [];
+    }
+    return Array.isArray(parsed.messages) ? parsed.messages : [];
   } catch {
     return [];
   }
 }
 
-function saveChat(documentId, messages) {
+export function saveChat(documentId, messages) {
   try {
-    globalThis.localStorage?.setItem(STORAGE_PREFIX + documentId, JSON.stringify(messages));
+    globalThis.localStorage?.setItem(
+      STORAGE_PREFIX + documentId,
+      JSON.stringify({ savedAt: Date.now(), messages }),
+    );
   } catch {
     // Storage blocked: the conversation just won't survive a restart.
   }
 }
+
+// One-time sweep so a note nobody reopens still gets its chat dropped after
+// 30 days, not just ones loadChat happens to touch again.
+function pruneOldChats() {
+  const storage = globalThis.localStorage;
+  if (!storage) return;
+  try {
+    for (const key of Object.keys(storage)) {
+      if (!key.startsWith(STORAGE_PREFIX)) continue;
+      try {
+        const parsed = JSON.parse(storage.getItem(key));
+        if (!Array.isArray(parsed) && Date.now() - parsed?.savedAt > CHAT_TTL_MS) {
+          storage.removeItem(key);
+        }
+      } catch {
+        // Unreadable entry: leave it, not worth failing the whole sweep over.
+      }
+    }
+  } catch {
+    // Storage enumeration blocked: nothing to sweep.
+  }
+}
+pruneOldChats();
 
 function parseArguments(raw) {
   try {
