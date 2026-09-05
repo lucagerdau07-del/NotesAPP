@@ -388,14 +388,16 @@ function renderFullPage(inkDoc, page, { maxDimension = FULL_PAGE_MAX_DIMENSION, 
 }
 
 // Every page of a note, whole (not cropped), each with its own aspect
-// ratio, for the note detail view's swipeable page gallery.
+// ratio - for the note detail view's swipeable page gallery, the document
+// scan, and the agent's see_document tool (src/agent/tools.js), which all
+// need the same "whole page as an image" rendering and differ only in
+// resolution/format (see the options each passes).
 // Optionen: die Detailansicht nimmt die Vorgaben (PNG, 640 px), der
-// Dokumentscan fordert JPEG bei 1000 px an - als Base64 in einer HTTP-Anfrage
-// ist PNG bei voller Auflösung rund eine Größenordnung zu groß.
-export function renderNotePagesOf(documentId, options = {}) {
-  if (typeof document === "undefined") return [];
-  const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
-  if (!inkDoc) return [];
+// Dokumentscan und der Agent fordern JPEG bei 1000 px an - als Base64 in
+// einer HTTP-Anfrage ist PNG bei voller Auflösung rund eine Größenordnung zu
+// groß.
+export function renderPagesFromDocument(inkDoc, options = {}) {
+  if (typeof document === "undefined" || !inkDoc) return [];
   return inkDoc.pages.map((page) => {
     const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, page);
     return {
@@ -405,4 +407,9 @@ export function renderNotePagesOf(documentId, options = {}) {
       aspectRatio: (maxX - minX) / Math.max(1, maxY - minY),
     };
   });
+}
+
+export function renderNotePagesOf(documentId, options = {}) {
+  const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
+  return renderPagesFromDocument(inkDoc, options);
 }

@@ -1262,13 +1262,33 @@ body::after {
 
 .rail-chat-steps li {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  flex-direction: column;
+  gap: 2px;
   color: rgba(241, 238, 231, 0.6);
 }
 
 .rail-chat-steps li.done { color: rgba(255, 255, 255, 0.9); }
 .rail-chat-steps li.failed { color: #E8A0A0; }
+
+.rail-chat-step-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Result/error line under a step, terminal-style: a tree connector plus
+   monospace output, same font as inline code in the markdown renderer. */
+.rail-chat-step-detail {
+  display: flex;
+  gap: 6px;
+  padding-left: 19px;
+  color: rgba(241, 238, 231, 0.4);
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.rail-chat-steps li.failed .rail-chat-step-detail {
+  color: #E8A0A0;
+}
 
 .rail-chat-spin {
   display: inline-block;

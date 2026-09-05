@@ -43,6 +43,25 @@ describe("agent tools", () => {
     expect(report.pages[0].objects[0]).toMatchObject({ type: "text", text: "Hallo" });
   });
 
+  it("renders a page as an image so it can see strokes read_document can't list", () => {
+    const api = createApi();
+    executeTool(
+      "draw",
+      { pageId: "note-1-page-1", paths: [[{ x: 10, y: 10 }, { x: 90, y: 10 }]] },
+      api,
+    );
+    const result = executeTool("see_document", {}, api);
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]).toMatchObject({ id: "note-1-page-1" });
+    expect(result.pages[0].src).toMatch(/^data:image\//);
+  });
+
+  it("see_document rejects an unknown page like the other tools", () => {
+    const api = createApi();
+    const result = executeTool("see_document", { pageId: "nope" }, api);
+    expect(String(result)).toMatch(/^Fehler/);
+  });
+
   it("rejects an unknown page instead of writing", () => {
     const api = createApi();
     const result = executeTool(

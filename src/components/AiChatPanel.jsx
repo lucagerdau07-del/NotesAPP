@@ -155,14 +155,22 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
           <ul className="rail-chat-steps">
             {steps.map((step) => (
               <li key={step.id} className={step.state}>
-                {step.state === "running" ? (
-                  <Loader2 size={12} className="rail-chat-spin" />
-                ) : step.state === "failed" ? (
-                  <AlertTriangle size={12} />
-                ) : (
-                  <Check size={12} />
+                <div className="rail-chat-step-line">
+                  {step.state === "running" ? (
+                    <Loader2 size={12} className="rail-chat-spin" />
+                  ) : step.state === "failed" ? (
+                    <AlertTriangle size={12} />
+                  ) : (
+                    <Check size={12} />
+                  )}
+                  <span>{step.label}</span>
+                </div>
+                {step.detail && (
+                  <div className="rail-chat-step-detail">
+                    <span aria-hidden="true">⎿</span>
+                    <span>{step.detail}</span>
+                  </div>
                 )}
-                <span>{step.label}</span>
               </li>
             ))}
           </ul>

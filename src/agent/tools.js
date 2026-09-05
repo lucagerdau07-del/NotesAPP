@@ -1,5 +1,6 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
+import { renderPagesFromDocument } from "../documents/notePreview.js";
 import { FONT_STACKS, snapBaselineToRule } from "../ink/textStyle.js";
 import {
   PAGE_WIDTH,
@@ -22,6 +23,10 @@ const SHAPE_TYPES = ["rect", "ellipse", "line", "arrow"];
 const MAX_TEXT = 4000;
 const MAX_PATHS = 200;
 const MAX_POINTS = 2000;
+// Same encoding as the document scan (src/knowledge/documentScan.js): JPEG at
+// 1000px reads handwriting fine and keeps the base64 payload manageable.
+const SEE_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
+const MAX_SEE_PAGES = 8;
 
 // The model needs to know where its next block may start. Real wrapping happens
 // in the DOM, so this is a deliberate estimate.
@@ -43,6 +48,19 @@ export const AGENT_TOOLS = [
       description:
         "Liest den aktuellen Dokumentzustand: Seiten, alle Textblöcke und Formen mit Position, Größe und Inhalt sowie die Strichzahl je Seite.",
       parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "see_document",
+      description:
+        "Zeigt die Seite(n) als Bild, inklusive handschriftlicher Striche und Zeichnungen, die read_document nicht auflistet. Ohne pageId werden alle Seiten gezeigt (bis zu 8).",
+      parameters: {
+        type: "object",
+        properties: { pageId: { type: "string" } },
+        required: [],
+      },
     },
   },
   {
@@ -291,11 +309,22 @@ export const AGENT_TOOLS = [
   },
 ];
 
+const READ_ONLY_TOOL_NAMES = new Set(["read_document", "see_document", "done"]);
+
+// Chat mode (editDocument: false) still lets the model look at the note, just
+// not change it — read_document/see_document/done from the same schema list,
+// so the read path is never a second definition to drift out of sync.
+export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
+  READ_ONLY_TOOL_NAMES.has(tool.function.name),
+);
+
 // Short line per tool call for the step list in the panel.
 export function describeToolCall(name, args = {}) {
   switch (name) {
     case "read_document":
       return "Dokument lesen";
+    case "see_document":
+      return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":
       return `Text schreiben: ${String(args.text || "").slice(0, 40)}`;
     case "edit_text":
@@ -382,6 +411,17 @@ export function executeTool(name, rawArgs, api) {
             })),
         })),
       };
+
+    case "see_document": {
+      if (args.pageId && !pageIds.includes(args.pageId))
+        return `Fehler: pageId "${args.pageId}" gibt es nicht. Vorhanden: ${pageIds.join(", ")}`;
+      const pages = renderPagesFromDocument(document, SEE_IMAGE_OPTIONS)
+        .filter((page) => !args.pageId || page.id === args.pageId)
+        .slice(0, MAX_SEE_PAGES)
+        .map((page) => ({ id: page.id, src: page.src }));
+      if (pages.length === 0) return "Fehler: Keine Seite zum Anzeigen gefunden.";
+      return { pages };
+    }
 
     case "write_text": {
       const patch = textPatch({ ...args, size: args.size ?? 18 }, null, inkColor, bounds);

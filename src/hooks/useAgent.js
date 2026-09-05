@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestCompletion } from "../agent/agentClient.js";
-import { AGENT_TOOLS, describeToolCall, executeTool } from "../agent/tools.js";
+import { AGENT_TOOLS, AGENT_READ_TOOLS, describeToolCall, executeTool } from "../agent/tools.js";
 import { buildSystemPrompt } from "../agent/systemPrompt.js";
 
 const MAX_STEPS = 30;
@@ -90,6 +90,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       if (!task || status === "running") return;
 
       const controllerAtStart = inkControllerRef?.current;
+      const canRead = Boolean(controllerAtStart?.getDocument);
       const canEdit = editDocument && Boolean(controllerAtStart?.applyCommands);
       const isWhiteboard = controllerAtStart?.document?.pages?.[0]?.kind === "whiteboard";
       const controller = new AbortController();
@@ -108,7 +109,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       };
 
       let conversation = [
-        { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit, isWhiteboard }) },
+        { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit, canRead, isWhiteboard }) },
         ...messages,
         { role: "user", content: task },
       ];
@@ -118,7 +119,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         for (let step = 0; step < MAX_STEPS; step += 1) {
           const reply = await requestCompletion({
             messages: wireMessages(conversation),
-            tools: canEdit ? AGENT_TOOLS : undefined,
+            tools: canEdit ? AGENT_TOOLS : canRead ? AGENT_READ_TOOLS : undefined,
             signal: controller.signal,
           });
           conversation = [...conversation, reply];
@@ -154,21 +155,53 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               }
             }
             const failed = typeof result === "string" && result.startsWith("Fehler");
+            const sawPages = name === "see_document" && !failed && Array.isArray(result?.pages);
             setSteps((current) =>
               current.map((entry) =>
-                entry.id === call.id ? { ...entry, state: failed ? "failed" : "done" } : entry,
+                entry.id === call.id
+                  ? {
+                      ...entry,
+                      state: failed ? "failed" : "done",
+                      ...(failed ? { detail: result } : {}),
+                      ...(sawPages ? { detail: `${result.pages.length} Bild(er)` } : {}),
+                    }
+                  : entry,
               ),
             );
             if (name === "done" && !failed) finished = result.summary;
 
-            conversation = [
-              ...conversation,
-              {
-                role: "tool",
-                tool_call_id: call.id,
-                content: typeof result === "string" ? result : JSON.stringify(result),
-              },
-            ];
+            // A tool result must stay a string on the wire (see wireMessages),
+            // so an image can't ride along in it. see_document's pages instead
+            // go out as image_url content parts on a synthetic user turn right
+            // after the tool result, the same shape documentScan.js builds for
+            // the note-scan vision call.
+            conversation = sawPages
+              ? [
+                  ...conversation,
+                  {
+                    role: "tool",
+                    tool_call_id: call.id,
+                    content: `${result.pages.length} Seite(n) als Bild angehängt.`,
+                  },
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: "Bild(er) der angeforderten Seite(n):" },
+                      ...result.pages.map((page) => ({
+                        type: "image_url",
+                        image_url: { url: page.src },
+                      })),
+                    ],
+                  },
+                ]
+              : [
+                  ...conversation,
+                  {
+                    role: "tool",
+                    tool_call_id: call.id,
+                    content: typeof result === "string" ? result : JSON.stringify(result),
+                  },
+                ];
           }
 
           if (finished !== null) {

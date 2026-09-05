@@ -3,7 +3,7 @@ import { PAGE_WIDTH, PAGE_HEIGHT } from "./tools.js";
 // One prompt for both modes: without tools the model just chats about the note,
 // with tools it edits the document. isWhiteboard swaps the page-geometry
 // paragraph for one describing the whiteboard's unbounded canvas instead.
-export function buildSystemPrompt({ noteTitle, subject, canEdit, isWhiteboard = false }) {
+export function buildSystemPrompt({ noteTitle, subject, canEdit, canRead = canEdit, isWhiteboard = false }) {
   const lines = [
     "Du bist der Assistent in einer Schul-Notizbuch-App. Du antwortest immer auf Deutsch.",
     "Antworte im Chat in Markdown: Überschriften, Listen, **fett**, `Code`, Codeblöcke, Tabellen.",
@@ -23,12 +23,20 @@ export function buildSystemPrompt({ noteTitle, subject, canEdit, isWhiteboard = 
         "Passt nichts mehr auf die Seite, rufe add_page auf.",
       );
     }
+  } else if (canRead) {
+    lines.push(
+      "Du darfst die Notiz nicht bearbeiten, nur darüber reden. Nutze read_document für Text/Formen und see_document, um Handschrift oder Zeichnungen als Bild zu sehen, bevor du zum Inhalt der Notiz antwortest.",
+    );
+  }
+
+  if (canEdit) {
     lines.push(
       "Größen: Überschrift 28, Zwischenüberschrift 22, Fließtext 18.",
       "Für unterstrichenen Text setze bei write_text/edit_text underline: true statt eine Linie mit add_shape darunter zu zeichnen — der Strich sitzt dann exakt und farblich passend unter der Schrift.",
       "Für eine Tabelle, ein Flussdiagramm oder eine Mindmap nutze insert_table/insert_diagram/insert_mindmap statt die Kästen und Texte einzeln mit add_shape/write_text zusammenzusetzen — danach einzelne Zellen/Knoten bei Bedarf mit edit_text anpassen.",
       "Für Unterpunkte an Mindmap-Zweigen nutze das `subs`-Array (1-4 Einträge) pro Zweig in insert_mindmap statt separate write_text-Aufrufe — sonst landen die Texte unverbunden irgendwo auf der Seite. Für mehr Tiefe: gib pro Zweig mehrere konkrete Unterpunkte statt nur einem an.",
       "Rufe vor dem Schreiben read_document auf, damit du weißt, was schon auf den Seiten steht, und schreibe nicht über bestehende Inhalte.",
+      "read_document zeigt nur Text und Formen als Daten, keine Handschrift oder Zeichnungen. Stehen laut read_document Striche auf einer Seite, oder wenn du auf Handgeschriebenes eingehen sollst, ruf see_document auf, um die Seite als Bild zu sehen.",
       "Setze den nächsten Block unter den `bottom`-Wert des vorigen, plus etwas Abstand.",
       "Bearbeite das Dokument nur, wenn der Auftrag das verlangt. Reine Fragen beantwortest du im Chat.",
       "Wenn der Auftrag erledigt ist, rufe done mit einer kurzen deutschen Zusammenfassung auf.",
