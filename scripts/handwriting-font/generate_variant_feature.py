@@ -29,10 +29,24 @@ def build_feature_text(letter_names, ligatures=()):
     lines = []
     for prev in letter_names:
         for curr in letter_names:
+            if prev == curr:
+                # A repeat of the same letter needs its own chain rules
+                # below — variant_index(x, x) is constant, so it can never
+                # make consecutive repeats of one letter differ from each
+                # other (e.g. every "b" in "bbb" picking the same variant).
+                continue
             v = variant_index(prev, curr)
             if v == 0:
                 continue
             lines.append(f"    sub {prev} {curr}' by {curr}.v{v + 1};")
+    # Chain rules: each repeat of the same letter advances to the next
+    # variant, so runs like "bbb" cycle base -> v2 -> v3 -> base instead of
+    # repeating one form. Order matters: each rule is its own lookup applied
+    # in sequence, so rule 2 sees rule 1's substitutions.
+    for name in letter_names:
+        lines.append(f"    sub {name} {name}' by {name}.v2;")
+        lines.append(f"    sub {name}.v2 {name}' by {name}.v3;")
+        lines.append(f"    sub {name}.v3 {name}' by {name};")
     body = "\n".join(lines)
     calt = f"feature calt {{\n{body}\n}} calt;\n"
 

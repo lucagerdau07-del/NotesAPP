@@ -92,6 +92,15 @@ def test_apply_variant_feature_skips_letter_with_only_v2_captured(tmp_path):
     assert used == 3  # "d" only has .v2, no .v3, so it's excluded entirely
 
 
+def test_repeated_letter_cycles_through_all_variants(tmp_path):
+    # Regression: variant_index(x, x) is constant, so without a dedicated
+    # chain rule every "b" in "bbb" picked the same variant.
+    font_path = tmp_path / "test.ttf"
+    _build_test_font(font_path)
+    apply_variant_feature(str(font_path), letter_names=["a", "b", "c"])
+    assert _shape_glyph_names(str(font_path), "bbb") == ["b", "b.v2", "b.v3"]
+
+
 def test_apply_variant_feature_preserves_existing_ligature_rule(tmp_path):
     # Regression: feaLib's addOpenTypeFeaturesFromString compiles a fresh
     # GSUB from its .fea text, which used to silently drop a `liga` feature
