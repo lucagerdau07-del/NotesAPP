@@ -16,6 +16,20 @@ import {
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
+import { renderInline } from "../Markdown.jsx";
+
+// AI-written text only: renders **bold**/_italic_/`code`/~~strike~~ instead of
+// showing the raw markdown syntax. User-typed text always stays literal.
+function renderAiText(text) {
+  return String(text)
+    .split("\n")
+    .map((line, index, lines) => (
+      <React.Fragment key={index}>
+        {renderInline(line, `t${index}`)}
+        {index < lines.length - 1 ? <br /> : null}
+      </React.Fragment>
+    ));
+}
 
 const HANDLE = 14;
 const MIN_TEXT_WIDTH = 24;
@@ -380,7 +394,7 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
         cursor: editable ? "text" : "inherit",
       }}
     >
-      {object.text}
+      {!editable && object.aiGenerated ? renderAiText(object.text) : object.text}
     </div>
   );
 }

@@ -455,6 +455,7 @@ export function executeTool(name, rawArgs, api) {
         type: "text",
         x: 64,
         color: inkColor,
+        aiGenerated: true,
         ...patch,
         y,
         lineHeight,
@@ -484,7 +485,7 @@ export function executeTool(name, rawArgs, api) {
         {
           type: "update-object",
           objectId: existing.id,
-          changes: { ...patch, y, lineHeight, height },
+          changes: { ...patch, y, lineHeight, height, aiGenerated: true },
         },
       ]);
       return { id: existing.id, height, bottom: y + height };

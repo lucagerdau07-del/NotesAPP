@@ -73,6 +73,10 @@ export function createPageObject(input = {}) {
     rotation: ((finite(source.rotation, 0) % 360) + 360) % 360,
     locked: source.locked === true,
     hidden: source.hidden === true,
+    // Set only by the AI agent's write_text/edit_text — never by the user's
+    // own text tool — so markdown syntax in the text can be rendered instead
+    // of shown literally for AI output only.
+    aiGenerated: source.aiGenerated === true,
   };
 }
 
