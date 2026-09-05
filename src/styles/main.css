@@ -2070,12 +2070,25 @@ body::after {
   transform: translateY(-1px);
 }
 
+.settings-action-btn:disabled {
+  opacity: 0.45;
+  transform: none;
+  cursor: default;
+}
+
+.settings-action-btn:focus-visible,
+.settings-switch:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: 2px;
+}
+
 .settings-switch {
   position: relative;
   width: 44px;
   height: 26px;
   flex: 0 0 auto;
   border-radius: 999px;
+  border: none;
   background: #3a3942;
   cursor: pointer;
   transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
