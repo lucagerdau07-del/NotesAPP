@@ -18,15 +18,18 @@ _GERMAN = {
     "adieresis": "ä",
     "odieresis": "ö",
     "udieresis": "ü",
-    "Adieresis": "Ä",
-    "Odieresis": "Ö",
-    "Udieresis": "Ü",
+    "Adieresis_upper": "Ä",
+    "Odieresis_upper": "Ö",
+    "Udieresis_upper": "Ü",
     "germandbls": "ß",
 }
 
+# Uppercase letters get a "_upper" suffix: on a case-insensitive filesystem
+# (Windows, default macOS) "A.svg" and "a.svg" are the same file, so plain
+# single-letter names would silently collide and overwrite each other.
 GLYPHS = (
     [(chr(c), chr(c)) for c in range(ord("a"), ord("z") + 1)]
-    + [(chr(c), chr(c)) for c in range(ord("A"), ord("Z") + 1)]
+    + [(chr(c) + "_upper", chr(c)) for c in range(ord("A"), ord("Z") + 1)]
     + [(chr(c), chr(c)) for c in range(ord("0"), ord("9") + 1)]
     + list(_PUNCTUATION.items())
     + list(_GERMAN.items())
