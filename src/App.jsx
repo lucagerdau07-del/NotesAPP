@@ -49,6 +49,11 @@ function Editor({ activeNote, onBack }) {
     [],
   );
   const [imageDropRequest, setImageDropRequest] = useState(null);
+  // Circle-to-search: DocumentView crops the circled region and hands the
+  // data URL up here; the chat panel picks it up as a pending attachment for
+  // the next message it sends. Mirrors imageDropRequest's bridge, just the
+  // other direction (canvas -> chat instead of browser -> canvas).
+  const [pendingAgentImage, setPendingAgentImage] = useState(null);
   useEffect(() => {
     return browserBridge.subscribe((event) => {
       if (event.type !== "image-drop") return;
@@ -211,6 +216,8 @@ function Editor({ activeNote, onBack }) {
           subject={activeNote?.subject}
           documentId={String(activeNote?.id ?? "default")}
           inkControllerRef={inkControllerRef}
+          pendingImage={pendingAgentImage}
+          onPendingImageHandled={() => setPendingAgentImage(null)}
         />
         <BrowserPanel
           active={panelMode === "browser"}
@@ -253,6 +260,10 @@ function Editor({ activeNote, onBack }) {
           onImageDropHandled={(id) =>
             setImageDropRequest((current) => (current?.id === id ? null : current))
           }
+          onCircleToSearch={(dataUrl) => {
+            setPendingAgentImage({ id: `${Date.now()}`, dataUrl });
+            setPanelMode("agent");
+          }}
         />
       </div>
     </div>

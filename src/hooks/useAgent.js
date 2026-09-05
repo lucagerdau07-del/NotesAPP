@@ -239,7 +239,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   );
 
   const send = useCallback(
-    async (text, { editDocument = true } = {}) => {
+    async (text, { editDocument = true, image } = {}) => {
       const task = String(text || "").trim();
       if (!task || status === "running") return;
 
@@ -271,10 +271,22 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       };
 
       let currentSteps = [];
+      // The persisted/displayed message stays plain text either way (its
+      // renderer only ever handles a string) — the image rides along only
+      // on the wire turn, same principle as see_document's synthetic message.
+      const userTurn = image
+        ? {
+            role: "user",
+            content: [
+              { type: "text", text: task },
+              { type: "image_url", image_url: { url: image } },
+            ],
+          }
+        : { role: "user", content: task };
       let conversation = [
         { role: "system", content: buildSystemPrompt({ noteTitle, subject, canEdit, canRead, isWhiteboard }) },
         ...messages,
-        { role: "user", content: task },
+        userTurn,
       ];
       setMessages((current) => [...current, { role: "user", content: task }]);
 

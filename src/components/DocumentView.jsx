@@ -34,6 +34,7 @@ import {
   Bold,
   Italic,
   Baseline,
+  ScanSearch,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useLongPress from "../hooks/useLongPress";
@@ -42,6 +43,7 @@ import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
 import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
+import { renderRegionFromDocument } from "../documents/notePreview.js";
 import { INPUT_MODES } from "../ink/inputPolicy";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
@@ -93,6 +95,21 @@ export const TEXT_TOOL = {
 };
 
 const TEXT_SIZE_PRESETS = [14, 18, 24, 32, 48];
+
+// Circle-to-search: an armed placingTool exactly like the shape tools (same
+// drag-a-box mechanic, already wired for pointerDown/Move/Up) — only its
+// pointerUp handling differs, see the draftPlacement branch below.
+const CIRCLE_SEARCH_TOOL = {
+  id: "circleSearch",
+  name: "Bereich",
+  icon: <ScanSearch size={15} />,
+  width: 200,
+  height: 130,
+};
+// Its visible mark: a bright, unmistakably-not-user-drawn accent so it reads
+// as "sent to the assistant", not as an actual shape.
+const SEARCH_MARK_COLOR = "#FF7A33";
+const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality: 0.82 };
 
 // Rail button icon mirrors whichever pen type is currently picked, so the
 // standalone marker button (now folded into the pen popover) isn't missed.
@@ -864,6 +881,7 @@ export default function DocumentView({
   isImmersive,
   imageDropRequest,
   onImageDropHandled,
+  onCircleToSearch,
 }) {
   const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
@@ -1193,6 +1211,31 @@ export default function DocumentView({
       src: object.originalSrc,
       originalSrc: null,
     });
+  };
+
+  // Crops the dragged box *before* adding the mark object, so the image
+  // handed to the agent shows the original content, not the mark covering it.
+  const handleCircleSearch = (pageId, x, y, width, height) => {
+    if (width < 12 || height < 12) return;
+    const dataUrl = renderRegionFromDocument(
+      inkDocument,
+      pageId,
+      { minX: x, minY: y, maxX: x + width, maxY: y + height },
+      SEARCH_CROP_OPTIONS,
+    );
+    if (!dataUrl) return;
+    inkController?.addObject?.({
+      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+      type: "rect",
+      pageId,
+      x,
+      y,
+      width,
+      height,
+      color: SEARCH_MARK_COLOR,
+      strokeWidth: 3,
+    });
+    onCircleToSearch?.(dataUrl);
   };
 
   const handleLassoCommit = (transform) => {
@@ -1744,6 +1787,20 @@ export default function DocumentView({
     if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
       inkPointer.onPointerUp(e);
       const tool = placingTool;
+
+      if (tool.id === "circleSearch") {
+        handleCircleSearch(
+          draftPlacement.pageId,
+          Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width),
+          Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height),
+          Math.abs(draftPlacement.width),
+          Math.abs(draftPlacement.height),
+        );
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
+
       const dragged =
         Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
       const object = {
@@ -2532,6 +2589,32 @@ export default function DocumentView({
         data-testid="lasso-tool-btn"
       >
         <LassoSelect size={18} />
+      </button>
+      <button
+        className={`rail-btn ${placingTool?.id === "circleSearch" ? "active" : ""}`}
+        onClick={() => {
+          if (placingTool?.id === "circleSearch") {
+            setPlacingTool(null);
+            return;
+          }
+          setPlacingTool(CIRCLE_SEARCH_TOOL);
+          setIsBucketMode(false);
+          setIsEraser?.(false);
+          setIsSelectMode?.(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title={
+          placingTool?.id === "circleSearch"
+            ? "Bereich ziehen zum Markieren (Klick zum Abbrechen)"
+            : "Bereich einkreisen und an den Assistenten geben"
+        }
+        data-testid="circle-search-tool-btn"
+      >
+        <ScanSearch size={18} />
       </button>
       <button
         className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}

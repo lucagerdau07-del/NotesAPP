@@ -19,6 +19,7 @@ export default function SplitLayout({
   inkControllerRef,
   imageDropRequest,
   onImageDropHandled,
+  onCircleToSearch,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -114,6 +115,7 @@ export default function SplitLayout({
           isImmersive={isImmersive}
           imageDropRequest={imageDropRequest}
           onImageDropHandled={onImageDropHandled}
+          onCircleToSearch={onCircleToSearch}
         />
         {layoutMode === "split" && (
           <WritingZone

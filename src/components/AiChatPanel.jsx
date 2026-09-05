@@ -13,6 +13,7 @@ import {
   History,
   Plus,
   Pencil,
+  ScanSearch,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -290,7 +291,16 @@ function CopyButton({ text }) {
   );
 }
 
-export default function AiChatPanel({ active = true, onClose, noteTitle, subject, documentId, inkControllerRef }) {
+export default function AiChatPanel({
+  active = true,
+  onClose,
+  noteTitle,
+  subject,
+  documentId,
+  inkControllerRef,
+  pendingImage,
+  onPendingImageHandled,
+}) {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -329,7 +339,9 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
     const text = draft.trim();
     if (!text || isRunning) return;
     setDraft("");
-    send(text);
+    const image = pendingImage?.dataUrl;
+    if (pendingImage) onPendingImageHandled?.();
+    send(text, { image });
   };
 
   const onKeyDown = (event) => {
@@ -430,6 +442,22 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
         )}
       </div>
 
+      {pendingImage && (
+        <div className="rail-chat-attachment">
+          <img src={pendingImage.dataUrl} alt="Markierter Bereich" />
+          <span className="rail-chat-attachment-label">
+            <ScanSearch size={12} /> Markierter Bereich
+          </span>
+          <button
+            type="button"
+            className="rail-chat-attachment-remove"
+            title="Anhang entfernen"
+            onClick={() => onPendingImageHandled?.()}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       <form className="rail-chat-input" onSubmit={submit}>
         <textarea
           ref={inputRef}
@@ -437,7 +465,7 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Frag etwas oder gib einen Auftrag…"
+          placeholder={pendingImage ? "Was ist im markierten Bereich?" : "Frag etwas oder gib einen Auftrag…"}
           aria-label="Nachricht an den KI-Assistenten"
         />
         {isRunning ? (

@@ -413,3 +413,30 @@ export function renderNotePagesOf(documentId, options = {}) {
   const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
   return renderPagesFromDocument(inkDoc, options);
 }
+
+// Just one rectangle of one page, in page units — the circle-to-search
+// crop. Same renderComposite as a full page, only the view/bounds differ.
+export function renderRegionFromDocument(inkDoc, pageId, rect, options = {}) {
+  if (typeof document === "undefined" || !inkDoc) return "";
+  const page = inkDoc.pages.find((p) => p.id === pageId);
+  if (!page) return "";
+  const { minX, minY, maxX, maxY } = rect;
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality } = options;
+  const scale = maxDimension / Math.max(width, height);
+
+  return renderComposite({
+    inkDoc,
+    page,
+    pixelWidth: Math.round(width * scale * FULL_PAGE_DPR),
+    pixelHeight: Math.round(height * scale * FULL_PAGE_DPR),
+    dpr: FULL_PAGE_DPR,
+    scale,
+    offsetX: -minX * scale,
+    offsetY: -minY * scale,
+    view: { minX, minY, maxX, maxY },
+    mimeType,
+    quality,
+  });
+}
