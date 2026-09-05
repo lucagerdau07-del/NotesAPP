@@ -1216,6 +1216,16 @@ body::after {
   cursor: default;
 }
 
+.rail-chat-circle-search {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(241, 238, 231, 0.7) !important;
+}
+
+.rail-chat-circle-search:hover {
+  background: rgba(255, 122, 51, 0.18) !important;
+  color: #FFB27A !important;
+}
+
 .rail-chat-head-actions {
   display: flex;
   gap: 4px;

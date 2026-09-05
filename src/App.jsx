@@ -54,6 +54,10 @@ function Editor({ activeNote, onBack }) {
   // the next message it sends. Mirrors imageDropRequest's bridge, just the
   // other direction (canvas -> chat instead of browser -> canvas).
   const [pendingAgentImage, setPendingAgentImage] = useState(null);
+  // Armed from the chat input's own button: closes the panel so the canvas
+  // has room, DocumentView picks this up to arm the drag tool, and
+  // onCircleToSearch (below) reopens the panel once a region comes back.
+  const [armCircleSearchRequest, setArmCircleSearchRequest] = useState(null);
   useEffect(() => {
     return browserBridge.subscribe((event) => {
       if (event.type !== "image-drop") return;
@@ -218,6 +222,10 @@ function Editor({ activeNote, onBack }) {
           inkControllerRef={inkControllerRef}
           pendingImage={pendingAgentImage}
           onPendingImageHandled={() => setPendingAgentImage(null)}
+          onRequestCircleSearch={() => {
+            setPanelMode(null);
+            setArmCircleSearchRequest({ id: `${Date.now()}-${Math.random()}` });
+          }}
         />
         <BrowserPanel
           active={panelMode === "browser"}
@@ -264,6 +272,10 @@ function Editor({ activeNote, onBack }) {
             setPendingAgentImage({ id: `${Date.now()}`, dataUrl });
             setPanelMode("agent");
           }}
+          armCircleSearchRequest={armCircleSearchRequest}
+          onArmCircleSearchHandled={(id) =>
+            setArmCircleSearchRequest((current) => (current?.id === id ? null : current))
+          }
         />
       </div>
     </div>

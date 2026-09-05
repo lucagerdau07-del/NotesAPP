@@ -300,6 +300,7 @@ export default function AiChatPanel({
   inkControllerRef,
   pendingImage,
   onPendingImageHandled,
+  onRequestCircleSearch,
 }) {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef(null);
@@ -459,6 +460,14 @@ export default function AiChatPanel({
         </div>
       )}
       <form className="rail-chat-input" onSubmit={submit}>
+        <button
+          type="button"
+          className="rail-chat-circle-search"
+          title="Bereich einkreisen und an den Assistenten geben"
+          onClick={() => onRequestCircleSearch?.()}
+        >
+          <ScanSearch size={16} />
+        </button>
         <textarea
           ref={inputRef}
           rows={1}

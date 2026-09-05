@@ -20,6 +20,8 @@ export default function SplitLayout({
   imageDropRequest,
   onImageDropHandled,
   onCircleToSearch,
+  armCircleSearchRequest,
+  onArmCircleSearchHandled,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -116,6 +118,8 @@ export default function SplitLayout({
           imageDropRequest={imageDropRequest}
           onImageDropHandled={onImageDropHandled}
           onCircleToSearch={onCircleToSearch}
+          armCircleSearchRequest={armCircleSearchRequest}
+          onArmCircleSearchHandled={onArmCircleSearchHandled}
         />
         {layoutMode === "split" && (
           <WritingZone

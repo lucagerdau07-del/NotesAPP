@@ -882,6 +882,8 @@ export default function DocumentView({
   imageDropRequest,
   onImageDropHandled,
   onCircleToSearch,
+  armCircleSearchRequest,
+  onArmCircleSearchHandled,
 }) {
   const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
@@ -1213,8 +1215,9 @@ export default function DocumentView({
     });
   };
 
-  // Crops the dragged box *before* adding the mark object, so the image
-  // handed to the agent shows the original content, not the mark covering it.
+  // Just crops and hands the image up — no persisted object. The live drag
+  // box (draftPlacement's own preview) is all the visible feedback there is;
+  // nothing should remain on the page once the region is released.
   const handleCircleSearch = (pageId, x, y, width, height) => {
     if (width < 12 || height < 12) return;
     const dataUrl = renderRegionFromDocument(
@@ -1224,17 +1227,6 @@ export default function DocumentView({
       SEARCH_CROP_OPTIONS,
     );
     if (!dataUrl) return;
-    inkController?.addObject?.({
-      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
-      type: "rect",
-      pageId,
-      x,
-      y,
-      width,
-      height,
-      color: SEARCH_MARK_COLOR,
-      strokeWidth: 3,
-    });
     onCircleToSearch?.(dataUrl);
   };
 
@@ -1368,6 +1360,24 @@ export default function DocumentView({
       cancelled = true;
     };
   }, [imageDropRequest]);
+
+  // Armed from the chat input's own circle-to-search button (see
+  // AiChatPanel): the panel closes itself first so the canvas has full
+  // width to drag on, then this arms the tool the same way the toolbar
+  // button would.
+  useEffect(() => {
+    if (!armCircleSearchRequest) return;
+    setPlacingTool(CIRCLE_SEARCH_TOOL);
+    setIsBucketMode(false);
+    setIsEraser?.(false);
+    setIsSelectMode?.(false);
+    setIsPenSettingsOpen(false);
+    setIsEraserSettingsOpen(false);
+    setIsColorPickerOpen(false);
+    setIsLassoMode(false);
+    setLassoSelection(null);
+    onArmCircleSearchHandled?.(armCircleSearchRequest.id);
+  }, [armCircleSearchRequest]);
 
   // Rasterizes this page's ink + shape outlines as walls, floods out from the
   // click, and drops the cropped result in as a "fill" object sized to match.
@@ -2591,32 +2601,6 @@ export default function DocumentView({
         <LassoSelect size={18} />
       </button>
       <button
-        className={`rail-btn ${placingTool?.id === "circleSearch" ? "active" : ""}`}
-        onClick={() => {
-          if (placingTool?.id === "circleSearch") {
-            setPlacingTool(null);
-            return;
-          }
-          setPlacingTool(CIRCLE_SEARCH_TOOL);
-          setIsBucketMode(false);
-          setIsEraser?.(false);
-          setIsSelectMode?.(false);
-          setIsPenSettingsOpen(false);
-          setIsEraserSettingsOpen(false);
-          setIsColorPickerOpen(false);
-          setIsLassoMode(false);
-          setLassoSelection(null);
-        }}
-        title={
-          placingTool?.id === "circleSearch"
-            ? "Bereich ziehen zum Markieren (Klick zum Abbrechen)"
-            : "Bereich einkreisen und an den Assistenten geben"
-        }
-        data-testid="circle-search-tool-btn"
-      >
-        <ScanSearch size={18} />
-      </button>
-      <button
         className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}
         onClick={() => {
           if (placingTool) {
@@ -3218,13 +3202,23 @@ export default function DocumentView({
                 </svg>
               ) : (
                 <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    border: "2px dashed #3E7BD8",
-                    backgroundColor: "rgba(62, 123, 216, 0.12)",
-                    borderRadius: draftPlacement.type === "rect" ? 6 : 4,
-                  }}
+                  style={
+                    draftPlacement.type === "circleSearch"
+                      ? {
+                          width: "100%",
+                          height: "100%",
+                          border: `2px dashed ${SEARCH_MARK_COLOR}`,
+                          backgroundColor: "rgba(255, 122, 51, 0.12)",
+                          borderRadius: 6,
+                        }
+                      : {
+                          width: "100%",
+                          height: "100%",
+                          border: "2px dashed #3E7BD8",
+                          backgroundColor: "rgba(62, 123, 216, 0.12)",
+                          borderRadius: draftPlacement.type === "rect" ? 6 : 4,
+                        }
+                  }
                 />
               )}
             </div>
