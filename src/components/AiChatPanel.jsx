@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   ChevronRight,
   ChevronDown,
+  History,
+  Plus,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -34,6 +36,19 @@ function formatElapsed(ms) {
 
 function formatWorked(ms) {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)}m` : `${Math.round(ms / 1000)}s`;
+}
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+function formatRelativeWhen(timestamp) {
+  const diff = Date.now() - timestamp;
+  if (diff < MINUTE) return "gerade eben";
+  if (diff < HOUR) return `vor ${Math.round(diff / MINUTE)} Min.`;
+  if (diff < DAY) return `vor ${Math.round(diff / HOUR)} Std.`;
+  const days = Math.round(diff / DAY);
+  return days === 1 ? "gestern" : `vor ${days} Tagen`;
 }
 
 // Eases the displayed number toward `target` instead of jumping straight to
@@ -142,6 +157,68 @@ function StepList({ steps, elapsedMs }) {
   );
 }
 
+function HistoryMenu({ sessions, activeId, onSelect, onStartNew }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (event) => {
+      if (!boxRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  return (
+    <div className="rail-chat-history" ref={boxRef}>
+      <button
+        className="rail-btn rail-chat-close"
+        onClick={() => setOpen((v) => !v)}
+        title="Chat-Verlauf"
+      >
+        <History size={15} />
+      </button>
+      {open && (
+        <div className="rail-chat-history-menu">
+          <button
+            type="button"
+            className="rail-chat-history-new"
+            onClick={() => {
+              onStartNew();
+              setOpen(false);
+            }}
+          >
+            <Plus size={13} /> Neue Unterhaltung
+          </button>
+          {sessions.length === 0 ? (
+            <div className="rail-chat-history-empty">Noch keine gespeicherten Chats.</div>
+          ) : (
+            sessions.map((session) => (
+              <button
+                type="button"
+                key={session.id}
+                className={`rail-chat-history-item ${session.id === activeId ? "active" : ""}`}
+                onClick={() => {
+                  onSelect(session.id);
+                  setOpen(false);
+                }}
+              >
+                <span className="rail-chat-history-item-title">
+                  {session.title || "Unbenannter Chat"}
+                </span>
+                <span className="rail-chat-history-item-when">
+                  {formatRelativeWhen(session.savedAt)}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -169,7 +246,21 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
 
-  const { messages, steps, isRunning, error, tokens, elapsedMs, send, stop, clear } = useAgent({
+  const {
+    messages,
+    sessions,
+    activeId,
+    steps,
+    isRunning,
+    error,
+    tokens,
+    elapsedMs,
+    send,
+    stop,
+    clear,
+    selectSession,
+    startNew,
+  } = useAgent({
     documentId,
     noteTitle,
     subject,
@@ -205,6 +296,12 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
           {noteTitle && <span className="rail-chat-subtitle">{noteTitle}</span>}
         </div>
         <div className="rail-chat-head-actions">
+          <HistoryMenu
+            sessions={sessions}
+            activeId={activeId}
+            onSelect={selectSession}
+            onStartNew={startNew}
+          />
           {messages.length > 0 && (
             <button
               className="rail-btn rail-chat-close"

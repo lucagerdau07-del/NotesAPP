@@ -1174,6 +1174,87 @@ body::after {
   gap: 4px;
 }
 
+.rail-chat-history {
+  position: relative;
+}
+
+.rail-chat-history-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1c1c22;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.rail-chat-history-new {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: rgba(241, 238, 231, 0.85);
+  font: 600 12px Manrope, sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rail-chat-history-new:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rail-chat-history-empty {
+  padding: 8px 9px;
+  color: rgba(241, 238, 231, 0.4);
+  font: 400 12px Manrope, sans-serif;
+}
+
+.rail-chat-history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: rgba(241, 238, 231, 0.8);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-chat-history-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rail-chat-history-item.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rail-chat-history-item-title {
+  font: 500 12.5px Manrope, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.rail-chat-history-item-when {
+  font: 400 10.5px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.4);
+}
+
 /* Agent vs. Chat — a segmented control, not two panels. */
 .rail-chat-empty-wrap {
   display: flex;
