@@ -12,6 +12,7 @@ import {
   ChevronDown,
   History,
   Plus,
+  Pencil,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -157,9 +158,16 @@ function StepList({ steps, elapsedMs }) {
   );
 }
 
-function HistoryMenu({ sessions, activeId, onSelect, onStartNew }) {
+function HistoryMenu({ sessions, activeId, onSelect, onStartNew, onDelete, onRename }) {
   const [open, setOpen] = useState(false);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState("");
   const boxRef = useRef(null);
+
+  const commitRename = (id) => {
+    onRename(id, renameDraft);
+    setRenamingId(null);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -195,22 +203,63 @@ function HistoryMenu({ sessions, activeId, onSelect, onStartNew }) {
             <div className="rail-chat-history-empty">Noch keine gespeicherten Chats.</div>
           ) : (
             sessions.map((session) => (
-              <button
-                type="button"
+              <div
                 key={session.id}
                 className={`rail-chat-history-item ${session.id === activeId ? "active" : ""}`}
-                onClick={() => {
-                  onSelect(session.id);
-                  setOpen(false);
-                }}
               >
-                <span className="rail-chat-history-item-title">
-                  {session.title || "Unbenannter Chat"}
-                </span>
-                <span className="rail-chat-history-item-when">
-                  {formatRelativeWhen(session.savedAt)}
-                </span>
-              </button>
+                {renamingId === session.id ? (
+                  <input
+                    autoFocus
+                    className="rail-chat-history-rename-input"
+                    value={renameDraft}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") commitRename(session.id);
+                      if (event.key === "Escape") setRenamingId(null);
+                    }}
+                    onBlur={() => commitRename(session.id)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="rail-chat-history-item-main"
+                    onClick={() => {
+                      onSelect(session.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="rail-chat-history-item-title">
+                      {session.title || "Unbenannter Chat"}
+                    </span>
+                    <span className="rail-chat-history-item-when">
+                      {formatRelativeWhen(session.savedAt)}
+                    </span>
+                  </button>
+                )}
+                {renamingId !== session.id && (
+                  <div className="rail-chat-history-item-actions">
+                    <button
+                      type="button"
+                      title="Umbenennen"
+                      onClick={() => {
+                        setRenamingId(session.id);
+                        setRenameDraft(session.title || "");
+                      }}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Löschen"
+                      className="rail-chat-history-item-delete"
+                      onClick={() => onDelete(session.id)}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
             ))
           )}
         </div>
@@ -260,6 +309,8 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
     clear,
     selectSession,
     startNew,
+    deleteSession,
+    renameSession,
   } = useAgent({
     documentId,
     noteTitle,
@@ -301,6 +352,8 @@ export default function AiChatPanel({ active = true, onClose, noteTitle, subject
             activeId={activeId}
             onSelect={selectSession}
             onStartNew={startNew}
+            onDelete={deleteSession}
+            onRename={renameSession}
           />
           {messages.length > 0 && (
             <button

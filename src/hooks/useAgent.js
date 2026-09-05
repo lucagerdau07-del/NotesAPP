@@ -205,6 +205,39 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     [stop, sessions],
   );
 
+  // Deleting from the history list — the active chat included, which then
+  // lands on a fresh blank one just like the trash button.
+  const deleteSession = useCallback(
+    (id) => {
+      setSessions((current) => {
+        const updated = current.filter((s) => s.id !== id);
+        saveSessions(documentId, updated);
+        return updated;
+      });
+      if (id === activeId) {
+        stop();
+        setActiveId(newSessionId());
+        setMessages([]);
+        setSteps([]);
+        setError(null);
+      }
+    },
+    [stop, activeId, documentId],
+  );
+
+  const renameSession = useCallback(
+    (id, title) => {
+      const trimmed = title.trim().slice(0, 60);
+      if (!trimmed) return;
+      setSessions((current) => {
+        const updated = current.map((s) => (s.id === id ? { ...s, title: trimmed } : s));
+        saveSessions(documentId, updated);
+        return updated;
+      });
+    },
+    [documentId],
+  );
+
   const send = useCallback(
     async (text, { editDocument = true } = {}) => {
       const task = String(text || "").trim();
@@ -410,5 +443,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     clear,
     selectSession,
     startNew,
+    deleteSession,
+    renameSession,
   };
 }
