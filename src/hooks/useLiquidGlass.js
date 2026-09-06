@@ -66,6 +66,21 @@ function useAppBackgroundAsSceneBase() {
 // the repaint above needs. That image is only ever sampled by another glass
 // panel overlapping this one, so hold it back until the box stops moving.
 //
+// A control's content image is only ever drawn into the scene *another* glass
+// panel samples, so a control that overlaps no other glass never has its image
+// read — and the library re-captures it on every DOM mutation inside the
+// control. That is one html-to-image pass over the whole panel per keystroke in
+// the chat input or per icon swap on a rail button: measured at ~900ms of
+// blocked main thread each on a Galaxy Tab A7. Skip the ones nothing samples.
+export function samplesEachOther(element, all) {
+  const a = element.getBoundingClientRect();
+  return all.some((other) => {
+    if (other === element) return false;
+    const b = other.getBoundingClientRect();
+    return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  });
+}
+
 // ponytail: monkeypatches two private methods. If the library renames either,
 // this becomes a no-op and we are back to the blink, not to a broken frame.
 // Upgrade path: patch-package (already a dependency).
@@ -89,8 +104,11 @@ function keepGlassPaintedWhileResizing() {
   prototype._checkGlassSizeChanges = repainting;
   // targets === null is the init/resize pass over every control — never deferred.
   prototype._captureGlassContent = function (targets = null) {
-    if (!this.__glassResizing || !targets) return captureContent.call(this, targets);
-    for (const element of targets) this._glassContentDirty.add(element);
+    const all = [...this.glassSet];
+    const sampled = [...(targets ?? all)].filter((el) => samplesEachOther(el, all));
+    if (sampled.length === 0) return Promise.resolve();
+    if (!this.__glassResizing || !targets) return captureContent.call(this, new Set(sampled));
+    for (const element of sampled) this._glassContentDirty.add(element);
     return Promise.resolve();
   };
 }
@@ -137,6 +155,69 @@ function sceneCapturesIdle(
   });
 }
 
+// Every non-glass child of root is rasterised through html-to-image once and
+// that cache entry is only ever treated as stale when the element's *size*
+// changes. So everything behind the glass — document text, page objects, an
+// opening panel — keeps refracting whatever was on screen when the instance
+// initialised. markChanged() does not help: it re-runs the shader over the same
+// cached bitmap. data-dynamic would re-capture every frame (~100ms+ of
+// html-to-image per frame on a Galaxy Tab A7), so re-capture on an actual DOM
+// change instead, debounced until the change settles. captureElement(force)
+// overwrites the cache entry in place, so the old pixels stay on screen until
+// the new ones land, and the library's own onCacheUpdate marks the glasses that
+// sample them.
+//
+// ponytail: DOM mutations only. Repaints that touch no DOM still show the old
+// capture — canvas pixels are fine (the library draws canvases live via
+// drawImage), but a scroll offset is not: html-to-image's clone never copies
+// scrollTop, so a re-capture of a scrolled container renders it from the top
+// either way. Fixing that needs a patch-package patch on the bundled clone step.
+const BACKGROUND_QUIET_MS = 250;
+
+export function recaptureBackgroundOnChange(instance, root) {
+  const noop = () => {};
+  const wrappers = Array.from(root.children).filter(
+    (child) =>
+      !child.hasAttribute("data-liquid-glass-control") &&
+      !["CANVAS", "IMG", "VIDEO"].includes(child.tagName),
+  );
+  if (!instance?.capture || wrappers.length === 0) return noop;
+
+  let timer = 0;
+  // Only the wrapper that actually changed: a re-capture is one html-to-image
+  // pass over that whole subtree (~790ms for the document body on a Galaxy Tab
+  // A7), so re-shooting all of them because one pill changed is three of those
+  // for nothing.
+  const dirty = new Set();
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
+      if (wrapper) dirty.add(wrapper);
+    }
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const pending = [...dirty];
+      dirty.clear();
+      for (const wrapper of pending)
+        Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(
+          noop,
+        );
+    }, BACKGROUND_QUIET_MS);
+  });
+  for (const wrapper of wrappers)
+    observer.observe(wrapper, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+  return () => {
+    observer.disconnect();
+    clearTimeout(timer);
+  };
+}
+
 export default function useLiquidGlass(rootRef, invalidateKey) {
   const instanceRef = useRef(null);
 
@@ -146,6 +227,7 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
 
     let cancelled = false;
     let instance = null;
+    let stopRecapture = null;
     root.dataset.liquidGlassState = "loading";
 
     const start = async () => {
@@ -174,6 +256,9 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         instanceRef.current.markChanged();
         await sceneCapturesIdle(created);
         if (cancelled) return;
+        // Only once the initial scene is complete: the re-capture keeps the
+        // pipeline busy, and sceneCapturesIdle waits for it to go quiet.
+        stopRecapture = recaptureBackgroundOnChange(created, root);
         root.dataset.liquidGlassState = "enhanced";
       } catch (error) {
         if (!cancelled) {
@@ -187,6 +272,7 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
     return () => {
       cancelled = true;
       instanceRef.current = null;
+      stopRecapture?.();
       instance?.destroy();
     };
   }, [rootRef]);

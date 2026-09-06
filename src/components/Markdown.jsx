@@ -75,7 +75,7 @@ function tableRow(line) {
     .map((cell) => cell.trim());
 }
 
-export default function Markdown({ text }) {
+function Markdown({ text }) {
   const openLink = useBrowserLink();
   const lines = String(text ?? "").split("\n");
   const blocks = [];
@@ -205,3 +205,5 @@ export default function Markdown({ text }) {
 
   return <div className="md">{blocks}</div>;
 }
+
+export default React.memo(Markdown);

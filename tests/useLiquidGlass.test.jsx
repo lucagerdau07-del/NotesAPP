@@ -115,8 +115,20 @@ describe('LiquidGlass control adapter', () => {
 
     const patchedCheck = FakeLiquidGlass.prototype._checkGlassSizeChanges
     const patchedCapture = FakeLiquidGlass.prototype._captureGlassContent
-    const rail = document.createElement('div')
-    const instance = { _glassContentDirty: new Set(), _globalDirty: false }
+    // Only a control another glass panel overlaps has its content image read,
+    // so the deferral path is exercised with a pair that does overlap.
+    const boxed = (left, width) => {
+      const element = document.createElement('div')
+      element.getBoundingClientRect = () => ({ left, right: left + width, top: 0, bottom: 40, width, height: 40 })
+      return element
+    }
+    const rail = boxed(0, 200)
+    const overlapping = boxed(100, 200)
+    const instance = {
+      _glassContentDirty: new Set(),
+      _globalDirty: false,
+      glassSet: new Set([rail, overlapping]),
+    }
 
     // Mid-transition. Resizing a control's canvas clears it, so the frame that
     // resized it has to be marked dirty or the panel is left blank; and the
@@ -141,6 +153,18 @@ describe('LiquidGlass control adapter', () => {
     patchedCheck.call(instance)
     await patchedCapture.call(instance)
     expect(captureContent).toHaveBeenCalledTimes(2)
+
+    // A control nothing overlaps is never sampled, so re-capturing it would be
+    // one html-to-image pass per DOM change inside it for nothing.
+    captureContent.mockClear()
+    checkSizes.mockReturnValue(false)
+    patchedCheck.call(instance)
+    const lonely = boxed(0, 200)
+    await patchedCapture.call(
+      { ...instance, glassSet: new Set([lonely]) },
+      new Set([lonely]),
+    )
+    expect(captureContent).not.toHaveBeenCalled()
   })
 
   it('holds the CSS glass fallback until the scene capture pipeline goes idle', async () => {
