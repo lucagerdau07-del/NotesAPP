@@ -140,6 +140,13 @@ function reclaimLegacyHistorySpace(storage) {
 
 export function createInkRepository(storage) {
   return {
+    // The raw, unparsed blob - lets a caller (the library preview cache) tell
+    // "unchanged since last read" from a string compare instead of having to
+    // re-render its own expensive derived output every time.
+    loadHistoryRaw(documentId) {
+      return storage.getItem(historyKey(String(documentId)));
+    },
+
     loadHistory(documentId) {
       const id = String(documentId);
       try {

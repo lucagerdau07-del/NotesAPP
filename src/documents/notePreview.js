@@ -300,6 +300,13 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
   return canvas.toDataURL(mimeType, quality);
 }
 
+// Library.jsx calls this for every card on every render (typing in the
+// search box included), and it's an actual canvas rasterization + PNG
+// encode - measured at 300ms+ per keystroke across a card grid on a Galaxy
+// Tab A7. The note's own ink only ever changes via saveHistory, so the raw
+// stored blob is a cheap, exact "unchanged" signal to skip redoing that work.
+const previewCache = new Map();
+
 // A real render of a note's own ink strokes and shapes/text - not a
 // description of them - for the library card thumbnail. Only the top of the
 // content is shown: it's scaled so the content's own width fits (so a line
@@ -307,11 +314,19 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
 // then whatever falls below the thumbnail's height is simply cropped -
 // never shrunk to cram the whole page in.
 export function renderNotePreviewDataUrl(documentId) {
-  const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
+  const id = String(documentId);
+  const raw = browserInkRepository.loadHistoryRaw(id);
+  const cached = previewCache.get(id);
+  if (cached && cached.raw === raw) return cached.dataUrl;
+
+  const inkDoc = browserInkRepository.loadHistory(id)?.present;
   const pageId = firstPageOf(inkDoc);
   const bounds = pageId ? contentBoundsOf(inkDoc, pageId) : null;
   const page = inkDoc?.pages?.[0];
-  if (!bounds || !page) return "";
+  if (!bounds || !page) {
+    previewCache.set(id, { raw, dataUrl: "" });
+    return "";
+  }
 
   const contentWidth = bounds.maxX - bounds.minX + CONTENT_PADDING * 2;
   const scale = Math.min(THUMB_WIDTH / contentWidth, MAX_SCALE);
@@ -321,7 +336,7 @@ export function renderNotePreviewDataUrl(documentId) {
     (THUMB_WIDTH - contentWidth * scale) / 2 - (bounds.minX - CONTENT_PADDING) * scale;
   const offsetY = (CONTENT_PADDING - bounds.minY) * scale;
 
-  return renderComposite({
+  const dataUrl = renderComposite({
     inkDoc,
     page,
     pixelWidth: THUMB_WIDTH * THUMB_DPR,
@@ -337,6 +352,8 @@ export function renderNotePreviewDataUrl(documentId) {
       maxY: (THUMB_HEIGHT - offsetY) / scale,
     },
   });
+  previewCache.set(id, { raw, dataUrl });
+  return dataUrl;
 }
 
 const FULL_PAGE_DPR = 2;
