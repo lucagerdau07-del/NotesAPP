@@ -1,7 +1,7 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { renderPagesFromDocument } from "../documents/notePreview.js";
-import { FONT_STACKS, snapBaselineToRule } from "../ink/textStyle.js";
+import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
   PAGE_WIDTH,
   PAGE_HEIGHT,
@@ -28,16 +28,35 @@ const MAX_POINTS = 2000;
 const SEE_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
 const MAX_SEE_PAGES = 8;
 
-// The model needs to know where its next block may start. Real wrapping happens
-// in the DOM, so this is a deliberate estimate.
-// ponytail: 0.52em average glyph width; swap for a canvas measureText pass if
-// the agent's stacking ever drifts visibly.
-export function estimateTextHeight(text, width, fontSize, lineHeight) {
+// The model needs to know where its next block may start. Measured the same
+// way the real text box wraps (an offscreen clone with identical CSS — see
+// measureTextBox in PageObjectLayer.jsx) instead of guessed, since a guessed
+// average glyph width drifted from the actual font metrics enough to overlap
+// blocks on-device (narrower/wider real fonts than the 0.52em assumption).
+// The character-count fallback covers both no-DOM environments (tests, SSR)
+// and jsdom, which never runs real layout so scrollHeight always reads 0.
+function estimateTextHeightByCharCount(text, width, fontSize, lineHeight) {
   const perLine = Math.max(1, Math.floor(width / (fontSize * 0.52)));
   const lines = String(text)
     .split("\n")
     .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / perLine)), 0);
-  return Math.round(lines * (lineHeight || fontSize * 1.4));
+  return Math.round(lines * lineHeight);
+}
+
+export function estimateTextHeight(text, width, fontSize, lineHeight, fontFamily, bold) {
+  const resolvedLineHeight = lineHeight || fontSize * 1.4;
+  if (typeof document === "undefined")
+    return estimateTextHeightByCharCount(text, width, fontSize, resolvedLineHeight);
+  const host = document.createElement("div");
+  host.style.cssText =
+    `position:fixed;left:-9999px;top:0;visibility:hidden;white-space:pre-wrap;` +
+    `width:${width}px;font-size:${fontSize}px;font-family:${fontStackOf(fontFamily)};` +
+    `font-weight:${bold ? 700 : 400};line-height:${resolvedLineHeight}px;`;
+  host.textContent = String(text) || " ";
+  document.body.appendChild(host);
+  const height = host.scrollHeight;
+  document.body.removeChild(host);
+  return height > 0 ? height : estimateTextHeightByCharCount(text, width, fontSize, resolvedLineHeight);
 }
 
 export const AGENT_TOOLS = [
@@ -448,7 +467,7 @@ export function executeTool(name, rawArgs, api) {
         patch.fontFamily,
         patch.bold,
       );
-      const height = estimateTextHeight(text, width, fontSize, lineHeight);
+      const height = estimateTextHeight(text, width, fontSize, lineHeight, patch.fontFamily, patch.bold);
       const object = createPageObject({
         id: newId("text"),
         pageId: args.pageId,
@@ -480,7 +499,14 @@ export function executeTool(name, rawArgs, api) {
         patch.fontFamily ?? existing.fontFamily,
         patch.bold ?? existing.bold,
       );
-      const height = estimateTextHeight(text, width, fontSize, lineHeight);
+      const height = estimateTextHeight(
+        text,
+        width,
+        fontSize,
+        lineHeight,
+        patch.fontFamily ?? existing.fontFamily,
+        patch.bold ?? existing.bold,
+      );
       api.apply([
         {
           type: "update-object",

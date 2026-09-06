@@ -332,14 +332,30 @@ test('zooms and pans around the moving two-finger centroid', () => {
   fireEvent.pointerMove(page, { pointerId: 11, pointerType: 'touch', clientX: 350, clientY: 150 });
   // Mid-pinch the zoom is only previewed by a transform, so layout is untouched.
   expect(page).toHaveStyle({ width: '800px' });
-  expect(page.style.transform).toBe('translate(-100px, -150px) scale(2)');
+  expect(page.style.transform).toBe('translate(-50px, -150px) scale(2)');
   expect(scroller.scrollLeft).toBe(50);
 
   fireEvent.pointerUp(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
   expect(page).toHaveStyle({ width: '1600px' });
-  expect(page.style.transform).toBe('');
-  expect(scroller.scrollLeft).toBe(150);
+  // Full mode carries x in the transform, not in scrollLeft — the page has to
+  // keep the spot the preview ended on instead of jumping back to center.
+  expect(page.style.transform).toBe('translateX(-50px)');
+  expect(scroller.scrollLeft).toBe(50);
   expect(scroller.scrollTop).toBe(250);
+});
+
+test('a render landing mid-pinch does not throw the preview away', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
+  const view = render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  fireEvent.pointerDown(page, { pointerId: 10, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(page, { pointerId: 11, pointerType: 'touch', clientX: 200, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
+  fireEvent.pointerMove(page, { pointerId: 11, pointerType: 'touch', clientX: 350, clientY: 150 });
+  const previewed = page.style.transform;
+
+  view.rerender(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
+  expect(page.style.transform).toBe(previewed);
 });
 
 test('keeps a pinch-resized focus rectangle inside its selected page', () => {
@@ -508,7 +524,9 @@ test('move mode pans instead of drawing, with pen and with one finger', () => {
   fireEvent.pointerMove(page, { pointerId: 1, pointerType: 'pen', clientX: 260, clientY: 240 });
   fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'pen', clientX: 260, clientY: 240 });
   expect(scroller.scrollTop).toBe(160);
-  expect(scroller.scrollLeft).toBe(40);
+  // Full mode shoves the page sideways with a transform: at the fitted width
+  // there is no scroll range for scrollLeft to spend.
+  expect(page.style.transform).toBe('translateX(-40px)');
   expect(controller.commitStroke).not.toHaveBeenCalled();
 
   fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 300 });
@@ -659,8 +677,11 @@ test('drops stale gutter pointer state when the document changes', () => {
   scroller.scrollTop = 100;
   fireEvent.pointerDown(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 200 });
   view.rerender(<DocumentView inkController={createControllerDouble({ document: { ...first.document, documentId: 'note-2' } })} toolbarState={toolState()} />);
+  // Opening another note parks the scroller at the top-UI clearance; the stale
+  // pointer must not pan it away from there.
+  expect(scroller.scrollTop).toBe(78);
   fireEvent.pointerMove(scroller, { pointerId: 20, pointerType: 'touch', clientX: 950, clientY: 100 });
-  expect(scroller.scrollTop).toBe(100);
+  expect(scroller.scrollTop).toBe(78);
 });
 
 test('cancels active page stroke when a second touch starts on the gutter', () => {

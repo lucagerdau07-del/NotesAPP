@@ -2994,6 +2994,8 @@ export default function Library({
 
   const newNoteRef = useRef(null);
   const [newNoteWidth, setNewNoteWidth] = useState(0);
+  const fileOpenRef = useRef(null);
+  const [fileOpenWidth, setFileOpenWidth] = useState(0);
 
   const showToast = (msg) => {
     setSortToast(msg);
@@ -3137,6 +3139,7 @@ export default function Library({
   // view/sort pill (right-anchored, same as this button) doesn't overlap it.
   useLayoutEffect(() => {
     if (newNoteRef.current) setNewNoteWidth(newNoteRef.current.offsetWidth);
+    if (fileOpenRef.current) setFileOpenWidth(fileOpenRef.current.offsetWidth);
   }, [selectedSubject]);
 
   return (
@@ -3434,25 +3437,6 @@ export default function Library({
         </button>
       </div>
 
-      <button
-        className="liquid-glass-circle liquid-control liquid-control-reset"
-        data-liquid-glass-control="reset"
-        data-config={JSON.stringify({
-          cornerRadius: 26,
-          zRadius: 26,
-          button: true,
-        })}
-        onClick={() => {
-          setSearchQuery("");
-          if (selectedSubject) setSelectedSubject(null);
-          showToast("Filter & Suche zurückgesetzt");
-        }}
-        title="Schließen / Filter leeren"
-        style={{ position: "absolute", left: 556, top: 20, zIndex: 30 }}
-      >
-        <X size={19} strokeWidth={2.4} />
-      </button>
-
       {/* view toggle + new note (right aligned) */}
       <div
         className="liquid-glass-pill liquid-control liquid-control-view-sort"
@@ -3460,7 +3444,7 @@ export default function Library({
         data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })}
         style={{
           position: "absolute",
-          right: 110 + newNoteWidth + 14,
+          right: 88 + newNoteWidth + 14 + fileOpenWidth + 14,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3541,7 +3525,7 @@ export default function Library({
         className="liquid-glass-pill lib-newnote"
         style={{
           position: "absolute",
-          right: 110,
+          right: 88,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3573,6 +3557,7 @@ export default function Library({
 
       {/* File Open / Import Button */}
       <button
+        ref={fileOpenRef}
         type="button"
         className="liquid-glass-pill lib-file-open"
         onClick={() => fileInputRef.current?.click()}
@@ -3582,7 +3567,7 @@ export default function Library({
         }
         style={{
           position: "absolute",
-          right: 110 + newNoteWidth + 14 + 130 + 10,
+          right: 88 + newNoteWidth + 14,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3623,7 +3608,7 @@ export default function Library({
           style={{
             position: "fixed",
             top: 84,
-            right: 110,
+            right: 88,
             padding: "8px 18px",
             color: "#FFFFFF",
             font: "600 12px Manrope,sans-serif",
@@ -3976,31 +3961,6 @@ export default function Library({
       </div>
 
       {/* agent panel */}
-      <button
-        className="liquid-glass-circle liquid-control liquid-control-agent"
-        data-liquid-glass-control="agent"
-        data-config={JSON.stringify({
-          cornerRadius: 26,
-          zRadius: 26,
-          button: true,
-        })}
-        onClick={() => setAgentOpen(true)}
-        title="Agent öffnen"
-        aria-hidden={agentOpen}
-        tabIndex={agentOpen ? -1 : undefined}
-        style={{
-          position: "absolute",
-          right: 20,
-          top: 20,
-          zIndex: 20,
-          visibility: agentOpen ? "hidden" : "visible",
-          pointerEvents: agentOpen ? "none" : "auto",
-        }}
-        data-testid="agent-open-btn"
-      >
-        <Sparkles size={18} strokeWidth={2.2} />
-      </button>
-
       <div
         className="agent-panel"
         data-open={agentOpen && !detailNote}

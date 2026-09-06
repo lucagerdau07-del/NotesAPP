@@ -818,6 +818,57 @@ const baseWidth = 800;
 const pageHeight = baseWidth * 1.414;
 const PAGE_GAP = 28;
 const maxPages = 20;
+// How far the move tool can carry the page past the point where its own edge
+// meets the viewport edge, as a share of the viewport — the page always keeps
+// at least the rest of that width on screen, so it can never be pushed out of
+// sight. Below this distance from center a release springs back instead.
+const DOC_EDGE_SLACK_RATIO = 0.25;
+const DOC_SNAP_THRESHOLD_X = 24;
+// Same clearance split mode reserves with a static margin (see the scroll
+// container's own margin below) — the floating title/action pills at the top
+// of the screen are that tall. Full mode instead runs the page edge-to-edge
+// under them by default and adds this as extra *scrollable* headroom, so the
+// page can still be pulled down far enough to work the first line free.
+const TOP_UI_CLEARANCE = 78;
+
+// Where the page's own left edge sits, untouched by any offset. text-align
+// centers it only while it still fits: once it is wider than the viewport the
+// browser pins the edge at 0 rather than letting it hang off to the left
+// (measured in Chrome — a 1600px page in an 800px box reports left 0, not -400).
+// Assuming it keeps sliding is what walked the page sideways per zoom step.
+export function pageLeftEdgeX(viewportWidth, pageWidth) {
+  return Math.max(0, (viewportWidth - pageWidth) / 2);
+}
+
+// Fitted, the page rests centered and may be nudged either way by the slack.
+// Overflowing, it starts flush left with the whole overflow hidden to the
+// right, so the travel that reveals anything runs one way only.
+export function clampDocOffsetX(offsetX, viewportWidth, pageWidth) {
+  const slack = viewportWidth * DOC_EDGE_SLACK_RATIO;
+  const overflow = Math.max(0, pageWidth - viewportWidth);
+  return Math.max(-overflow - slack, Math.min(slack, offsetX));
+}
+
+// Where a pinch has to leave the page horizontally to keep the point between
+// the fingers under them, plus the translate that shows it before the new
+// layout exists. Both read the same edge, so the preview and what it commits to
+// cannot disagree — a mismatch there is a jump on release.
+export function pinchAnchorX({
+  centerX,
+  startCenterX,
+  startOffsetX,
+  viewportWidth,
+  startPageWidth,
+  pageWidth,
+}) {
+  const startEdge = pageLeftEdgeX(viewportWidth, startPageWidth);
+  const edge = pageLeftEdgeX(viewportWidth, pageWidth);
+  const scale = pageWidth / startPageWidth;
+  const anchor = (startCenterX - startEdge - startOffsetX) * scale;
+  const offsetX = clampDocOffsetX(centerX - edge - anchor, viewportWidth, pageWidth);
+  return { offsetX, translateX: edge + offsetX - startEdge };
+}
+
 const emptyDocument = {
   version: 1,
   documentId: "",
@@ -1892,6 +1943,25 @@ export default function DocumentView({
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
   const gutterPanData = useRef(null);
+  // Full-mode move-tool drag nudges the page a little off its centered rest
+  // position instead of scrolling it (there's usually no scroll room at all
+  // once it's fit to width). Bounded so it can never leave the frame, and
+  // springs back to center on release when it lands close enough.
+  // Written straight to the DOM, never through state: a pinch previews itself
+  // by writing this same transform every frame, so a render landing mid-gesture
+  // (autosave, page counter, anything upstream) would put the pre-gesture value
+  // back and the page would jump. One writer, no race. The ref is the value of
+  // record — every gesture below reads its own position back from it.
+  const docOffsetXRef = useRef(0);
+  const applyDocOffset = (next, { animate = false } = {}) => {
+    docOffsetXRef.current = next;
+    const content = containerRef.current;
+    if (!content) return;
+    content.style.transition = animate
+      ? "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)"
+      : "none";
+    content.style.transform = next ? `translateX(${next}px)` : "";
+  };
   // Zoom a live pinch is previewing via transform, and where the previewed
   // content sat on screen when it was committed (see commitLivePinch).
   const livePinchRef = useRef(null);
@@ -1933,6 +2003,21 @@ export default function DocumentView({
     };
   }, [inkDocument.documentId]);
 
+  // A nudged-off-center page from the previous note would otherwise carry
+  // over onto the next one opened.
+  useLayoutEffect(() => {
+    applyDocOffset(0);
+  }, [inkDocument.documentId]);
+
+  // Full mode's page sits under the floating title/action pills by default
+  // (see TOP_UI_CLEARANCE) — without this, a freshly opened note would show
+  // that gap right away instead of starting flush like before, since a taller
+  // scroll container otherwise still rests at scrollTop 0.
+  useLayoutEffect(() => {
+    if (!isFullMode || !scrollRef.current) return;
+    scrollRef.current.scrollTop = TOP_UI_CLEARANCE;
+  }, [inkDocument.documentId, isFullMode]);
+
   // A lasso selection names specific stroke/object ids — meaningless (and
   // stale) the moment the user opens a different note.
   useEffect(() => {
@@ -1941,15 +2026,19 @@ export default function DocumentView({
   }, [inkDocument.documentId]);
 
   // Gutter drags only ever scrolled vertically; a move-mode drag pans both axes.
-  const startPan = (event) => ({
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
-    startScrollTop: scrollRef.current?.scrollTop ?? 0,
-    panX: isMoveMode,
-    active: false,
-  });
+  const startPan = (event) => {
+    if (containerRef.current) containerRef.current.style.transition = "none";
+    return {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
+      startScrollTop: scrollRef.current?.scrollTop ?? 0,
+      startOffsetX: docOffsetXRef.current,
+      panX: isMoveMode,
+      active: false,
+    };
+  };
 
   const handleGestureStart = (event) => {
     if (event.pointerType === "pen") {
@@ -1988,6 +2077,8 @@ export default function DocumentView({
     // ever a finger.
     if (inputMode === "stylus" && palmGuard.passiveStylus) return;
     gutterPanData.current = null;
+    // A snap still transitioning would animate every preview frame below.
+    if (containerRef.current) containerRef.current.style.transition = "none";
 
     for (const pointerId of activePointers.current.keys()) {
       inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
@@ -2006,6 +2097,8 @@ export default function DocumentView({
       centerY: (first.y + second.y) / 2 - rect.top,
       scrollTop: scrollRef.current.scrollTop,
       scrollLeft: scrollRef.current.scrollLeft,
+      offsetX: docOffsetXRef.current,
+      viewportWidth: rect.width,
       // Only a focus box that is actually on screen (split mode — see its
       // render below) takes part in the pinch; useFocusBox hands us one in
       // full mode too, where it is invisible.
@@ -2026,7 +2119,19 @@ export default function DocumentView({
     }
     if (pan.active && scrollRef.current) {
       scrollRef.current.scrollTop = pan.startScrollTop + dy;
-      if (pan.panX) scrollRef.current.scrollLeft = pan.startScrollLeft + dx;
+      if (pan.panX) {
+        if (isFullMode) {
+          applyDocOffset(
+            clampDocOffsetX(
+              pan.startOffsetX - dx,
+              scrollRef.current.clientWidth,
+              resolvedPageWidth * zoom,
+            ),
+          );
+        } else {
+          scrollRef.current.scrollLeft = pan.startScrollLeft + dx;
+        }
+      }
     }
   };
 
@@ -2088,6 +2193,8 @@ export default function DocumentView({
           centerY: startY,
           scrollTop: startScrollTop,
           scrollLeft: startScrollLeft,
+          offsetX: startOffsetX,
+          viewportWidth: startViewportWidth,
           focusBox: startFb,
         } = pinchInitialData.current;
 
@@ -2104,14 +2211,35 @@ export default function DocumentView({
         // Focus-box pinches scale the box inversely to the zoom, which a plain
         // transform cannot express, so those keep the per-frame path.
         if (!startFb) {
+          // Horizontally the page is laid out, not scrolled: it sits where
+          // pageLeftEdgeX says and the offset carries it from there. The
+          // scroll-frame formula below stays for y, which does grow down from a
+          // fixed top.
+          const anchor = isFullMode
+            ? pinchAnchorX({
+                centerX: currentCenterX,
+                startCenterX: startX,
+                startOffsetX,
+                viewportWidth: startViewportWidth,
+                startPageWidth: resolvedPageWidth * startZoom,
+                pageWidth: resolvedPageWidth * newZoom,
+              })
+            : { offsetX: 0, translateX: 0 };
           livePinchRef.current = {
             zoom: newZoom,
+            offsetX: anchor.offsetX,
             scrollLeft: (startScrollLeft + startX) * zoomRatio - currentCenterX,
             scrollTop: (startScrollTop + startY) * zoomRatio - currentCenterY,
           };
           const content = containerRef.current;
           if (content) {
-            const tx = currentCenterX + startScrollLeft - (startScrollLeft + startX) * zoomRatio;
+            // This replaces the resting translateX on the same node, so tx
+            // carries the whole offset, not the change in it. It comes out of
+            // the same call as the committed offsetX, so the handover on
+            // release is invisible instead of a jump.
+            const tx = isFullMode
+              ? anchor.translateX
+              : currentCenterX + startScrollLeft - (startScrollLeft + startX) * zoomRatio;
             const ty = currentCenterY + startScrollTop - (startScrollTop + startY) * zoomRatio;
             content.style.transformOrigin = "0 0";
             content.style.willChange = "transform";
@@ -2262,12 +2390,23 @@ export default function DocumentView({
     pinchCommitRef.current = null;
     const content = containerRef.current;
     if (content) {
-      content.style.transform = "";
       content.style.transformOrigin = "";
       content.style.willChange = "";
     }
     const scroller = scrollRef.current;
     if (!scroller) return;
+    if (isFullMode) {
+      // Horizontal lives in the offset, not in scrollLeft: at the fitted width
+      // there is no scroll range, so writing it there is a silent no-op and the
+      // page springs back the moment the preview drops. offsetX already carries
+      // the anchored, clamped position the preview was showing — hand it over
+      // as is. No snap to center here: this also ends a pure zoom, and yanking
+      // the page to the middle after every pinch is not a gesture the user made.
+      applyDocOffset(commit.offsetX);
+      scroller.scrollTop = commit.scrollTop;
+      return;
+    }
+    containerRef.current?.style.setProperty("transform", "");
     scroller.scrollLeft = commit.scrollLeft;
     scroller.scrollTop = commit.scrollTop;
   };
@@ -2289,6 +2428,21 @@ export default function DocumentView({
       }
     }
     if (gutterPanData.current?.pointerId === event.pointerId) {
+      // Offset 0 only means "at rest" while the whole page fits across the
+      // viewport. Zoomed in past that, center is just one more spot on a page
+      // the user is panning around, and catching them as they cross it is the
+      // gesture fighting back.
+      const pageFitsWidth =
+        resolvedPageWidth * zoom <= (scrollRef.current?.clientWidth ?? 0) + 1;
+      if (
+        gutterPanData.current.panX &&
+        gutterPanData.current.active &&
+        pageFitsWidth &&
+        docOffsetXRef.current !== 0 &&
+        Math.abs(docOffsetXRef.current) <= DOC_SNAP_THRESHOLD_X
+      ) {
+        applyDocOffset(0, { animate: true });
+      }
       gutterPanData.current = null;
     }
     if (event.pointerType !== 'touch') return;
@@ -2900,7 +3054,7 @@ export default function DocumentView({
             position: "relative",
             backgroundColor: "transparent",
             boxShadow: "none",
-            margin: isFullMode ? 0 : "96px 0 24px 0",
+            margin: isFullMode ? `${TOP_UI_CLEARANCE}px 0 0 0` : "96px 0 24px 0",
             touchAction:
               isSelectMode || isFullMode || placingTool || isBucketMode || isLassoMode
                 ? "none"

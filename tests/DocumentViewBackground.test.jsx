@@ -74,9 +74,12 @@ describe('DocumentView background removal integration', () => {
       />
     );
 
-    // Select the image object
+    // Select the image object (a real tap is pointerdown + pointerup with no
+    // drag in between — see useTapSelect in PageObjectLayer.jsx)
     const imageElement = screen.getByAltText('Bild');
-    fireEvent.pointerDown(imageElement.closest('[data-object-id="img-123"]'));
+    const imageContainer = imageElement.closest('[data-object-id="img-123"]');
+    fireEvent.pointerDown(imageContainer);
+    fireEvent.pointerUp(imageContainer);
 
     // Find the magic wand button
     const wandBtn = await screen.findByTitle('Hintergrund entfernen');
@@ -109,9 +112,12 @@ describe('DocumentView background removal integration', () => {
       />
     );
 
-    // Select the image object
+    // Select the image object (a real tap is pointerdown + pointerup with no
+    // drag in between — see useTapSelect in PageObjectLayer.jsx)
     const imageElement = screen.getByAltText('Bild');
-    fireEvent.pointerDown(imageElement.closest('[data-object-id="img-123"]'));
+    const imageContainer = imageElement.closest('[data-object-id="img-123"]');
+    fireEvent.pointerDown(imageContainer);
+    fireEvent.pointerUp(imageContainer);
 
     // Find the restore button
     const restoreBtn = await screen.findByTitle('Original wiederherstellen');

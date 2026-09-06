@@ -12,6 +12,8 @@ import {
   ChevronDown,
   ArrowUpToLine,
   ArrowDownToLine,
+  Check,
+  X,
 } from "lucide-react";
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
@@ -32,6 +34,9 @@ function renderAiText(text) {
 }
 
 const HANDLE = 14;
+// Touch target only — the visible dot stays HANDLE, but a finger is much
+// wider than a mouse cursor, so the hit area extends past it on all sides.
+const HANDLE_HIT = 36;
 const MIN_TEXT_WIDTH = 24;
 const TEXT_WIDTH_BUFFER = 6;
 const PAGE_EDGE_MARGIN = 16;
@@ -75,6 +80,229 @@ function measureTextBox(node, maxWidth) {
 
 // Dragging writes to local state and commits once on release, so a move is one
 // undo step instead of one per pointermove.
+// Distinguishes a real tap on an unselected object from a pan/scroll/pinch
+// that merely passes over its hitbox: a finger panning or zooming touches
+// down and moves (or a second finger joins for a pinch) before it lifts,
+// where a tap stays still and stays alone. Only gates the FIRST select — once
+// an object is already selected, dragging it further is deliberate and keeps
+// firing immediately (see the onPointerDown handler below).
+const TAP_MOVE_THRESHOLD = 8;
+
+function useTapSelect(onSelect) {
+  const pending = useRef(null);
+
+  const start = (event, objectId) => {
+    pending.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, objectId };
+
+    const cancel = () => {
+      pending.current = null;
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("pointerdown", handleOtherDown);
+    };
+    const handleMove = (e) => {
+      const p = pending.current;
+      if (!p || e.pointerId !== p.pointerId) return;
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > TAP_MOVE_THRESHOLD) cancel();
+    };
+    const handleUp = (e) => {
+      const p = pending.current;
+      if (!p || e.pointerId !== p.pointerId) return;
+      cancel();
+      onSelect?.(p.objectId);
+    };
+    // A second finger touching down mid-gesture means this was the start of a
+    // pinch, not a tap — even if the first finger never moved.
+    const handleOtherDown = (e) => {
+      if (e.pointerId !== pending.current?.pointerId) cancel();
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("pointerdown", handleOtherDown);
+  };
+
+  return start;
+}
+
+// Crop rect is tracked in the object's own unscaled units (same space as
+// object.x/y/width/height) so confirming it is a plain page-space patch —
+// only the CSS positions below multiply by zoom.
+const CROP_MIN = 20;
+
+function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, onConfirm, onCancel }) {
+  const [natural, setNatural] = useState(null);
+  const [rect, setRect] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setNatural({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = object.src;
+    return () => {
+      cancelled = true;
+    };
+  }, [object.src]);
+
+  // The visible image rect within the box, per objectFit:"contain" — crop
+  // selection can only move inside this, never into the letterboxed margin.
+  const containRect = natural
+    ? (() => {
+        const scale = Math.min(boxWidth / natural.width, boxHeight / natural.height);
+        const width = natural.width * scale;
+        const height = natural.height * scale;
+        return { x: (boxWidth - width) / 2, y: (boxHeight - height) / 2, width, height, scale };
+      })()
+    : null;
+
+  useEffect(() => {
+    if (containRect && !rect) {
+      const { x, y, width, height } = containRect;
+      setRect({ x, y, width, height });
+    }
+  }, [containRect, rect]);
+
+  if (!containRect || !rect) return null;
+
+  const clamp = (r) => {
+    const x = Math.max(containRect.x, Math.min(r.x, containRect.x + containRect.width - CROP_MIN));
+    const y = Math.max(containRect.y, Math.min(r.y, containRect.y + containRect.height - CROP_MIN));
+    const maxWidth = containRect.x + containRect.width - x;
+    const maxHeight = containRect.y + containRect.height - y;
+    return {
+      x,
+      y,
+      width: Math.max(CROP_MIN, Math.min(r.width, maxWidth)),
+      height: Math.max(CROP_MIN, Math.min(r.height, maxHeight)),
+    };
+  };
+
+  const startCornerDrag = (corner) => (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const start = { x: event.clientX, y: event.clientY, rect: { ...rect } };
+    const move = (e) => {
+      const dx = (e.clientX - start.x) / zoom;
+      const dy = (e.clientY - start.y) / zoom;
+      const next = { ...start.rect };
+      if (corner.includes("w")) {
+        next.x = start.rect.x + dx;
+        next.width = start.rect.width - dx;
+      }
+      if (corner.includes("e")) next.width = start.rect.width + dx;
+      if (corner.includes("n")) {
+        next.y = start.rect.y + dy;
+        next.height = start.rect.height - dy;
+      }
+      if (corner.includes("s")) next.height = start.rect.height + dy;
+      setRect(clamp(next));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const confirm = () => {
+    const sx = (rect.x - containRect.x) / containRect.scale;
+    const sy = (rect.y - containRect.y) / containRect.scale;
+    const sw = rect.width / containRect.scale;
+    const sh = rect.height / containRect.scale;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(sw));
+    canvas.height = Math.max(1, Math.round(sh));
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      onConfirm({
+        src: canvas.toDataURL("image/png"),
+        x: object.x + rect.x,
+        y: object.y + rect.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+    img.src = object.src;
+  };
+
+  return (
+    <div
+      onPointerDown={(event) => event.stopPropagation()}
+      style={{ position: "absolute", inset: 0, overflow: "hidden", cursor: "default", zIndex: 50 }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: rect.x * zoom,
+          top: rect.y * zoom,
+          width: rect.width * zoom,
+          height: rect.height * zoom,
+          boxShadow: "0 0 0 2000px rgba(0,0,0,0.5)",
+          outline: "1.5px solid #3E7BD8",
+          overflow: "hidden",
+        }}
+      >
+        <img
+          src={object.src}
+          alt=""
+          draggable={false}
+          style={{
+            position: "absolute",
+            left: -(rect.x - containRect.x) * zoom,
+            top: -(rect.y - containRect.y) * zoom,
+            width: containRect.width * zoom,
+            height: containRect.height * zoom,
+            pointerEvents: "none",
+          }}
+        />
+      </div>
+      {["nw", "ne", "sw", "se"].map((corner) => (
+        <div
+          key={corner}
+          onPointerDown={startCornerDrag(corner)}
+          style={{
+            position: "absolute",
+            left: (corner.includes("w") ? rect.x : rect.x + rect.width) * zoom - HANDLE_HIT / 2,
+            top: (corner.includes("n") ? rect.y : rect.y + rect.height) * zoom - HANDLE_HIT / 2,
+            width: HANDLE_HIT,
+            height: HANDLE_HIT,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: `${corner}-resize`,
+            touchAction: "none",
+          }}
+        >
+          <div
+            style={{
+              width: HANDLE,
+              height: HANDLE,
+              borderRadius: "50%",
+              background: "#fff",
+              border: "2px solid #3E7BD8",
+            }}
+          />
+        </div>
+      ))}
+      <div style={{ position: "absolute", left: rect.x * zoom, top: rect.y * zoom - 34, display: "flex", gap: 4 }}>
+        <IconButton label="Zuschnitt übernehmen" onClick={confirm}>
+          <Check size={14} />
+        </IconButton>
+        <IconButton label="Abbrechen" onClick={onCancel}>
+          <X size={14} />
+        </IconButton>
+      </div>
+    </div>
+  );
+}
+
 function useDrag(onCommit) {
   const [draft, setDraft] = useState(null);
   const draftRef = useRef(null);
@@ -405,17 +633,27 @@ function Handle({ position, onPointerDown }) {
       onPointerDown={onPointerDown}
       style={{
         position: "absolute",
-        left: position.left - HANDLE / 2,
-        top: position.top - HANDLE / 2,
-        width: HANDLE,
-        height: HANDLE,
-        borderRadius: "50%",
-        background: "#fff",
-        border: "2px solid #3E7BD8",
+        left: position.left - HANDLE_HIT / 2,
+        top: position.top - HANDLE_HIT / 2,
+        width: HANDLE_HIT,
+        height: HANDLE_HIT,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         cursor: "nwse-resize",
         touchAction: "none",
       }}
-    />
+    >
+      <div
+        style={{
+          width: HANDLE,
+          height: HANDLE,
+          borderRadius: "50%",
+          background: "#fff",
+          border: "2px solid #3E7BD8",
+        }}
+      />
+    </div>
   );
 }
 
@@ -426,12 +664,15 @@ function RotateHandle({ position, onPointerDown }) {
       onPointerDown={onPointerDown}
       style={{
         position: "absolute",
-        left: position.left,
-        top: position.top,
-        transform: "translate(-50%, -100%)",
+        left: position.left - HANDLE_HIT / 2,
+        top: position.top - HANDLE_HIT,
+        width: HANDLE_HIT,
+        height: HANDLE_HIT,
+        transform: "translateX(-50%)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        justifyContent: "flex-end",
         pointerEvents: "auto",
         cursor: "grab",
         touchAction: "none",
@@ -506,7 +747,9 @@ export default function PageObjectLayer({
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
 }) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
+  const [croppingId, setCroppingId] = useState(null);
   const drag = useDrag(onChange);
+  const tapSelect = useTapSelect(onSelect);
   const zoom = pageLayout?.zoom || 1;
 
   useEffect(() => {
@@ -538,6 +781,7 @@ export default function PageObjectLayer({
             data-object-id={object.id}
             data-object-type={object.type}
             onPointerDown={(event) => {
+              if (croppingId === object.id) return;
               if (object.type === "link" && !isSelected && editingId !== object.id && onOpenLink) {
                 event.stopPropagation();
                 onOpenLink(object.href);
@@ -550,10 +794,16 @@ export default function PageObjectLayer({
               const localX = bounds.x + (event.clientX - rect.left) / zoom;
               const localY = bounds.y + (event.clientY - rect.top) / zoom;
               if (!hitTestObject(object, localX, localY)) return;
-              onSelect?.(object.id);
-              if (!object.locked && editingId !== object.id) drag.start(event, object, "move", zoom);
+              if (isSelected) {
+                if (!object.locked && editingId !== object.id) drag.start(event, object, "move", zoom);
+              } else {
+                tapSelect(event, object.id);
+              }
             }}
-            onDoubleClick={() => object.type === "text" && onEditingChange?.(object.id)}
+            onDoubleClick={() => {
+              if (object.type === "text") onEditingChange?.(object.id);
+              else if (object.type === "image") setCroppingId(object.id);
+            }}
             style={{
               position: "absolute",
               left: origin.x + bounds.x * zoom,
@@ -629,6 +879,20 @@ export default function PageObjectLayer({
               >
                 <Lock size={12} strokeWidth={2.5} />
               </button>
+            )}
+
+            {croppingId === object.id && (
+              <ImageCropOverlay
+                object={object}
+                boxWidth={bounds.width}
+                boxHeight={bounds.height}
+                zoom={zoom}
+                onConfirm={(patch) => {
+                  onChange?.(object.id, patch);
+                  setCroppingId(null);
+                }}
+                onCancel={() => setCroppingId(null)}
+              />
             )}
 
             {isSelected && (

@@ -7,6 +7,7 @@ export function buildSystemPrompt({ noteTitle, subject, canEdit, canRead = canEd
   const lines = [
     "Du bist der Assistent in einer Schul-Notizbuch-App. Du antwortest immer auf Deutsch.",
     "Antworte im Chat in Markdown: Überschriften, Listen, **fett**, `Code`, Codeblöcke, Tabellen.",
+    "Nutze nie \"-\" als Gedankenstrich und nie \";\" — schreibe stattdessen mit Punkt, Komma oder \"und\"/\"aber\" als eigenem Satz. \"-\" bleibt als Aufzählungszeichen am Zeilenanfang erlaubt.",
     noteTitle ? `Geöffnete Notiz: "${noteTitle}"${subject ? ` (Fach: ${subject})` : ""}.` : "",
   ];
 
