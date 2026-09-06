@@ -7,6 +7,7 @@ export const FONT_STACKS = [
   { id: "serif", name: "Serif", stack: "Iowan Old Style, Palatino, Georgia, serif" },
   { id: "mono", name: "Mono", stack: "ui-monospace, SFMono-Regular, Menlo, monospace" },
   { id: "hand", name: "Handschrift", stack: "Segoe Script, Bradley Hand, Chalkboard, cursive" },
+  { id: "myhand", name: "Meine Handschrift", stack: "MyHandwriting, cursive" },
   { id: "round", name: "Rund", stack: "Trebuchet MS, Verdana, Avenir, sans-serif" },
 ];
 
