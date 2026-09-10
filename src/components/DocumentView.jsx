@@ -817,6 +817,7 @@ function ColorSlot({
 const baseWidth = 800;
 const pageHeight = baseWidth * 1.414;
 const PAGE_GAP = 28;
+const EMPTY_STROKES = [];
 const maxPages = 20;
 // How far the move tool can carry the page past the point where its own edge
 // meets the viewport edge, as a share of the viewport — the page always keeps
@@ -1110,7 +1111,26 @@ export default function DocumentView({
           width: inkDocument.pages[index]?.width || resolvedPageWidth,
           height: inkDocument.pages[index]?.height || resolvedPageHeight,
         }));
-  const documentMetrics = calculateDocumentMetrics(pageDescriptors);
+  // Memoized so imported documents (pageDescriptors === note.pages, a stable
+  // reference) get a stable pageLayouts array/objects across unrelated
+  // re-renders - otherwise every DocumentPage below would see a "new" page
+  // prop each time and React.memo on it would never hit.
+  const documentMetrics = useMemo(
+    () => calculateDocumentMetrics(pageDescriptors),
+    [pageDescriptors],
+  );
+  // Group strokes by page once per document change instead of handing every
+  // visible page's canvas the whole document's strokes to scan itself - that
+  // was O(pages * totalStrokes) on every single stroke commit.
+  const strokesByPage = useMemo(() => {
+    const map = new Map();
+    for (const stroke of inkDocument.strokes) {
+      const list = map.get(stroke.pageId);
+      if (list) list.push(stroke);
+      else map.set(stroke.pageId, [stroke]);
+    }
+    return map;
+  }, [inkDocument.strokes]);
   const totalDocumentHeight = showPageBreaks
     ? note?.kind === "imported"
       ? documentMetrics.totalHeight * zoom
@@ -3133,13 +3153,20 @@ export default function DocumentView({
                   left: 0,
                   width: `${pageLayout.width * zoom}px`,
                   height: `${pageLayout.height * zoom}px`,
+                  // Documents can have hundreds of pages; every wrapper (and its
+                  // IntersectionObserver) is still created up front, but this
+                  // lets the browser itself skip layout/paint for the ones far
+                  // off screen instead of doing that work for all of them. No
+                  // effect on unsupported browsers - it's a pure optimization.
+                  contentVisibility: "auto",
+                  containIntrinsicSize: `${Math.round(pageLayout.width * zoom)}px ${Math.round(pageLayout.height * zoom)}px`,
                 }}
               >
                 <DocumentPage
                   page={pageLayout}
                   sourceType={note.source?.type}
                   sourceHandle={sourceHandle}
-                  strokes={inkDocument.strokes}
+                  strokes={strokesByPage.get(pageLayout.id) || EMPTY_STROKES}
                   zoom={zoom}
                   dpr={globalThis.devicePixelRatio || 1}
                 />

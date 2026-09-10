@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { renderInkStroke } from "../../ink/renderInk.js";
 
-export default function InkPageCanvas({
+function InkPageCanvas({
   page,
   strokes = [],
   zoom = 1,
@@ -63,3 +63,5 @@ export default function InkPageCanvas({
     />
   );
 }
+
+export default React.memo(InkPageCanvas);
