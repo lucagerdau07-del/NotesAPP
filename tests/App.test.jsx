@@ -48,7 +48,7 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
-  it('switches one shared editor rail between browser and assistant', () => {
+  it('switches one shared editor rail between browser and assistant', async () => {
     render(<App />);
     fireEvent.click(screen.getByText('Neue Notiz'));
     fireEvent.click(screen.getByTestId('new-doc-submit'));
@@ -56,24 +56,25 @@ describe('App Component', () => {
     const rail = screen.getByTestId('editor-sidebar');
     fireEvent.click(screen.getByTitle('Browser'));
     expect(rail).toHaveAttribute('data-mode', 'browser');
-    expect(screen.getByTestId('browser-panel')).not.toHaveAttribute('hidden');
+    // Browser/assistant panels are lazy-loaded on first open.
+    expect(await screen.findByTestId('browser-panel')).not.toHaveAttribute('hidden');
 
     fireEvent.click(screen.getByTitle('KI-Assistent'));
     expect(rail).toHaveAttribute('data-mode', 'agent');
     expect(screen.getByTestId('browser-panel')).toHaveAttribute('hidden');
   });
 
-  it('keeps browser and assistant state while switching modes', () => {
+  it('keeps browser and assistant state while switching modes', async () => {
     render(<App />);
     fireEvent.click(screen.getByText('Neue Notiz'));
     fireEvent.click(screen.getByTestId('new-doc-submit'));
 
     fireEvent.click(screen.getByTitle('Browser'));
-    fireEvent.change(screen.getByLabelText('Adresse oder Google-Suche'), {
+    fireEvent.change(await screen.findByLabelText('Adresse oder Google-Suche'), {
       target: { value: 'photosynthese lernen' },
     });
     fireEvent.click(screen.getByTitle('KI-Assistent'));
-    fireEvent.change(screen.getByLabelText('Nachricht an den KI-Assistenten'), {
+    fireEvent.change(await screen.findByLabelText('Nachricht an den KI-Assistenten'), {
       target: { value: 'Merke diesen Entwurf' },
     });
     fireEvent.click(screen.getByTitle('Browser'));
@@ -83,11 +84,12 @@ describe('App Component', () => {
     expect(screen.getByLabelText('Nachricht an den KI-Assistenten')).toHaveValue('Merke diesen Entwurf');
   });
 
-  it('lets the shared rail be resized by its drag handle and remembers the width', () => {
+  it('lets the shared rail be resized by its drag handle and remembers the width', async () => {
     render(<App />);
     fireEvent.click(screen.getByText('Neue Notiz'));
     fireEvent.click(screen.getByTestId('new-doc-submit'));
     fireEvent.click(screen.getByTitle('Browser'));
+    await screen.findByTestId('browser-panel');
 
     const rail = screen.getByTestId('editor-sidebar');
     fireEvent.pointerDown(screen.getByRole('separator', { name: 'Seitenfenster-Breite ändern' }), {
@@ -129,14 +131,15 @@ describe('App Component', () => {
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', documentId);
   });
 
-  it('opens the settings screen from the library and navigates through palm settings and advanced view', () => {
+  it('opens the settings screen from the library and navigates through palm settings and advanced view', async () => {
     render(<App />);
 
     // Click settings button at bottom of sidebar rail
     const settingsBtn = screen.getByTestId('settings-nav-btn');
     fireEvent.click(settingsBtn);
 
-    expect(screen.getByTestId('settings-screen')).toBeInTheDocument();
+    // Settings screen is lazy-loaded on first open.
+    expect(await screen.findByTestId('settings-screen')).toBeInTheDocument();
     expect(screen.getAllByText('Palm-Schutz').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Neu kalibrieren')).toBeInTheDocument();
 
@@ -163,11 +166,12 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
-  it('opens the plan screen from the library and returns', () => {
+  it('opens the plan screen from the library and returns', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByTestId('open-plan-btn'));
-    expect(screen.getByTestId('plan-screen')).toBeInTheDocument();
+    // Plan screen is lazy-loaded on first open.
+    expect(await screen.findByTestId('plan-screen')).toBeInTheDocument();
     expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Zurück zur Bibliothek' }));
