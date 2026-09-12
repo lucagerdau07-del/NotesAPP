@@ -15,8 +15,10 @@ export const COMPONENT_LIBRARY = [
     description:
       "Waagerechte Zeitachse mit Markierungen. items: Liste aus {label, sub} — label über der Achse (Jahr), sub darunter (Ereignis).",
     params: {
-      width: { default: 640 },
-      items: { default: [] },
+      width: { default: 640, min: 300, max: 1200 },
+      // Below 2 there is no axis to speak of; past 8 the step() spacing over
+      // a typical width starts crowding the two-line labels into each other.
+      items: { default: [], minItems: 2, maxItems: 8 },
       role: { default: "accent" },
     },
     body: [
@@ -42,10 +44,11 @@ export const COMPONENT_LIBRARY = [
     description:
       "Nummerierte Schritte untereinander, durch Pfeile verbunden. steps: Liste aus Texten.",
     params: {
-      width: { default: 420 },
-      steps: { default: [] },
+      width: { default: 420, min: 200, max: 700 },
+      // Past 8 steps the vertical chain runs past a typical page height.
+      steps: { default: [], minItems: 1, maxItems: 8 },
       role: { default: "subheading" },
-      gap: { default: 26 },
+      gap: { default: 26, min: 10, max: 60 },
     },
     body: [
       {
@@ -75,11 +78,11 @@ export const COMPONENT_LIBRARY = [
     description:
       "Zwei Spalten mit Überschriften und einer Trennlinie, für Pro/Contra oder Vorher/Nachher. left/right: Überschriften, leftItems/rightItems: Listen aus Texten.",
     params: {
-      width: { default: 640 },
+      width: { default: 640, min: 320, max: 1000 },
       left: { default: "Dafür" },
       right: { default: "Dagegen" },
-      leftItems: { default: [] },
-      rightItems: { default: [] },
+      leftItems: { default: [], maxItems: 8 },
+      rightItems: { default: [], maxItems: 8 },
       leftRole: { default: "support" },
       rightRole: { default: "signal" },
     },
@@ -119,11 +122,12 @@ export const COMPONENT_LIBRARY = [
     description:
       "Klammer, die mehrere Zeilen zusammenfasst, mit einer Beschriftung rechts daneben. items: Liste aus Texten, label: Text rechts.",
     params: {
-      items: { default: [] },
+      // Fewer than 2 lines is not a grouping — underline the one line instead.
+      items: { default: [], minItems: 2, maxItems: 6 },
       label: { default: "" },
       role: { default: "accent" },
-      rowHeight: { default: 30 },
-      width: { default: 300 },
+      rowHeight: { default: 30, min: 20, max: 60 },
+      width: { default: 300, min: 160, max: 700 },
     },
     body: [
       {
@@ -170,11 +174,13 @@ export const COMPONENT_LIBRARY = [
     description:
       "Achsenkreuz mit Pfeilspitzen und Achsenbeschriftung. points: optionale Liste aus {x, y} in Achseneinheiten (0..1), die als Kurve verbunden wird.",
     params: {
-      width: { default: 320 },
-      height: { default: 220 },
+      width: { default: 320, min: 160, max: 700 },
+      height: { default: 220, min: 100, max: 500 },
       xLabel: { default: "x" },
       yLabel: { default: "y" },
-      points: { default: [] },
+      // Each point costs one stroke segment; past ~30 the curve gets no
+      // visibly smoother, just slower to place.
+      points: { default: [], maxItems: 30 },
       role: { default: "body" },
       curveRole: { default: "accent" },
     },
@@ -209,9 +215,10 @@ export const COMPONENT_LIBRARY = [
     description:
       "Gaußsche Glockenkurve über einer Achse, mit Mittelwertlinie und optionalen Markierungen bei Standardabweichungen. sigmas: wie viele Abweichungen links und rechts markiert werden.",
     params: {
-      width: { default: 360 },
-      height: { default: 150 },
-      sigmas: { default: 2 },
+      width: { default: 360, min: 200, max: 700 },
+      height: { default: 150, min: 80, max: 350 },
+      // Marks beyond ±3σ sit under the axis line and are not worth drawing.
+      sigmas: { default: 2, min: 1, max: 3 },
       meanLabel: { default: "μ" },
       role: { default: "body" },
       curveRole: { default: "accent" },
@@ -262,10 +269,10 @@ export const COMPONENT_LIBRARY = [
     description:
       "Handgezeichneter Erlenmeyerkolben mit optionaler Füllstandslinie und Beschriftung. fill: 0 bis 1.",
     params: {
-      width: { default: 110 },
-      height: { default: 140 },
+      width: { default: 110, min: 60, max: 260 },
+      height: { default: 140, min: 80, max: 320 },
       label: { default: "" },
-      fill: { default: 0.35 },
+      fill: { default: 0.35, min: 0, max: 1 },
       role: { default: "body" },
       liquidRole: { default: "accent" },
     },
@@ -316,7 +323,7 @@ export const COMPONENT_LIBRARY = [
     description:
       "Waagerechter Reaktionspfeil mit Beschriftung darüber (Reagenz) und darunter (Bedingung).",
     params: {
-      width: { default: 150 },
+      width: { default: 150, min: 60, max: 400 },
       above: { default: "" },
       below: { default: "" },
       role: { default: "body" },
@@ -335,8 +342,10 @@ export const COMPONENT_LIBRARY = [
     description:
       "Stationen im Kreis, mit Pfeilen im Uhrzeigersinn verbunden. items: Liste aus Texten.",
     params: {
-      radius: { default: 110 },
-      items: { default: [] },
+      radius: { default: 110, min: 60, max: 220 },
+      // Below 2 there is no cycle; past 8 the arc-and-arrowhead per station
+      // has no room left between labels.
+      items: { default: [], minItems: 2, maxItems: 8 },
       role: { default: "support" },
     },
     body: [
@@ -422,8 +431,10 @@ export const COMPONENT_LIBRARY = [
     tags: ["physik", "chemie"],
     description: "Kern mit Elektronenschalen. shells: Anzahl der Schalen, label: Elementsymbol.",
     params: {
-      radius: { default: 90 },
-      shells: { default: 2 },
+      radius: { default: 90, min: 50, max: 160 },
+      // The shell spacing formula divides the radius by the count, so past 5
+      // rings collapse into each other rather than staying legible.
+      shells: { default: 2, min: 1, max: 5 },
       label: { default: "" },
       role: { default: "body" },
       shellRole: { default: "accent" },
@@ -502,7 +513,11 @@ export const COMPONENT_LIBRARY = [
     title: "Eingekreiste Nummer",
     tags: ["annotation"],
     description: "Eingekreiste Zahl, wie sie am Rand für Reihenfolgen verwendet wird.",
-    params: { number: { default: 1 }, size: { default: 34 }, role: { default: "signal" } },
+    params: {
+      number: { default: 1, min: 1, max: 99 },
+      size: { default: 34, min: 20, max: 80 },
+      role: { default: "signal" },
+    },
     body: [
       { type: "ellipse", x: 0, y: 0, width: "size", height: "size", role: "role", strokeWidth: 2.2 },
       { type: "text", text: "{number}", x: 0, y: "size * 0.2", width: "size", size: "size * 0.5", bold: true, align: "center", role: "role" },

@@ -223,12 +223,55 @@ function runNodes(nodes, scope, context, path) {
   });
 }
 
+// A param can constrain what it accepts, the same way insert_table already
+// pins rows to 1-20 and cols to 1-10 — except here it is declared once on the
+// component (built-in or the model's own) instead of hard-coded per tool:
+//   min / max        clamps a number into range, like a table's row count
+//   minItems/maxItems bounds a list — over is truncated, under is an error,
+//                     since padding a "Vergleich" with an invented row would
+//                     misrepresent the note rather than just look plain
+//   options           value must be one of these, else falls back to default
+//   fixed             the author's default always wins; args cannot change it
+//                     — "genau drei Spalten", not "bis zu zehn"
+function applyConstraint(name, spec, value, where) {
+  if (spec.fixed) return spec.default;
+  // minItems/min/max guard what a *caller* hands in — an omitted param falls
+  // back to the author's own default unchecked, or a component with no
+  // required content (an empty default list, say) would be unusable without
+  // padding every recipe's defaults with placeholder items just to pass its
+  // own rule.
+  const provided = value !== undefined && value !== null;
+  const resolved = provided ? value : spec.default;
+  if (resolved === undefined) return 0;
+
+  if (Array.isArray(spec.default)) {
+    if (!Array.isArray(resolved))
+      throw new RecipeError(`${where}: Parameter "${name}" muss eine Liste sein.`);
+    if (provided && spec.minItems !== undefined && resolved.length < spec.minItems)
+      throw new RecipeError(
+        `${where}: Parameter "${name}" braucht mindestens ${spec.minItems} Einträge, hat ${resolved.length}.`,
+      );
+    if (spec.maxItems !== undefined && resolved.length > spec.maxItems)
+      return resolved.slice(0, spec.maxItems);
+    return resolved;
+  }
+
+  if (Array.isArray(spec.options) && spec.options.length > 0)
+    return spec.options.includes(resolved) ? resolved : spec.default;
+
+  if (typeof resolved === "number" && (spec.min !== undefined || spec.max !== undefined)) {
+    const min = spec.min ?? -Infinity;
+    const max = spec.max ?? Infinity;
+    return Math.min(max, Math.max(min, resolved));
+  }
+
+  return resolved;
+}
+
 function buildScope(recipe, args) {
   const scope = {};
   for (const [name, spec] of Object.entries(recipe.params || {})) {
-    const given = args?.[name];
-    scope[name] = given === undefined || given === null ? spec?.default : given;
-    if (scope[name] === undefined) scope[name] = 0;
+    scope[name] = applyConstraint(name, spec || {}, args?.[name], "params");
   }
   return scope;
 }

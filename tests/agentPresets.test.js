@@ -382,3 +382,49 @@ describe("component tools", () => {
     expect(executeTool("read_component", { id: "zeitstrahl" }, api).id).toBe("zeitstrahl");
   });
 });
+
+describe("component tools with constraints", () => {
+  function withFixedCols() {
+    const recipe = {
+      id: "tabelle3",
+      title: "Feste 3-Spalten-Tabelle",
+      params: { cols: { default: 3, fixed: true }, rows: { default: 2, min: 1, max: 5 } },
+      body: [
+        {
+          repeat: "rows",
+          as: "r",
+          body: [
+            { repeat: "cols", as: "c", body: [{ type: "rect", x: "c * 100", y: "r * 40", width: 90, height: 30 }] },
+          ],
+        },
+      ],
+    };
+    return {
+      ...createApi(),
+      getComponentStore: () => ({ get: () => recipe, list: () => [], save: () => true }),
+    };
+  }
+
+  it("ignores an attempt to override a fixed parameter", () => {
+    const api = withFixedCols();
+    const result = executeTool(
+      "insert_component",
+      { pageId: "note-1-page-1", id: "tabelle3", x: 0, y: 0, args: { cols: 12, rows: 2 } },
+      api,
+    );
+    // 2 rows x 3 cols (never 12), one rect each.
+    expect(pageObjectsOf(api.getDocument())).toHaveLength(6);
+    expect(result.saved).toBeUndefined();
+  });
+
+  it("still honours a min/max range alongside a fixed sibling", () => {
+    const api = withFixedCols();
+    executeTool(
+      "insert_component",
+      { pageId: "note-1-page-1", id: "tabelle3", x: 0, y: 0, args: { rows: 999 } },
+      api,
+    );
+    // rows clamped to 5, cols fixed at 3.
+    expect(pageObjectsOf(api.getDocument())).toHaveLength(15);
+  });
+});

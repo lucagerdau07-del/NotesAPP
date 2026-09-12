@@ -233,3 +233,73 @@ describe("component store", () => {
     expect(store.save({ id: "x", body: [] })).toBe(false);
   });
 });
+
+describe("component parameter constraints", () => {
+  it("clamps a number into its min/max range", () => {
+    const { objects } = run({
+      id: "t",
+      params: { size: { default: 10, min: 5, max: 20 } },
+      body: [{ type: "rect", x: 0, y: 0, width: "size", height: "size" }],
+    }, { size: 999 });
+    expect(objects[0].width).toBe(20);
+  });
+
+  it("truncates a list over maxItems", () => {
+    const { scope } = run({
+      id: "t",
+      params: { items: { default: [], maxItems: 2 } },
+      body: [],
+    }, { items: ["a", "b", "c", "d"] });
+    expect(scope.items).toEqual(["a", "b"]);
+  });
+
+  it("rejects a list under minItems, naming the parameter", () => {
+    expect(() =>
+      run(
+        { id: "t", params: { items: { default: [], minItems: 3 } }, body: [] },
+        { items: ["a"] },
+      ),
+    ).toThrow(/items.*mindestens 3/);
+  });
+
+  it("locks a fixed parameter regardless of what is passed", () => {
+    const { scope } = run(
+      { id: "t", params: { cols: { default: 3, fixed: true } }, body: [] },
+      { cols: 99 },
+    );
+    expect(scope.cols).toBe(3);
+  });
+
+  it("falls back to the default when a value is not among options", () => {
+    const { scope } = run(
+      { id: "t", params: { variant: { default: "a", options: ["a", "b"] } }, body: [] },
+      { variant: "quatsch" },
+    );
+    expect(scope.variant).toBe("a");
+  });
+
+  it("accepts a value that is among options", () => {
+    const { scope } = run(
+      { id: "t", params: { variant: { default: "a", options: ["a", "b"] } }, body: [] },
+      { variant: "b" },
+    );
+    expect(scope.variant).toBe("b");
+  });
+});
+
+describe("built-in constraints hold the library components inside their designed range", () => {
+  it("keeps a zeitstrahl from growing past its label spacing", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ label: String(i), sub: "" }));
+    const { scope } = run(COMPONENT_BY_ID.get("zeitstrahl"), { items: many });
+    expect(scope.items).toHaveLength(8);
+  });
+
+  it("refuses a vergleich-less klammer instead of drawing a pointless brace", () => {
+    expect(() => run(COMPONENT_BY_ID.get("klammer"), { items: ["nur eins"] })).toThrow(/mindestens/);
+  });
+
+  it("keeps glockenkurve sigma marks from running under the axis", () => {
+    const { scope } = run(COMPONENT_BY_ID.get("glockenkurve"), { sigmas: 12 });
+    expect(scope.sigmas).toBe(3);
+  });
+});

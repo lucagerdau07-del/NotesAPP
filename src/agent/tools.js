@@ -468,7 +468,8 @@ export const AGENT_TOOLS = [
           tags: { type: "array", items: { type: "string" } },
           params: {
             type: "object",
-            description: 'Parametername auf {"default": Wert}, z.B. {"width": {"default": 400}}',
+            description:
+              'Parametername auf {"default": Wert, ...Grenzen}. Grenzen wie bei insert_table (dort sind rows/cols fest auf 1-20/1-10 begrenzt): "min"/"max" für Zahlen, "minItems"/"maxItems" für Listen, "options": [...] für eine feste Auswahl, "fixed": true, wenn der Wert nie vom Aufrufer überschrieben werden darf. Beispiel: {"cols": {"default": 3, "min": 1, "max": 6}, "items": {"default": [], "maxItems": 8}}',
           },
           body: {
             type: "array",
