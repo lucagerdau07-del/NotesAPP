@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   ExternalLink,
   Loader2,
@@ -727,7 +727,7 @@ function IconButton({ label, onClick, disabled = false, children }) {
   );
 }
 
-export default function PageObjectLayer({
+const PageObjectLayer = forwardRef(function PageObjectLayer({
   objects = [],
   pageLayout,
   selectedId = null,
@@ -745,21 +745,45 @@ export default function PageObjectLayer({
   onShiftOrder,
   onOpenLayers,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
-}) {
+}, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
   const drag = useDrag(onChange);
   const tapSelect = useTapSelect(onSelect);
   const zoom = pageLayout?.zoom || 1;
+  const containerRef = useRef(null);
 
   useEffect(() => {
     setLayersMenuOpen(false);
   }, [selectedId]);
 
+  // Same live-preview trick as WhiteboardCanvas: a pinch/pan gesture moves this
+  // whole layer with one cheap CSS transform instead of waiting for `camera`
+  // state to commit and re-laying-out every object div. Without this, ink
+  // strokes pan smoothly while text/table/callout content — everything an
+  // AI-built note is actually made of — sits frozen until the gesture ends.
+  useImperativeHandle(forwardedRef, () => ({
+    setViewportPreview(translateX, translateY, scale) {
+      const node = containerRef.current;
+      if (!node) return;
+      node.style.transformOrigin = "0 0";
+      node.style.willChange = "transform";
+      node.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    },
+    clearViewportPreview() {
+      const node = containerRef.current;
+      if (!node) return;
+      node.style.transform = "";
+      node.style.transformOrigin = "";
+      node.style.willChange = "";
+    },
+  }), []);
+
   if (objects.length === 0) return null;
 
   return (
     <div
+      ref={containerRef}
       data-testid="page-object-layer"
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
       onPointerMove={drag.move}
@@ -1185,4 +1209,6 @@ export default function PageObjectLayer({
       })}
     </div>
   );
-}
+});
+
+export default PageObjectLayer;

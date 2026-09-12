@@ -102,9 +102,16 @@ function parseArguments(raw) {
 }
 
 // Only the last MAX_HISTORY messages go to the model, and a tool result is only
-// ever a string on the wire.
+// ever a string on the wire. The system prompt (index 0) is kept pinned rather
+// than counted into that window — otherwise a long-running tool loop pushes it
+// out of the trailing slice and the model loses the only place that says when
+// to call `done`, which is how it used to run to the step ceiling instead of
+// finishing.
 function wireMessages(messages) {
-  return messages.slice(-MAX_HISTORY).map(({ role, content, tool_calls, tool_call_id }) => ({
+  const [first, ...rest] = messages;
+  const kept =
+    first?.role === "system" ? [first, ...rest.slice(-(MAX_HISTORY - 1))] : messages.slice(-MAX_HISTORY);
+  return kept.map(({ role, content, tool_calls, tool_call_id }) => ({
     role,
     content: content ?? "",
     ...(tool_calls ? { tool_calls } : {}),

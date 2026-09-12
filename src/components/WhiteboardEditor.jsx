@@ -80,6 +80,7 @@ function ColorWidthPopover({ color, onColorChange, width, onWidthChange, onClose
 export default function WhiteboardEditor({ inkController, railSlot }) {
   const containerRef = useRef(null);
   const canvasControllerRef = useRef(null);
+  const objectLayerRef = useRef(null);
   const touchesRef = useRef(new Map());
   const pinchRef = useRef(null);
   const pinchCommitRef = useRef(false);
@@ -139,10 +140,22 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       canvasControllerRef.current?.appendDraftSegment(draft, appendedFrom),
   });
 
+  // Ink canvas and object layer (text/tables/callouts) share one committed
+  // camera, so a live gesture previews both the same way or they'd visibly
+  // split apart mid-pinch.
+  const setPreview = (translateX, translateY, scale) => {
+    canvasControllerRef.current?.setViewportPreview(translateX, translateY, scale);
+    objectLayerRef.current?.setViewportPreview(translateX, translateY, scale);
+  };
+  const clearPreview = () => {
+    canvasControllerRef.current?.clearViewportPreview();
+    objectLayerRef.current?.clearViewportPreview();
+  };
+
   useLayoutEffect(() => {
     if (!pinchCommitRef.current) return;
     pinchCommitRef.current = false;
-    canvasControllerRef.current?.clearViewportPreview();
+    clearPreview();
   }, [camera]);
 
   const measureRef = useCallback((node) => {
@@ -169,7 +182,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     );
     const ratio = scale / pinch.startScale;
     pinch.pending = { centerScreen, scale };
-    canvasControllerRef.current?.setViewportPreview(
+    setPreview(
       centerScreen.x - pinch.startCenter.x * ratio,
       centerScreen.y - pinch.startCenter.y * ratio,
       ratio,
@@ -280,10 +293,10 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
             pinchCommitRef.current = true;
             focusWorldPointAtScreen(pinch.worldCenter, pending.centerScreen, pending.scale);
           } else {
-            canvasControllerRef.current?.clearViewportPreview();
+            clearPreview();
           }
         } else {
-          canvasControllerRef.current?.clearViewportPreview();
+          clearPreview();
         }
       }
       touchesRef.current.delete(event.pointerId);
@@ -330,7 +343,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         if (pinchRef.current.frameId !== null) {
           cancelAnimationFrame(pinchRef.current.frameId);
         }
-        canvasControllerRef.current?.clearViewportPreview();
+        clearPreview();
       }
       touchesRef.current.delete(event.pointerId);
       if (touchesRef.current.size < 2) pinchRef.current = null;
@@ -341,20 +354,48 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   React.useEffect(() => {
     const node = containerRef.current;
     if (!node) return undefined;
+    // A trackpad fires wheel events far faster than the display refreshes.
+    // Applying each one straight to camera state (as before) forced a full
+    // React commit — canvas redraw of every stroke, layout of every text/table
+    // object — per event instead of per frame, which read as "extreme" lag on
+    // exactly the content-heavy notes this app builds. Coalescing into one
+    // accumulated pan/zoom per animation frame is the same fix already applied
+    // to touch pinch below.
+    let frameId = null;
+    let pending = null;
+
+    const flush = () => {
+      frameId = null;
+      const job = pending;
+      pending = null;
+      if (!job) return;
+      if (job.kind === "zoom") zoomBy(job.point, job.factor);
+      else panBy(job.dx, job.dy);
+    };
+
     const handleWheel = (event) => {
       event.preventDefault();
       const normalizedDeltaX = event.deltaMode === 1 ? event.deltaX * 16 : event.deltaX;
       const normalizedDeltaY = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
       if (event.ctrlKey) {
         const rect = node.getBoundingClientRect();
+        const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
         const factor = Math.exp(-normalizedDeltaY * 0.0015);
-        zoomBy({ x: event.clientX - rect.left, y: event.clientY - rect.top }, factor);
+        pending =
+          pending?.kind === "zoom" ? { kind: "zoom", point, factor: pending.factor * factor } : { kind: "zoom", point, factor };
       } else {
-        panBy(-normalizedDeltaX, -normalizedDeltaY);
+        pending =
+          pending?.kind === "pan"
+            ? { kind: "pan", dx: pending.dx - normalizedDeltaX, dy: pending.dy - normalizedDeltaY }
+            : { kind: "pan", dx: -normalizedDeltaX, dy: -normalizedDeltaY };
       }
+      if (frameId === null) frameId = requestAnimationFrame(flush);
     };
     node.addEventListener("wheel", handleWheel, { passive: false });
-    return () => node.removeEventListener("wheel", handleWheel);
+    return () => {
+      node.removeEventListener("wheel", handleWheel);
+      if (frameId !== null) cancelAnimationFrame(frameId);
+    };
   }, [panBy, zoomBy]);
 
   React.useEffect(() => {
@@ -671,6 +712,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           />
         )}
         <PageObjectLayer
+          ref={objectLayerRef}
           objects={pageObjects}
           pageLayout={fakePageLayout}
           mapOrigin={mapOrigin}
