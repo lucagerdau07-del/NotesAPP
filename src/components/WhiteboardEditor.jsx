@@ -158,10 +158,21 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     clearPreview();
   }, [camera]);
 
+  // Cached instead of re-read via getBoundingClientRect() on every gesture:
+  // that call forces a synchronous layout flush, and right after a big
+  // camera-commit re-render (many object divs got new left/top) that flush is
+  // exactly the ~1s freeze users saw at the start of every new pinch/pan —
+  // measured to scale with object count, not with anything about the gesture
+  // itself. Refreshed only on real resize, same as `size` below.
+  const containerRectRef = useRef({ left: 0, top: 0 });
+
   const measureRef = useCallback((node) => {
     containerRef.current = node;
     if (!node) return;
-    const update = () => setSize({ width: node.clientWidth, height: node.clientHeight });
+    const update = () => {
+      setSize({ width: node.clientWidth, height: node.clientHeight });
+      containerRectRef.current = node.getBoundingClientRect();
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(node);
@@ -171,7 +182,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (!pinch || pinchRef.current !== pinch) return;
     const [a, b] = pinch.pointerIds.map((id) => touchesRef.current.get(id));
     if (!a || !b) return;
-    const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+    const rect = containerRectRef.current;
     const distance = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
     const centerScreen = {
       x: (a.x + b.x) / 2 - rect.left,
@@ -194,7 +205,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2) {
         inkPointer.abortActiveStroke?.(event.pointerId, event.timeStamp);
-        const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+        const rect = containerRectRef.current;
         const [a, b] = Array.from(touchesRef.current.values());
         const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
         pinchRef.current = {
@@ -378,7 +389,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       const normalizedDeltaX = event.deltaMode === 1 ? event.deltaX * 16 : event.deltaX;
       const normalizedDeltaY = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
       if (event.ctrlKey) {
-        const rect = node.getBoundingClientRect();
+        const rect = containerRectRef.current;
         const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
         const factor = Math.exp(-normalizedDeltaY * 0.0015);
         pending =
@@ -716,6 +727,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           objects={pageObjects}
           pageLayout={fakePageLayout}
           mapOrigin={mapOrigin}
+          perObjectTouchAction={false}
           selectedId={selectedObjectId}
           processingObjectId={processingImageId}
           onSelect={setSelectedObjectId}

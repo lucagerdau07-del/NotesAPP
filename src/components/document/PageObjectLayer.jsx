@@ -745,6 +745,15 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   onShiftOrder,
   onOpenLayers,
   mapOrigin = (layout, pageId) => pagePointToViewport(layout, pageId, { x: 0, y: 0 }),
+  // DocumentView's page ancestor toggles touch-action between "none" and
+  // "auto" by mode, so each object needs its own "none" to stay draggable
+  // regardless of that. The whiteboard surface is unconditionally "none"
+  // already, so there each per-object region is pure duplication — one
+  // touch-action region per object instead of one for the whole surface,
+  // which is exactly the kind of thing Chromium has to re-resolve against
+  // every touch point. Off by default to leave DocumentView's behavior
+  // untouched; WhiteboardEditor passes false.
+  perObjectTouchAction = true,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -841,7 +850,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               width: bounds.width * zoom,
               height: bounds.height * zoom,
               pointerEvents: "auto",
-              touchAction: "none",
+              ...(perObjectTouchAction ? { touchAction: "none" } : null),
               cursor: object.locked ? "default" : "move",
               transform: `rotate(${object.rotation || 0}deg)`,
               transformOrigin: "50% 50%",
