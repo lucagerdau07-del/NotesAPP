@@ -97,15 +97,23 @@ export function renderInkDocument(context, document, layout) {
   const pageLayouts = Array.isArray(layout?.pageLayouts)
     ? layout.pageLayouts
     : null;
+  // Index once instead of Array.find()/indexOf() per stroke - identical
+  // results, but O(pages) instead of O(strokes * pages) for the whole draw.
+  const pageLayoutsById = pageLayouts
+    ? new Map(pageLayouts.map((page) => [page.id, page]))
+    : null;
+  const pageIndexById = pageLayouts
+    ? null
+    : new Map(pageIds.map((id, index) => [id, index]));
   (document?.strokes || []).forEach((stroke) => {
     let offsetY = 0;
-    if (pageLayouts) {
-      const page = pageLayouts.find((p) => p.id === stroke.pageId);
+    if (pageLayoutsById) {
+      const page = pageLayoutsById.get(stroke.pageId);
       if (!page) return;
       offsetY = page.top * scaleY;
     } else {
-      const pageIndex = pageIds.indexOf(stroke.pageId);
-      if (pageIndex < 0) return;
+      const pageIndex = pageIndexById.get(stroke.pageId);
+      if (pageIndex === undefined) return;
       offsetY = pageIndex * (pageHeight * scaleY + pageGap);
     }
     renderInkStroke(context, stroke, {

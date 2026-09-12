@@ -11,7 +11,22 @@ import {
   color,
   newId,
 } from "./agentGeometry.js";
-import { buildTablePreset, buildDiagramPreset, buildMindmapPreset } from "./presets.js";
+import {
+  buildTablePreset,
+  buildDiagramPreset,
+  buildMindmapPreset,
+  buildSectionHeaderPreset,
+  buildCalloutPreset,
+  buildHighlightObjects,
+} from "./presets.js";
+import {
+  CALLOUT_VARIANTS,
+  HIGHLIGHT_COLORS,
+  STYLE_ROLES,
+  roleColor,
+  themeOf,
+} from "./noteStyle.js";
+import { createComponentStore, runRecipe } from "./components/index.js";
 
 // Page geometry mirrors DocumentView's baseWidth/pageHeight. Coordinates are
 // page-local: origin top left of the addressed page, unit = page pixel. A
@@ -25,7 +40,16 @@ const MAX_PATHS = 200;
 const MAX_POINTS = 2000;
 // Same encoding as the document scan (src/knowledge/documentScan.js): JPEG at
 // 1000px reads handwriting fine and keeps the base64 payload manageable.
-const SEE_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
+// paintBackground because the canvas is otherwise transparent and the page's
+// colour is a CSS layer the caller puts behind it — which this caller cannot
+// do. The JPEG encoder then flattens the transparency to black, so a note on
+// light paper reached the model as dark ink on black, i.e. blank.
+const SEE_IMAGE_OPTIONS = {
+  maxDimension: 1000,
+  mimeType: "image/jpeg",
+  quality: 0.72,
+  paintBackground: true,
+};
 const MAX_SEE_PAGES = 8;
 
 // The model needs to know where its next block may start. Measured the same
@@ -108,6 +132,16 @@ export const AGENT_TOOLS = [
           underline: { type: "boolean" },
           align: { type: "string", enum: ["left", "center", "right"] },
           font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+          // Both concepts (which role means what, when to reach for a
+          // one-word highlight block) are explained once in the system
+          // prompt; only the one fact that isn't — that color wins over
+          // role — needs saying again here.
+          role: { type: "string", enum: STYLE_ROLES, description: "Farbrolle. color überschreibt sie." },
+          highlight: {
+            type: "string",
+            enum: Object.keys(HIGHLIGHT_COLORS),
+            description: "Marker hinter den Zeilen dieses Blocks.",
+          },
         },
         required: ["pageId", "x", "y", "width", "text"],
       },
@@ -327,6 +361,131 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "insert_section_header",
+      description:
+        "Setzt eine Abschnittsüberschrift als gestaltetes Element: getönter Balken über die Spaltenbreite (banner), schmale Pille um die Wörter (pill) oder Titel über dickem Strich (underline). Gibt die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          width: { type: "number" },
+          title: { type: "string" },
+          variant: { type: "string", enum: ["banner", "pill", "underline"] },
+          role: { type: "string", enum: STYLE_ROLES, description: "Farbrolle, Standard heading" },
+          size: { type: "number" },
+          font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+        },
+        required: ["pageId", "x", "y", "width", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_callout",
+      description:
+        "Setzt einen abgesetzten Kasten mit farbiger Kante für Definitionen, Beispiele, Warnungen oder Formeln. Die Höhe richtet sich nach dem Text. Gibt die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          width: { type: "number" },
+          text: { type: "string" },
+          variant: { type: "string", enum: Object.keys(CALLOUT_VARIANTS) },
+          title: { type: "string", description: "Überschrift des Kastens, Standard ist die Variante" },
+          size: { type: "number" },
+          font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+        },
+        required: ["pageId", "x", "y", "width", "text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_components",
+      description:
+        "Listet die verfügbaren Bauelemente (Zeitstrahl, Ablauf, Klammer, Kolben, Glockenkurve, …) mit ihren Parametern auf.",
+      parameters: {
+        type: "object",
+        properties: {
+          tag: { type: "string", description: "Filter, z.B. chemie, mathe, struktur, annotation" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_component",
+      description:
+        "Gibt das vollständige Rezept eines Bauelements zurück — als Vorlage zum Abwandeln oder um eine Proportion zu ändern.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_component",
+      description:
+        "Setzt ein Bauelement auf die Seite. args enthält die Parameter des Rezepts. Gibt die belegte Fläche und die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          id: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          args: { type: "object", description: "Parameter laut Rezept, z.B. {items: [...], width: 600}" },
+        },
+        required: ["pageId", "id", "x", "y"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "define_component",
+      description:
+        "Speichert ein eigenes Bauelement oder überschreibt ein vorhandenes unter derselben id. Das Rezept wird vor dem Speichern testweise ausgeführt, Fehler kommen als Text zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Kleinbuchstaben, ohne Leerzeichen" },
+          title: { type: "string" },
+          description: { type: "string", description: "Wofür das Element gedacht ist und was die Parameter bedeuten" },
+          tags: { type: "array", items: { type: "string" } },
+          params: {
+            type: "object",
+            description:
+              // Full explanation of min/max/minItems/maxItems/options/fixed is
+              // in the system prompt (describeRecipeLanguage) — kept in one
+              // place so the two can't drift apart. Only the concrete syntax
+              // stays here, since that's what's needed at call time.
+              'Parametername auf {"default": Wert, ...Grenzen}, siehe Rezeptsprache im Systemprompt. Beispiel: {"cols": {"default": 3, "min": 1, "max": 6}, "items": {"default": [], "maxItems": 8}}',
+          },
+          body: {
+            type: "array",
+            items: { type: "object" },
+            description: "Elemente, repeat/when/let — siehe die Rezeptsprache im Systemprompt",
+          },
+        },
+        required: ["id", "title", "body"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -346,6 +505,75 @@ const READ_ONLY_TOOL_NAMES = new Set(["read_document", "see_document", "done"]);
 export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
   READ_ONLY_TOOL_NAMES.has(tool.function.name),
 );
+
+// Edit mode splits into a core the model reaches for on nearly every turn
+// (full schema, always sent) and an extended set it only names occasionally -
+// full table/diagram/component builders run 300-950 chars each, and most
+// turns ("schreib einen Satz", "was steht auf Seite 2") touch none of them.
+// The extended set is described in one line each instead (see
+// describeExtendedToolManifest below) and only actually added to the `tools`
+// array for the rest of a run once the model calls enable_tools for it -
+// the same shape as this environment's own ToolSearch: named upfront,
+// fetched in full on demand.
+// Only tools whose need can't be told upfront from the task, or that are cheap
+// enough that deferring them would cost more in a forced extra round trip
+// than just sending them stays core. delete_objects/add_shape/draw/erase are
+// usually obvious from the task text itself ("lösche ...", "zeichne einen
+// Pfeil...") - the model can enable_tools for them in the same turn as the
+// read_document call it makes anyway, so deferring costs nothing there. What
+// see_document/add_page need is only known *after* a tool result comes back
+// (read_document's stroke count; the page actually filling up), one turn too
+// late to bundle - and both are small enough (~90/~80 tokens) that forcing a
+// dedicated round trip whenever they are needed would cost more than they do.
+const CORE_TOOL_NAMES = new Set([
+  "read_document",
+  "see_document",
+  "write_text",
+  "edit_text",
+  "add_page",
+  "done",
+]);
+
+export const ENABLE_TOOLS_TOOL = {
+  type: "function",
+  function: {
+    name: "enable_tools",
+    description:
+      "Schaltet weitere Werkzeuge für den Rest dieses Laufs frei (siehe die Liste im Systemprompt). Vor der ersten Nutzung eines dort aufgeführten Werkzeugs aufrufen; danach steht es wie jedes andere zur Verfügung.",
+    parameters: {
+      type: "object",
+      properties: { names: { type: "array", items: { type: "string" } } },
+      required: ["names"],
+    },
+  },
+};
+
+export const AGENT_CORE_TOOLS = [
+  ...AGENT_TOOLS.filter((tool) => CORE_TOOL_NAMES.has(tool.function.name)),
+  ENABLE_TOOLS_TOOL,
+];
+
+const AGENT_EXTENDED_TOOLS = AGENT_TOOLS.filter(
+  (tool) => !CORE_TOOL_NAMES.has(tool.function.name),
+);
+
+export const AGENT_EXTENDED_BY_NAME = new Map(
+  AGENT_EXTENDED_TOOLS.map((tool) => [tool.function.name, tool]),
+);
+
+// One line per extended tool, name plus its own first sentence — read off the
+// full description rather than authored separately, so the manifest can't
+// say something the real schema doesn't.
+export function describeExtendedToolManifest() {
+  return AGENT_EXTENDED_TOOLS.map((tool) => {
+    // Split on a sentence-ending period only, not every colon — several of
+    // these descriptions use a colon mid-sentence to introduce a list (e.g.
+    // insert_diagram's "Kästen ... : Kästen mit Beschriftung ..."), and
+    // cutting there would lose exactly the part naming what the tool does.
+    const first = tool.function.description.split(/(?<=\.)\s+/)[0];
+    return `${tool.function.name} — ${first}`;
+  }).join("\n");
+}
 
 // Short line per tool call for the step list in the panel.
 export function describeToolCall(name, args = {}) {
@@ -376,11 +604,63 @@ export function describeToolCall(name, args = {}) {
       return `Diagramm einfügen (${args.nodes?.length ?? 0} Knoten)`;
     case "insert_mindmap":
       return `Mindmap einfügen (${args.branches?.length ?? 0} Zweige)`;
+    case "insert_section_header":
+      return `Überschrift: ${String(args.title || "").slice(0, 40)}`;
+    case "insert_callout":
+      return `Kasten einfügen (${CALLOUT_VARIANTS[args.variant] ? args.variant : "definition"})`;
+    case "list_components":
+      return args.tag ? `Bauelemente suchen (${args.tag})` : "Bauelemente auflisten";
+    case "read_component":
+      return `Rezept lesen: ${args.id || "?"}`;
+    case "insert_component":
+      return `Element einfügen: ${args.id || "?"}`;
+    case "define_component":
+      return `Element speichern: ${args.id || "?"}`;
+    case "enable_tools":
+      return `Werkzeuge freischalten: ${(args.names || []).join(", ") || "?"}`;
     case "done":
       return "Fertig";
     default:
       return name;
   }
+}
+
+// One store per app run unless the caller supplies its own (tests do), so the
+// agent's saved components survive between runs without being re-read on every
+// tool call.
+let sharedComponentStore = null;
+function componentStore(api) {
+  if (api?.getComponentStore) return api.getComponentStore();
+  if (!sharedComponentStore) sharedComponentStore = createComponentStore();
+  return sharedComponentStore;
+}
+
+// What a placed component actually occupies, so the model can put the next
+// block under it without guessing the recipe's internal geometry.
+function componentExtent({ objects, strokes }) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const see = (x, y) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  };
+  for (const object of objects) {
+    see(object.x, object.y);
+    see(object.x + object.width, object.y + object.height);
+  }
+  for (const stroke of strokes) for (const point of stroke.points) see(point.x, point.y);
+  if (minX === Infinity) return { width: 0, height: 0, bottom: 0 };
+  return {
+    x: Math.round(minX),
+    y: Math.round(minY),
+    width: Math.round(maxX - minX),
+    height: Math.round(maxY - minY),
+    bottom: Math.round(maxY),
+  };
 }
 
 function textPatch(args, existing, defaultColor, bounds) {
@@ -410,6 +690,7 @@ export function executeTool(name, rawArgs, api) {
   const pageIds = document.pages.map((page) => page.id);
   const objects = pageObjectsOf(document);
   const bounds = boundsFor(document);
+  const theme = themeOf(document);
   const whiteboard = isWhiteboardDocument(document);
   const needsPage = [
     "write_text",
@@ -418,6 +699,9 @@ export function executeTool(name, rawArgs, api) {
     "insert_table",
     "insert_diagram",
     "insert_mindmap",
+    "insert_section_header",
+    "insert_callout",
+    "insert_component",
   ].includes(name);
   if (needsPage && !pageIds.includes(args.pageId))
     return `Fehler: pageId "${args.pageId}" gibt es nicht. Vorhanden: ${pageIds.join(", ")}`;
@@ -455,7 +739,10 @@ export function executeTool(name, rawArgs, api) {
     }
 
     case "write_text": {
-      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, inkColor, bounds);
+      // An explicit colour still wins; the role only moves the default off the
+      // user's ink so the palette holds up on light and dark paper alike.
+      const baseColor = args.role ? roleColor(theme, args.role) : inkColor;
+      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, baseColor, bounds);
       const text = patch.text ?? "";
       if (!text.trim()) return "Fehler: text ist leer.";
       const width = patch.width ?? 400;
@@ -473,7 +760,7 @@ export function executeTool(name, rawArgs, api) {
         pageId: args.pageId,
         type: "text",
         x: 64,
-        color: inkColor,
+        color: baseColor,
         aiGenerated: true,
         ...patch,
         y,
@@ -481,8 +768,98 @@ export function executeTool(name, rawArgs, api) {
         width,
         height,
       });
-      api.apply([{ type: "add-object", object }]);
+      // Markers are ordinary rects, and objects render in insertion order, so
+      // they go in ahead of the text they sit behind.
+      const markers = HIGHLIGHT_COLORS[args.highlight]
+        ? buildHighlightObjects(object, args.highlight)
+        : [];
+      api.apply(
+        [...markers, object].map((added) => ({ type: "add-object", object: added })),
+      );
       return { id: object.id, height, bottom: object.y + height };
+    }
+
+    case "insert_section_header": {
+      const built = buildSectionHeaderPreset(args, bounds, theme);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
+    }
+
+    case "insert_callout": {
+      const built = buildCalloutPreset(args, bounds, theme);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
+    }
+
+    case "list_components": {
+      const tag = typeof args.tag === "string" ? args.tag.toLowerCase() : null;
+      const entries = componentStore(api)
+        .list()
+        .filter((entry) => !tag || entry.tags.includes(tag))
+        .map((entry) => {
+          const recipe = componentStore(api).get(entry.id);
+          return {
+            ...entry,
+            params: Object.entries(recipe?.params || {}).map(
+              ([name, spec]) => `${name}=${JSON.stringify(spec?.default)}`,
+            ),
+          };
+        });
+      return { components: entries };
+    }
+
+    case "read_component": {
+      const recipe = componentStore(api).get(args.id);
+      if (!recipe) return `Fehler: Kein Bauelement mit der id "${args.id}".`;
+      return recipe;
+    }
+
+    case "insert_component": {
+      const recipe = componentStore(api).get(args.id);
+      if (!recipe) return `Fehler: Kein Bauelement mit der id "${args.id}". list_components zeigt die vorhandenen.`;
+      let built;
+      try {
+        built = runRecipe(
+          recipe,
+          { ...(args.args || {}), x: args.x, y: args.y },
+          { pageId: args.pageId, theme },
+        );
+      } catch (error) {
+        return `Fehler im Rezept "${args.id}": ${error.message}`;
+      }
+      if (built.objects.length === 0 && built.strokes.length === 0)
+        return `Fehler: "${args.id}" hat nichts erzeugt. Sind die Listen-Parameter gefüllt?`;
+      api.apply([
+        ...built.objects.map((object) => ({ type: "add-object", object })),
+        ...built.strokes.map((stroke) => ({ type: "commit-stroke", stroke })),
+      ]);
+      return { id: args.id, ...componentExtent(built) };
+    }
+
+    case "define_component": {
+      const id = String(args.id || "").trim().toLowerCase().replace(/\s+/g, "-");
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(id))
+        return "Fehler: id braucht Kleinbuchstaben, Ziffern, - oder _.";
+      const recipe = {
+        id,
+        title: String(args.title || id),
+        description: String(args.description || ""),
+        tags: Array.isArray(args.tags) ? args.tags.map((tag) => String(tag).toLowerCase()) : [],
+        params: args.params && typeof args.params === "object" ? args.params : {},
+        body: args.body,
+      };
+      // Run it once before saving: a recipe that throws is worth far less to
+      // the model as a stored element than as an error it can still fix.
+      try {
+        runRecipe(recipe, {}, { pageId: pageIds[0], theme });
+      } catch (error) {
+        return `Fehler im Rezept: ${error.message}`;
+      }
+      if (!componentStore(api).save(recipe))
+        return "Fehler: Bauelement konnte nicht gespeichert werden (Speicher voll?).";
+      return { id, saved: true };
     }
 
     case "edit_text": {

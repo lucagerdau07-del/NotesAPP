@@ -6,8 +6,14 @@ import {
   toPageDescriptors,
   validateSingleImport,
 } from "./fileImport.js";
-import { inspectPdf as inspectPdfDefault } from "./pdfRuntime.js";
 import { inspectImage as inspectImageDefault } from "./imageRuntime.js";
+
+// pdfjs-dist is large and only needed when the user actually imports a PDF,
+// so it's loaded on demand instead of being pulled into the library bundle.
+async function inspectPdfDefault(blob) {
+  const { inspectPdf } = await import("./pdfRuntime.js");
+  return inspectPdf(blob);
+}
 
 function stableUuid() {
   return (

@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
-import { openPdf as defaultOpenPdf } from "../documents/pdfRuntime.js";
 import { openImage as defaultOpenImage } from "../documents/imageRuntime.js";
+
+// pdfjs-dist is large and only needed for PDF-backed notes, so it's loaded
+// on demand instead of being pulled into every note's bundle up front.
+async function defaultOpenPdf(blob) {
+  const { openPdf } = await import("../documents/pdfRuntime.js");
+  return openPdf(blob);
+}
 
 export default function useDocumentSource({
   note,

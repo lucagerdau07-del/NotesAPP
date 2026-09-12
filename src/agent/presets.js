@@ -1,5 +1,12 @@
 import { createPageObject } from "../ink/pageObjects.js";
 import { clamp, color, newId } from "./agentGeometry.js";
+import { measureTextLines } from "./textMetrics.js";
+import {
+  CALLOUT_VARIANTS,
+  TYPE_SCALE,
+  highlightColor,
+  roleColor,
+} from "./noteStyle.js";
 
 // Presets build ordinary page objects (rects, ellipses, lines, text) — the
 // same primitives write_text/add_shape produce — so everything they create
@@ -353,5 +360,251 @@ export function buildMindmapPreset(args, bounds, defaultColor) {
   return {
     objects,
     result: { root: { id: rootId, textId: rootTextId }, branches },
+  };
+}
+
+// Fill-only rectangles: strokeWidth is floored at 1 by createPageObject, so a
+// decoration that wants no outline gets a fully transparent stroke rather than
+// a hairline edge in the fill colour.
+const NO_STROKE = "#00000000";
+
+function tint(hex, alpha = "2E") {
+  return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}${alpha}` : hex;
+}
+
+// Line boxes cover the glyph band, not the leading around it, so a block's
+// height is counted in whole lines rather than read off the last box.
+function totalHeight(lines, lineHeight) {
+  return Math.max(1, lines.length) * lineHeight;
+}
+
+function firstLineWidth(lines) {
+  return lines.reduce((widest, line) => Math.max(widest, line.width), 0);
+}
+
+const HIGHLIGHT_PAD_X = 5;
+// measureTextLines already returns the glyph band, so the marker only needs a
+// hair of room around it. Padding the full line box instead would make
+// successive lines touch and the block would read as one solid slab.
+const HIGHLIGHT_PAD_Y = 2;
+
+// Marker bars behind a text object's own lines, fitted to what each line
+// actually occupies. Returned in the caller's insertion order, which is also
+// z-order — emit these *before* the text they belong to.
+export function buildHighlightObjects(textObject, highlightName) {
+  const fill = highlightColor(highlightName);
+  const lineHeight = textObject.lineHeight || textObject.fontSize * 1.4;
+  const lines = measureTextLines(textObject.text, {
+    width: textObject.width,
+    fontSize: textObject.fontSize,
+    lineHeight,
+    fontFamily: textObject.fontFamily,
+    bold: textObject.bold,
+    italic: textObject.italic,
+  });
+  return lines
+    .filter((line) => line.width > 1)
+    .map((line) =>
+      createPageObject({
+        id: newId("shape"),
+        pageId: textObject.pageId,
+        type: "rect",
+        x: textObject.x + line.x - HIGHLIGHT_PAD_X,
+        y: textObject.y + line.y - HIGHLIGHT_PAD_Y,
+        width: line.width + HIGHLIGHT_PAD_X * 2,
+        height: line.height + HIGHLIGHT_PAD_Y * 2,
+        color: NO_STROKE,
+        fillColor: fill,
+      }),
+    );
+}
+
+const HEADER_PAD_X = 14;
+const HEADER_PAD_Y = 7;
+const HEADER_RULE_HEIGHT = 4;
+const HEADER_VARIANTS = ["banner", "pill", "underline"];
+
+// The three header shapes the reference notes actually use: a tinted bar across
+// the column, a tinted pill hugging the words, and a plain title over a thick
+// rule. The bar is a tint rather than a solid block so the title keeps the full
+// role colour and stays legible on light and dark paper alike.
+export function buildSectionHeaderPreset(args, bounds, theme) {
+  const title = String(args.title ?? "").trim();
+  if (!title) return "Fehler: title ist leer.";
+  const variant = HEADER_VARIANTS.includes(args.variant) ? args.variant : "banner";
+  const accent = roleColor(theme, args.role, "heading");
+  const x = clamp(args.x, bounds.minX, bounds.maxX, 64);
+  const y = clamp(args.y, bounds.minY, bounds.maxY, 64);
+  const width = clamp(args.width, 60, bounds.maxX - x, 672);
+  const fontSize = clamp(args.size, 12, 72, TYPE_SCALE.heading);
+  const lineHeight = Math.round(fontSize * 1.35);
+
+  const lines = measureTextLines(title, {
+    width: width - HEADER_PAD_X * 2,
+    fontSize,
+    lineHeight,
+    fontFamily: args.font,
+    bold: true,
+  });
+  const textHeight = totalHeight(lines, lineHeight);
+  const objects = [];
+
+  const barHeight = textHeight + HEADER_PAD_Y * 2;
+  const barWidth =
+    variant === "pill" ? Math.min(width, firstLineWidth(lines) + HEADER_PAD_X * 2) : width;
+
+  if (variant !== "underline") {
+    objects.push(
+      createPageObject({
+        id: newId("shape"),
+        pageId: args.pageId,
+        type: "rect",
+        x,
+        y,
+        width: barWidth,
+        height: barHeight,
+        color: NO_STROKE,
+        fillColor: tint(accent),
+      }),
+    );
+  }
+
+  const textY = variant === "underline" ? y : y + HEADER_PAD_Y;
+  const textX = variant === "underline" ? x : x + HEADER_PAD_X;
+  objects.push(
+    createPageObject({
+      id: newId("text"),
+      pageId: args.pageId,
+      type: "text",
+      x: textX,
+      y: textY,
+      width: width - (variant === "underline" ? 0 : HEADER_PAD_X * 2),
+      height: textHeight,
+      text: title,
+      fontSize,
+      lineHeight,
+      color: accent,
+      bold: true,
+      fontFamily: args.font,
+      aiGenerated: true,
+    }),
+  );
+
+  let height = variant === "underline" ? textHeight : barHeight;
+  if (variant === "underline") {
+    objects.push(
+      createPageObject({
+        id: newId("shape"),
+        pageId: args.pageId,
+        type: "rect",
+        x,
+        y: y + textHeight + 4,
+        width: Math.min(width, firstLineWidth(lines) || width),
+        height: HEADER_RULE_HEIGHT,
+        color: NO_STROKE,
+        fillColor: accent,
+      }),
+    );
+    height = textHeight + 4 + HEADER_RULE_HEIGHT;
+  }
+
+  return {
+    objects,
+    result: { x, y, width: barWidth, height, bottom: Math.round(y + height) },
+  };
+}
+
+const CALLOUT_PAD = 14;
+const CALLOUT_SPINE = 5;
+const CALLOUT_LABEL_GAP = 6;
+
+// A bordered box with a coloured spine: the "Definition"/"Achtung" blocks the
+// reference notes set apart from running text. Height follows the measured body
+// text, so the box never crops its own content.
+export function buildCalloutPreset(args, bounds, theme) {
+  const body = String(args.text ?? "").trim();
+  if (!body) return "Fehler: text ist leer.";
+  const variant = CALLOUT_VARIANTS[args.variant] ? args.variant : "definition";
+  const spec = CALLOUT_VARIANTS[variant];
+  const accent = roleColor(theme, spec.role, "subheading");
+  const x = clamp(args.x, bounds.minX, bounds.maxX, 64);
+  const y = clamp(args.y, bounds.minY, bounds.maxY, 64);
+  const width = clamp(args.width, 120, bounds.maxX - x, 672);
+  const fontSize = clamp(args.size, 10, 48, TYPE_SCALE.body);
+  const lineHeight = Math.round(fontSize * 1.45);
+  const title = String(args.title ?? spec.label).trim();
+
+  const innerX = x + CALLOUT_SPINE + CALLOUT_PAD;
+  const innerWidth = width - CALLOUT_SPINE - CALLOUT_PAD * 2;
+  const labelSize = Math.max(11, Math.round(fontSize * 0.72));
+  const labelHeight = Math.round(labelSize * 1.3);
+  const bodyLines = measureTextLines(body, {
+    width: innerWidth,
+    fontSize,
+    lineHeight,
+    fontFamily: args.font,
+  });
+  const bodyHeight = totalHeight(bodyLines, lineHeight);
+  const height = CALLOUT_PAD * 2 + labelHeight + CALLOUT_LABEL_GAP + bodyHeight;
+
+  const objects = [
+    createPageObject({
+      id: newId("shape"),
+      pageId: args.pageId,
+      type: "rect",
+      x,
+      y,
+      width,
+      height,
+      color: tint(accent, "66"),
+      fillColor: theme?.surface || tint(accent, "12"),
+      strokeWidth: 2,
+    }),
+    createPageObject({
+      id: newId("shape"),
+      pageId: args.pageId,
+      type: "rect",
+      x,
+      y,
+      width: CALLOUT_SPINE,
+      height,
+      color: NO_STROKE,
+      fillColor: accent,
+    }),
+    createPageObject({
+      id: newId("text"),
+      pageId: args.pageId,
+      type: "text",
+      x: innerX,
+      y: y + CALLOUT_PAD,
+      width: innerWidth,
+      height: labelHeight,
+      text: title,
+      fontSize: labelSize,
+      lineHeight: labelHeight,
+      color: accent,
+      bold: true,
+      aiGenerated: true,
+    }),
+    createPageObject({
+      id: newId("text"),
+      pageId: args.pageId,
+      type: "text",
+      x: innerX,
+      y: y + CALLOUT_PAD + labelHeight + CALLOUT_LABEL_GAP,
+      width: innerWidth,
+      height: bodyHeight,
+      text: body,
+      fontSize,
+      lineHeight,
+      color: roleColor(theme, "body"),
+      fontFamily: args.font,
+      aiGenerated: true,
+    }),
+  ];
+
+  return {
+    objects,
+    result: { x, y, width, height, bottom: Math.round(y + height), variant },
   };
 }

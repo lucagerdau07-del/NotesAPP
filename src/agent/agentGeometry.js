@@ -26,7 +26,10 @@ export function boundsFor(document) {
   return isWhiteboardDocument(document) ? WHITEBOARD_BOUNDS : PAGE_BOUNDS;
 }
 
-const HEX = /^#[0-9a-f]{6}$/i;
+// Eight digits allowed so translucent decorations (marker bars, tinted
+// banners) survive validation — a highlight that is not see-through covers the
+// text it is meant to mark.
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 export const clamp = (value, min, max, fallback) =>
   Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;

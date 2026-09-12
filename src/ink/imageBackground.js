@@ -1,5 +1,12 @@
-import { removeBackground } from "@imgly/background-removal";
 import { tryFastCanvasRemoval } from "./canvasBackgroundRemoval.js";
+
+// @imgly/background-removal pulls in onnxruntime-web (a multi-MB WASM ML
+// runtime) that's only needed for the AI fallback below, so it's loaded on
+// demand instead of being bundled into every document view up front.
+async function removeBackground(imageSource, config) {
+  const { removeBackground: run } = await import("@imgly/background-removal");
+  return run(imageSource, config);
+}
 
 /**
  * Converts a Blob to a base64 Data URL.

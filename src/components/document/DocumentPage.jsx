@@ -5,7 +5,7 @@ import InkPageCanvas from "./InkPageCanvas.jsx";
 import PdfLinkLayer from "./PdfLinkLayer.jsx";
 import { useBrowserLink } from "../../browser/BrowserLinkContext.jsx";
 
-export default function DocumentPage({
+function DocumentPage({
   page,
   sourceType,
   sourceHandle,
@@ -86,3 +86,9 @@ export default function DocumentPage({
     </div>
   );
 }
+
+// documentMetrics/strokesByPage in DocumentView are memoized so an unrelated
+// re-render (opening the assistant rail, switching tools) hands this the
+// same page/strokes references and this skips reconciling entirely, instead
+// of re-running for every mounted page.
+export default React.memo(DocumentPage);

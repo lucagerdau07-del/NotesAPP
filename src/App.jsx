@@ -1,18 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
-import Settings from "./components/Settings";
-import PlanScreen from "./components/PlanScreen";
-import AiChatPanel from "./components/AiChatPanel";
-import BrowserPanel from "./components/BrowserPanel";
 import { createBrowserBridge } from "./browser/browserBridge";
 import { createBrowserRepository } from "./browser/browserRepository";
 import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { browserNoteRepository } from "./storage/noteRepository.js";
+
+// These screens/panels are not needed on initial load (library or a plain
+// note), so they're split into their own chunks and fetched on demand.
+const Settings = lazy(() => import("./components/Settings"));
+const PlanScreen = lazy(() => import("./components/PlanScreen"));
+const AiChatPanel = lazy(() => import("./components/AiChatPanel"));
+const BrowserPanel = lazy(() => import("./components/BrowserPanel"));
 
 const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
 const RAIL_LEFT_INSET = 8;
@@ -70,6 +73,15 @@ function Editor({ activeNote, onBack }) {
     });
   }, [browserBridge]);
   const isPanelOpen = panelMode !== null;
+  // AiChatPanel/BrowserPanel stay mounted (toggled via `active`/`hidden`) so
+  // their in-memory state survives closing, but they shouldn't be mounted -
+  // and their chunks fetched - before the user opens them the first time.
+  const [hasOpenedAgent, setHasOpenedAgent] = useState(false);
+  const [hasOpenedBrowser, setHasOpenedBrowser] = useState(false);
+  useEffect(() => {
+    if (panelMode === "agent") setHasOpenedAgent(true);
+    if (panelMode === "browser") setHasOpenedBrowser(true);
+  }, [panelMode]);
   const navigationSequenceRef = useRef(0);
   const railWidthRef = useRef(railWidth);
   const resizePointerRef = useRef(null);
@@ -213,31 +225,39 @@ function Editor({ activeNote, onBack }) {
           </button>
           <div className="rail-divider" />
         </div>
-        <AiChatPanel
-          active={panelMode === "agent"}
-          onClose={() => setPanelMode(null)}
-          noteTitle={activeNote?.title}
-          subject={activeNote?.subject}
-          documentId={String(activeNote?.id ?? "default")}
-          inkControllerRef={inkControllerRef}
-          pendingImage={pendingAgentImage}
-          onPendingImageHandled={() => setPendingAgentImage(null)}
-          onRequestCircleSearch={() => {
-            setPanelMode(null);
-            setArmCircleSearchRequest({ id: `${Date.now()}-${Math.random()}` });
-          }}
-        />
-        <BrowserPanel
-          active={panelMode === "browser"}
-          bridge={browserBridge}
-          repository={browserRepository}
-          navigationRequest={browserNavigation}
-          onClose={() => {
-            setBrowserFullscreen(false);
-            setPanelMode(null);
-          }}
-          onFullscreenChange={setBrowserFullscreen}
-        />
+        {hasOpenedAgent && (
+          <Suspense fallback={null}>
+            <AiChatPanel
+              active={panelMode === "agent"}
+              onClose={() => setPanelMode(null)}
+              noteTitle={activeNote?.title}
+              subject={activeNote?.subject}
+              documentId={String(activeNote?.id ?? "default")}
+              inkControllerRef={inkControllerRef}
+              pendingImage={pendingAgentImage}
+              onPendingImageHandled={() => setPendingAgentImage(null)}
+              onRequestCircleSearch={() => {
+                setPanelMode(null);
+                setArmCircleSearchRequest({ id: `${Date.now()}-${Math.random()}` });
+              }}
+            />
+          </Suspense>
+        )}
+        {hasOpenedBrowser && (
+          <Suspense fallback={null}>
+            <BrowserPanel
+              active={panelMode === "browser"}
+              bridge={browserBridge}
+              repository={browserRepository}
+              navigationRequest={browserNavigation}
+              onClose={() => {
+                setBrowserFullscreen(false);
+                setPanelMode(null);
+              }}
+              onFullscreenChange={setBrowserFullscreen}
+            />
+          </Suspense>
+        )}
         {isPanelOpen && !isBrowserFullscreen && (
           <div
             className="rail-resize-handle"
@@ -304,11 +324,19 @@ export default function App() {
   };
 
   if (screen === "settings") {
-    return <Settings onBack={() => setScreen("library")} />;
+    return (
+      <Suspense fallback={null}>
+        <Settings onBack={() => setScreen("library")} />
+      </Suspense>
+    );
   }
 
   if (screen === "plan") {
-    return <PlanScreen onBack={() => setScreen("library")} />;
+    return (
+      <Suspense fallback={null}>
+        <PlanScreen onBack={() => setScreen("library")} />
+      </Suspense>
+    );
   }
 
   if (screen === "library") {
