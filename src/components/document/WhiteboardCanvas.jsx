@@ -37,16 +37,12 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
     setViewportPreview(translateX, translateY, scale) {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      canvas.style.transformOrigin = "0 0";
-      canvas.style.willChange = "transform";
       canvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
     },
     clearViewportPreview() {
       const canvas = canvasRef.current;
       if (!canvas) return;
       canvas.style.transform = "";
-      canvas.style.transformOrigin = "";
-      canvas.style.willChange = "";
     },
   }), [camera, dpr, pageId]);
 
@@ -92,6 +88,14 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
         width: `${width}px`,
         height: `${height}px`,
         touchAction: "none",
+        // Kept on permanently, not toggled per gesture: switching will-change
+        // on/off forces the browser to tear down and rebuild this element's
+        // compositing layer on every pinch/pan start, which is a visible
+        // freeze the moment a heavy note is on screen. Staying promoted costs
+        // a little GPU memory instead — worth it for a layer that's animated
+        // via transform on nearly every gesture anyway.
+        transformOrigin: "0 0",
+        willChange: "transform",
       }}
     />
   );

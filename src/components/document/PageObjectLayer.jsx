@@ -766,16 +766,12 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
     setViewportPreview(translateX, translateY, scale) {
       const node = containerRef.current;
       if (!node) return;
-      node.style.transformOrigin = "0 0";
-      node.style.willChange = "transform";
       node.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
     },
     clearViewportPreview() {
       const node = containerRef.current;
       if (!node) return;
       node.style.transform = "";
-      node.style.transformOrigin = "";
-      node.style.willChange = "";
     },
   }), []);
 
@@ -785,7 +781,17 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
     <div
       ref={containerRef}
       data-testid="page-object-layer"
-      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        // Kept on permanently rather than toggled per gesture — see the same
+        // comment in WhiteboardCanvas.jsx. This layer holds every text/table/
+        // callout div on the page, so re-promoting it from scratch at the
+        // start of every pinch/pan is the actual freeze users were seeing.
+        transformOrigin: "0 0",
+        willChange: "transform",
+      }}
       onPointerMove={drag.move}
       onPointerUp={drag.end}
       onPointerCancel={drag.end}
