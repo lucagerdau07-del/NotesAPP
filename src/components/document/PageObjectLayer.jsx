@@ -131,7 +131,7 @@ function useTapSelect(onSelect) {
 // only the CSS positions below multiply by zoom.
 const CROP_MIN = 20;
 
-function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, onConfirm, onCancel }) {
+function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zoom, onConfirm, onCancel }) {
   const [natural, setNatural] = useState(null);
   const [rect, setRect] = useState(null);
 
@@ -186,8 +186,8 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, onConfirm, onCanc
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const start = { x: event.clientX, y: event.clientY, rect: { ...rect } };
     const move = (e) => {
-      const dx = (e.clientX - start.x) / zoom;
-      const dy = (e.clientY - start.y) / zoom;
+      const dx = (e.clientX - start.x) / pointerScale;
+      const dy = (e.clientY - start.y) / pointerScale;
       const next = { ...start.rect };
       if (corner.includes("w")) {
         next.x = start.rect.x + dx;
@@ -627,7 +627,16 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
   );
 }
 
-function Handle({ position, onPointerDown }) {
+// Chrome-sized in screen pixels, not object units: when the wrapper scales the
+// whole layer, everything in it scales too, which would leave grab handles
+// 1px wide zoomed out and huge zoomed in. Undoing the scale around their own
+// centre keeps them put and keeps them grabbable at any zoom.
+function counterScale(containerScale, transformOrigin = "center") {
+  if (containerScale === 1) return null;
+  return { transform: `scale(${1 / containerScale})`, transformOrigin };
+}
+
+function Handle({ position, onPointerDown, containerScale = 1 }) {
   return (
     <div
       onPointerDown={onPointerDown}
@@ -642,6 +651,7 @@ function Handle({ position, onPointerDown }) {
         justifyContent: "center",
         cursor: "nwse-resize",
         touchAction: "none",
+        ...counterScale(containerScale),
       }}
     >
       <div
@@ -657,7 +667,7 @@ function Handle({ position, onPointerDown }) {
   );
 }
 
-function RotateHandle({ position, onPointerDown }) {
+function RotateHandle({ position, onPointerDown, containerScale = 1 }) {
   return (
     <div
       data-testid="rotate-handle"
@@ -668,7 +678,11 @@ function RotateHandle({ position, onPointerDown }) {
         top: position.top - HANDLE_HIT,
         width: HANDLE_HIT,
         height: HANDLE_HIT,
-        transform: "translateX(-50%)",
+        transform:
+          containerScale === 1
+            ? "translateX(-50%)"
+            : `translateX(-50%) scale(${1 / containerScale})`,
+        transformOrigin: "50% 100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -760,12 +774,21 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   // DocumentView, where each page sits at its own offset. Omitted there, which
   // leaves positioning exactly as it was.
   containerOffset = null,
+  // Same idea for scale: with this set, objects lay out at their unscaled size
+  // and the wrapper scales them, so zooming — like panning — never rewrites a
+  // single child style. The caller then passes pageLayout.zoom as 1, since the
+  // zoom lives here instead.
+  containerScale = 1,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
   const drag = useDrag(onChange);
   const tapSelect = useTapSelect(onSelect);
   const zoom = pageLayout?.zoom || 1;
+  // How many screen pixels one object unit spans, wherever the scaling happens
+  // — in the children (`zoom`) or on the wrapper (`containerScale`). Anything
+  // converting a pointer position into object space has to use this, not zoom.
+  const pointerScale = zoom * containerScale;
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -816,14 +839,18 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
           position: "absolute",
           inset: 0,
           transformOrigin: "0 0",
-          // Panning moves this one transform instead of rewriting left/top on
-          // every child. Both produce the same picture, but changing children
-          // dirties the promoted layer's contents, so the GPU has to re-raster
-          // the whole thing — every glyph on screen — before the next frame.
-          // Moving the layer itself is compositor-only work. Zoom still goes
-          // through the children (it changes their size, not just position).
-          ...(containerOffset
-            ? { transform: `translate(${containerOffset.x}px, ${containerOffset.y}px)` }
+          // Pan and zoom both move this one transform instead of rewriting
+          // left/top/width/height on every child. Both produce the same
+          // picture, but changing children dirties the promoted layer's
+          // contents, so the GPU has to re-raster the whole thing — every
+          // glyph on screen — before the next frame. Moving and scaling the
+          // layer itself is compositor-only work.
+          ...(containerOffset || containerScale !== 1
+            ? {
+                transform:
+                  `translate(${containerOffset?.x ?? 0}px, ${containerOffset?.y ?? 0}px)` +
+                  ` scale(${containerScale})`,
+              }
             : null),
         }}
       >
@@ -857,11 +884,11 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               // missing that band lets the click fall through to the canvas
               // underneath instead of stopping propagation.
               const rect = event.currentTarget.getBoundingClientRect();
-              const localX = bounds.x + (event.clientX - rect.left) / zoom;
-              const localY = bounds.y + (event.clientY - rect.top) / zoom;
+              const localX = bounds.x + (event.clientX - rect.left) / pointerScale;
+              const localY = bounds.y + (event.clientY - rect.top) / pointerScale;
               if (!hitTestObject(object, localX, localY)) return;
               if (isSelected) {
-                if (!object.locked && editingId !== object.id) drag.start(event, object, "move", zoom);
+                if (!object.locked && editingId !== object.id) drag.start(event, object, "move", pointerScale);
               } else {
                 tapSelect(event, object.id);
               }
@@ -941,6 +968,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                   zIndex: 30,
                   boxShadow: "0 2px 5px rgba(0,0,0,0.4)",
                   padding: 0,
+                  ...counterScale(containerScale),
                 }}
               >
                 <Lock size={12} strokeWidth={2.5} />
@@ -953,6 +981,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 boxWidth={bounds.width}
                 boxHeight={bounds.height}
                 zoom={zoom}
+                pointerScale={pointerScale}
                 onConfirm={(patch) => {
                   onChange?.(object.id, patch);
                   setCroppingId(null);
@@ -972,7 +1001,8 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                           left: (object.width < 0 ? bounds.width : 0) * zoom,
                           top: (object.height < 0 ? bounds.height : 0) * zoom,
                         }}
-                        onPointerDown={(event) => drag.start(event, object, "start", zoom)}
+                        onPointerDown={(event) => drag.start(event, object, "start", pointerScale)}
+                        containerScale={containerScale}
                       />
                     )}
                     <Handle
@@ -980,7 +1010,8 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                         left: (object.width < 0 ? 0 : bounds.width) * zoom,
                         top: (object.height < 0 ? 0 : bounds.height) * zoom,
                       }}
-                      onPointerDown={(event) => drag.start(event, object, "end", zoom)}
+                      onPointerDown={(event) => drag.start(event, object, "end", pointerScale)}
+                      containerScale={containerScale}
                     />
                     {object.type !== "arrow" && object.type !== "line" && (
                       <RotateHandle
@@ -992,8 +1023,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                           const rect = event.currentTarget.parentElement?.getBoundingClientRect();
                           const cx = rect ? rect.left + rect.width / 2 : event.clientX;
                           const cy = rect ? rect.top + rect.height / 2 : event.clientY;
-                          drag.start(event, object, "rotate", zoom, { x: cx, y: cy });
+                          drag.start(event, object, "rotate", pointerScale, { x: cx, y: cy });
                         }}
+                        containerScale={containerScale}
                       />
                     )}
                   </>
@@ -1010,6 +1042,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                     borderRadius: 8,
                     background: "rgba(20,20,24,0.92)",
                     border: "1px solid rgba(255,255,255,0.12)",
+                    // Anchored at its bottom-left so it stays tucked against
+                    // the object's top edge as it scales back to screen size.
+                    ...counterScale(containerScale, "0 100%"),
                     zIndex: 40,
                   }}
                 >

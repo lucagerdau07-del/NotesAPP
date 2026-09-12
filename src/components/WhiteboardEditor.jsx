@@ -17,6 +17,8 @@ import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
 import { DESIGN_TOOLS, TEXT_TOOL, DesignToolsPopover } from "./DocumentView.jsx";
 
+const WORLD_UNIT_LAYOUT = { zoom: 1 };
+
 function relativePoint(element, event) {
   if (!element) return null;
   const rect = element.getBoundingClientRect();
@@ -110,6 +112,10 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     [camera],
   );
   const fakePageLayout = { zoom: camera.scale };
+  // The object layer lays out in unscaled world units and lets its own wrapper
+  // apply the camera, so a pan or zoom never touches a single object's style.
+  // Constant identity, so the layer does not re-render just for this.
+  const objectLayerLayout = WORLD_UNIT_LAYOUT;
 
   const mapPoint = useCallback(
     (event) => {
@@ -158,13 +164,18 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     clearPreview();
   }, [camera]);
 
-  // Cached instead of re-read via getBoundingClientRect() on every gesture:
-  // that call forces a synchronous layout flush, and right after a big
-  // camera-commit re-render (many object divs got new left/top) that flush is
-  // exactly the ~1s freeze users saw at the start of every new pinch/pan —
-  // measured to scale with object count, not with anything about the gesture
-  // itself. Refreshed only on real resize, same as `size` below.
+  // Measured once per gesture rather than once per frame. A ResizeObserver
+  // alone is not enough — the surface can move without resizing, and a stale
+  // offset skews the point a pinch zooms about. Re-reading is cheap now that a
+  // pan or zoom no longer rewrites object styles, so layout is clean when we
+  // ask; it was the combination of asking and a freshly dirtied layout that
+  // made this expensive before.
   const containerRectRef = useRef({ left: 0, top: 0 });
+  const refreshContainerRect = () => {
+    const measured = containerRef.current?.getBoundingClientRect();
+    if (measured) containerRectRef.current = measured;
+    return containerRectRef.current;
+  };
 
   const measureRef = useCallback((node) => {
     containerRef.current = node;
@@ -205,7 +216,9 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2) {
         inkPointer.abortActiveStroke?.(event.pointerId, event.timeStamp);
-        const rect = containerRectRef.current;
+        // Once here, at the start of the pinch; every frame of it then reuses
+        // this via containerRectRef.
+        const rect = refreshContainerRect();
         const [a, b] = Array.from(touchesRef.current.values());
         const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
         pinchRef.current = {
@@ -380,8 +393,14 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       const job = pending;
       pending = null;
       if (!job) return;
-      if (job.kind === "zoom") zoomBy(job.point, job.factor);
-      else panBy(job.dx, job.dy);
+      if (job.kind === "zoom") {
+        // Converted here rather than in the handler, so a burst of wheel
+        // events costs one rect read per frame instead of one per event.
+        const rect = refreshContainerRect();
+        zoomBy({ x: job.client.x - rect.left, y: job.client.y - rect.top }, job.factor);
+      } else {
+        panBy(job.dx, job.dy);
+      }
     };
 
     const handleWheel = (event) => {
@@ -389,11 +408,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       const normalizedDeltaX = event.deltaMode === 1 ? event.deltaX * 16 : event.deltaX;
       const normalizedDeltaY = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
       if (event.ctrlKey) {
-        const rect = containerRectRef.current;
-        const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const client = { x: event.clientX, y: event.clientY };
         const factor = Math.exp(-normalizedDeltaY * 0.0015);
         pending =
-          pending?.kind === "zoom" ? { kind: "zoom", point, factor: pending.factor * factor } : { kind: "zoom", point, factor };
+          pending?.kind === "zoom"
+            ? { kind: "zoom", client, factor: pending.factor * factor }
+            : { kind: "zoom", client, factor };
       } else {
         pending =
           pending?.kind === "pan"
@@ -725,10 +745,11 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         <PageObjectLayer
           ref={objectLayerRef}
           objects={pageObjects}
-          pageLayout={fakePageLayout}
+          pageLayout={objectLayerLayout}
           mapOrigin={mapOrigin}
           perObjectTouchAction={false}
           containerOffset={mapOrigin()}
+          containerScale={camera.scale}
           selectedId={selectedObjectId}
           processingObjectId={processingImageId}
           onSelect={setSelectedObjectId}
