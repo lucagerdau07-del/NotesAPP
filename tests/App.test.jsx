@@ -13,23 +13,14 @@ vi.mock('@ybouane/liquidglass', () => ({
 import App from '../src/App';
 
 describe('App Component', () => {
-  it('marks exactly five direct Library controls for WebGL glass', () => {
+  it('marks exactly three direct Library controls for WebGL glass', () => {
     render(<App />)
     const root = screen.getByTestId('liquid-glass-root')
     const controls = root.querySelectorAll(':scope > [data-liquid-glass-control]')
     expect([...controls].map(node => node.dataset.liquidGlassControl)).toEqual([
-      'navigation', 'search', 'reset', 'view-sort', 'agent',
+      'navigation', 'search', 'view-sort',
     ])
     expect(screen.getByTestId('new-note-btn')).not.toHaveAttribute('data-liquid-glass-control')
-  })
-
-  it('keeps the agent trigger mounted while the agent panel is open', () => {
-    render(<App />)
-
-    fireEvent.click(screen.getByTestId('agent-open-btn'))
-
-    expect(screen.getByTestId('agent-panel')).toHaveAttribute('data-open', 'true')
-    expect(screen.getByTestId('agent-open-btn')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('renders the library without crashing', () => {
@@ -229,8 +220,8 @@ describe('App Component', () => {
     expect(screen.getByText('Ableitungsregeln')).toBeInTheDocument();
     expect(screen.queryByText('Titrationskurve')).not.toBeInTheDocument();
 
-    // Reset via the close pod
-    fireEvent.click(screen.getByTitle('Schließen / Filter leeren'));
+    // Reset via the folder back button
+    fireEvent.click(screen.getByTitle('Zurück zur Übersicht'));
     expect(screen.getByText('Titrationskurve')).toBeInTheDocument();
   });
 });
