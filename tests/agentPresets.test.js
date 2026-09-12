@@ -126,3 +126,173 @@ describe("insert_mindmap", () => {
     expect(root.x).toBeLessThan(-8000);
   });
 });
+
+describe("insert_section_header", () => {
+  it("puts a tinted bar behind the title so the bar is drawn first", () => {
+    const api = createApi();
+    const result = executeTool(
+      "insert_section_header",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Diazotierung" },
+      api,
+    );
+    const objects = pageObjectsOf(api.getDocument());
+    expect(objects).toHaveLength(2);
+    const [bar, title] = objects;
+    expect(bar.type).toBe("rect");
+    expect(title).toMatchObject({ type: "text", text: "Diazotierung", bold: true });
+    // Translucent tint, and the title keeps the solid role colour.
+    expect(bar.fillColor).toMatch(/^#[0-9a-f]{8}$/i);
+    expect(title.color).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(result.bottom).toBeGreaterThan(100);
+  });
+
+  it("fits the pill variant to the words instead of the column", () => {
+    const api = createApi();
+    const banner = executeTool(
+      "insert_section_header",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Kurz", variant: "banner" },
+      api,
+    );
+    const pill = executeTool(
+      "insert_section_header",
+      { pageId: "note-1-page-1", x: 64, y: 300, width: 672, title: "Kurz", variant: "pill" },
+      api,
+    );
+    expect(banner.width).toBe(672);
+    expect(pill.width).toBeLessThan(banner.width);
+  });
+
+  it("draws a rule under the title for the underline variant", () => {
+    const api = createApi();
+    executeTool(
+      "insert_section_header",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Evolution", variant: "underline" },
+      api,
+    );
+    const objects = pageObjectsOf(api.getDocument());
+    const rule = objects.find((object) => object.type === "rect");
+    const title = objects.find((object) => object.type === "text");
+    expect(rule.y).toBeGreaterThan(title.y);
+    expect(rule.height).toBeLessThan(8);
+  });
+
+  it("rejects an empty title", () => {
+    const api = createApi();
+    const result = executeTool(
+      "insert_section_header",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "   " },
+      api,
+    );
+    expect(result).toMatch(/^Fehler:/);
+    expect(pageObjectsOf(api.getDocument())).toHaveLength(0);
+  });
+});
+
+describe("insert_callout", () => {
+  it("builds a box with a spine, label and body in one undo step", () => {
+    const api = createApi();
+    const before = api.undoSteps();
+    const result = executeTool(
+      "insert_callout",
+      {
+        pageId: "note-1-page-1",
+        x: 64,
+        y: 200,
+        width: 672,
+        text: "Ein Benami ist ein fiktiver Käufer.",
+        variant: "definition",
+      },
+      api,
+    );
+    const objects = pageObjectsOf(api.getDocument());
+    expect(objects).toHaveLength(4);
+    const [box, spine, label, body] = objects;
+    expect(box).toMatchObject({ type: "rect", width: 672 });
+    expect(spine.width).toBeLessThan(box.width);
+    expect(spine.height).toBe(box.height);
+    expect(label).toMatchObject({ type: "text", text: "Definition", bold: true });
+    expect(body.text).toContain("Benami");
+    // The body sits inside the box, not over its border.
+    expect(body.x).toBeGreaterThan(box.x);
+    expect(result.bottom).toBe(Math.round(box.y + box.height));
+    expect(api.undoSteps()).toBe(before + 1);
+  });
+
+  it("grows the box for longer text", () => {
+    const api = createApi();
+    const short = executeTool(
+      "insert_callout",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 400, text: "Kurz." },
+      api,
+    );
+    const long = executeTool(
+      "insert_callout",
+      {
+        pageId: "note-1-page-1",
+        x: 64,
+        y: 400,
+        width: 400,
+        text: "Kurz. ".repeat(80),
+      },
+      api,
+    );
+    expect(long.height).toBeGreaterThan(short.height);
+  });
+
+  it("falls back to the definition variant for an unknown one", () => {
+    const api = createApi();
+    const result = executeTool(
+      "insert_callout",
+      { pageId: "note-1-page-1", x: 64, y: 100, width: 400, text: "Test", variant: "quatsch" },
+      api,
+    );
+    expect(result.variant).toBe("definition");
+  });
+});
+
+describe("write_text highlighting", () => {
+  it("lays marker bars behind the text they mark", () => {
+    const api = createApi();
+    const result = executeTool(
+      "write_text",
+      {
+        pageId: "note-1-page-1",
+        x: 64,
+        y: 120,
+        width: 300,
+        text: "Permanent Settlement",
+        highlight: "yellow",
+      },
+      api,
+    );
+    const objects = pageObjectsOf(api.getDocument());
+    const markers = objects.filter((object) => object.type === "rect");
+    const text = objects.find((object) => object.id === result.id);
+    expect(markers.length).toBeGreaterThan(0);
+    // Drawn before the text, so the text stays readable on top.
+    expect(objects.indexOf(markers[0])).toBeLessThan(objects.indexOf(text));
+    expect(markers[0].fillColor).toMatch(/^#[0-9a-f]{8}$/i);
+    expect(markers[0].y).toBeGreaterThanOrEqual(text.y);
+  });
+
+  it("writes no marker without the highlight argument", () => {
+    const api = createApi();
+    executeTool(
+      "write_text",
+      { pageId: "note-1-page-1", x: 64, y: 120, width: 300, text: "Schlicht" },
+      api,
+    );
+    expect(pageObjectsOf(api.getDocument()).filter((o) => o.type === "rect")).toHaveLength(0);
+  });
+
+  it("takes its colour from the role when no colour is given", () => {
+    const api = createApi();
+    const result = executeTool(
+      "write_text",
+      { pageId: "note-1-page-1", x: 64, y: 120, width: 300, text: "Achtung", role: "signal" },
+      api,
+    );
+    const text = pageObjectsOf(api.getDocument()).find((o) => o.id === result.id);
+    expect(text.color).toBe("#FF5C5C");
+  });
+});

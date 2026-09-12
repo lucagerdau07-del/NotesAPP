@@ -1,9 +1,17 @@
 import { PAGE_WIDTH, PAGE_HEIGHT } from "./tools.js";
+import { describeNoteStyle, themeForBackground } from "./noteStyle.js";
 
 // One prompt for both modes: without tools the model just chats about the note,
 // with tools it edits the document. isWhiteboard swaps the page-geometry
 // paragraph for one describing the whiteboard's unbounded canvas instead.
-export function buildSystemPrompt({ noteTitle, subject, canEdit, canRead = canEdit, isWhiteboard = false }) {
+export function buildSystemPrompt({
+  noteTitle,
+  subject,
+  canEdit,
+  canRead = canEdit,
+  isWhiteboard = false,
+  background,
+}) {
   const lines = [
     "Du bist der Assistent in einer Schul-Notizbuch-App. Du antwortest immer auf Deutsch.",
     "Antworte im Chat in Markdown: Überschriften, Listen, **fett**, `Code`, Codeblöcke, Tabellen.",
@@ -32,7 +40,15 @@ export function buildSystemPrompt({ noteTitle, subject, canEdit, canRead = canEd
 
   if (canEdit) {
     lines.push(
-      "Größen: Überschrift 28, Zwischenüberschrift 22, Fließtext 18.",
+      ...describeNoteStyle(themeForBackground(background)),
+      "Gestalte die Seite wie handschriftliche Lernnotizen, nicht wie ein Fließtext-Dokument:",
+      "- Jeder Abschnitt beginnt mit insert_section_header: banner für Hauptabschnitte, pill für Unterabschnitte, underline für kurze Zwischentitel. Kein fetter Textblock als Ersatz.",
+      "- Definitionen, Beispiele, Warnungen und Formeln gehören in insert_callout statt in den Fließtext.",
+      "- Einen Schlüsselbegriff hebst du hervor, indem du ihn als eigenen kurzen write_text-Block mit highlight schreibst, damit der Marker nur das Wort trifft und nicht den ganzen Absatz.",
+      "- Wechsle Blockgrößen und Abstände ab. Gleich große Absätze untereinander lesen sich wie ein Ausdruck, nicht wie Notizen.",
+      "- Lass Luft: mindestens 18 px zwischen zwei Blöcken, etwa 32 px bevor eine neue Überschrift kommt.",
+      "- Randnotizen, Merksätze und Kommentare in der Handschrift-Schrift (font: hand), Fließtext nie.",
+      "- Nutze role statt eigener Hex-Farben, außer du brauchst bewusst eine Farbe außerhalb der Palette.",
       "Für unterstrichenen Text setze bei write_text/edit_text underline: true statt eine Linie mit add_shape darunter zu zeichnen — der Strich sitzt dann exakt und farblich passend unter der Schrift.",
       "Für eine Tabelle, ein Flussdiagramm oder eine Mindmap nutze insert_table/insert_diagram/insert_mindmap statt die Kästen und Texte einzeln mit add_shape/write_text zusammenzusetzen — danach einzelne Zellen/Knoten bei Bedarf mit edit_text anpassen.",
       "Für Unterpunkte an Mindmap-Zweigen nutze das `subs`-Array (1-4 Einträge) pro Zweig in insert_mindmap statt separate write_text-Aufrufe — sonst landen die Texte unverbunden irgendwo auf der Seite. Für mehr Tiefe: gib pro Zweig mehrere konkrete Unterpunkte statt nur einem an.",

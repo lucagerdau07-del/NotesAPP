@@ -11,7 +11,21 @@ import {
   color,
   newId,
 } from "./agentGeometry.js";
-import { buildTablePreset, buildDiagramPreset, buildMindmapPreset } from "./presets.js";
+import {
+  buildTablePreset,
+  buildDiagramPreset,
+  buildMindmapPreset,
+  buildSectionHeaderPreset,
+  buildCalloutPreset,
+  buildHighlightObjects,
+} from "./presets.js";
+import {
+  CALLOUT_VARIANTS,
+  HIGHLIGHT_COLORS,
+  STYLE_ROLES,
+  roleColor,
+  themeOf,
+} from "./noteStyle.js";
 
 // Page geometry mirrors DocumentView's baseWidth/pageHeight. Coordinates are
 // page-local: origin top left of the addressed page, unit = page pixel. A
@@ -25,7 +39,16 @@ const MAX_PATHS = 200;
 const MAX_POINTS = 2000;
 // Same encoding as the document scan (src/knowledge/documentScan.js): JPEG at
 // 1000px reads handwriting fine and keeps the base64 payload manageable.
-const SEE_IMAGE_OPTIONS = { maxDimension: 1000, mimeType: "image/jpeg", quality: 0.72 };
+// paintBackground because the canvas is otherwise transparent and the page's
+// colour is a CSS layer the caller puts behind it — which this caller cannot
+// do. The JPEG encoder then flattens the transparency to black, so a note on
+// light paper reached the model as dark ink on black, i.e. blank.
+const SEE_IMAGE_OPTIONS = {
+  maxDimension: 1000,
+  mimeType: "image/jpeg",
+  quality: 0.72,
+  paintBackground: true,
+};
 const MAX_SEE_PAGES = 8;
 
 // The model needs to know where its next block may start. Measured the same
@@ -108,6 +131,18 @@ export const AGENT_TOOLS = [
           underline: { type: "boolean" },
           align: { type: "string", enum: ["left", "center", "right"] },
           font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+          role: {
+            type: "string",
+            enum: STYLE_ROLES,
+            description:
+              "Farbrolle statt eigener Hex-Wert — passt sich hellem und dunklem Papier an. color überschreibt sie.",
+          },
+          highlight: {
+            type: "string",
+            enum: Object.keys(HIGHLIGHT_COLORS),
+            description:
+              "Legt einen Marker hinter die Zeilen dieses Blocks. Für einzelne Schlüsselbegriffe: eigenen kurzen Block schreiben und den markieren.",
+          },
         },
         required: ["pageId", "x", "y", "width", "text"],
       },
@@ -327,6 +362,52 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "insert_section_header",
+      description:
+        "Setzt eine Abschnittsüberschrift als gestaltetes Element: getönter Balken über die Spaltenbreite (banner), schmale Pille um die Wörter (pill) oder Titel über dickem Strich (underline). Gibt die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          width: { type: "number" },
+          title: { type: "string" },
+          variant: { type: "string", enum: ["banner", "pill", "underline"] },
+          role: { type: "string", enum: STYLE_ROLES, description: "Farbrolle, Standard heading" },
+          size: { type: "number" },
+          font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+        },
+        required: ["pageId", "x", "y", "width", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_callout",
+      description:
+        "Setzt einen abgesetzten Kasten mit farbiger Kante für Definitionen, Beispiele, Warnungen oder Formeln. Die Höhe richtet sich nach dem Text. Gibt die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          width: { type: "number" },
+          text: { type: "string" },
+          variant: { type: "string", enum: Object.keys(CALLOUT_VARIANTS) },
+          title: { type: "string", description: "Überschrift des Kastens, Standard ist die Variante" },
+          size: { type: "number" },
+          font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
+        },
+        required: ["pageId", "x", "y", "width", "text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -376,6 +457,10 @@ export function describeToolCall(name, args = {}) {
       return `Diagramm einfügen (${args.nodes?.length ?? 0} Knoten)`;
     case "insert_mindmap":
       return `Mindmap einfügen (${args.branches?.length ?? 0} Zweige)`;
+    case "insert_section_header":
+      return `Überschrift: ${String(args.title || "").slice(0, 40)}`;
+    case "insert_callout":
+      return `Kasten einfügen (${CALLOUT_VARIANTS[args.variant] ? args.variant : "definition"})`;
     case "done":
       return "Fertig";
     default:
@@ -410,6 +495,7 @@ export function executeTool(name, rawArgs, api) {
   const pageIds = document.pages.map((page) => page.id);
   const objects = pageObjectsOf(document);
   const bounds = boundsFor(document);
+  const theme = themeOf(document);
   const whiteboard = isWhiteboardDocument(document);
   const needsPage = [
     "write_text",
@@ -418,6 +504,8 @@ export function executeTool(name, rawArgs, api) {
     "insert_table",
     "insert_diagram",
     "insert_mindmap",
+    "insert_section_header",
+    "insert_callout",
   ].includes(name);
   if (needsPage && !pageIds.includes(args.pageId))
     return `Fehler: pageId "${args.pageId}" gibt es nicht. Vorhanden: ${pageIds.join(", ")}`;
@@ -455,7 +543,10 @@ export function executeTool(name, rawArgs, api) {
     }
 
     case "write_text": {
-      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, inkColor, bounds);
+      // An explicit colour still wins; the role only moves the default off the
+      // user's ink so the palette holds up on light and dark paper alike.
+      const baseColor = args.role ? roleColor(theme, args.role) : inkColor;
+      const patch = textPatch({ ...args, size: args.size ?? 18 }, null, baseColor, bounds);
       const text = patch.text ?? "";
       if (!text.trim()) return "Fehler: text ist leer.";
       const width = patch.width ?? 400;
@@ -473,7 +564,7 @@ export function executeTool(name, rawArgs, api) {
         pageId: args.pageId,
         type: "text",
         x: 64,
-        color: inkColor,
+        color: baseColor,
         aiGenerated: true,
         ...patch,
         y,
@@ -481,8 +572,29 @@ export function executeTool(name, rawArgs, api) {
         width,
         height,
       });
-      api.apply([{ type: "add-object", object }]);
+      // Markers are ordinary rects, and objects render in insertion order, so
+      // they go in ahead of the text they sit behind.
+      const markers = HIGHLIGHT_COLORS[args.highlight]
+        ? buildHighlightObjects(object, args.highlight)
+        : [];
+      api.apply(
+        [...markers, object].map((added) => ({ type: "add-object", object: added })),
+      );
       return { id: object.id, height, bottom: object.y + height };
+    }
+
+    case "insert_section_header": {
+      const built = buildSectionHeaderPreset(args, bounds, theme);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
+    }
+
+    case "insert_callout": {
+      const built = buildCalloutPreset(args, bounds, theme);
+      if (typeof built === "string") return built;
+      api.apply(built.objects.map((object) => ({ type: "add-object", object })));
+      return built.result;
     }
 
     case "edit_text": {

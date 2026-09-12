@@ -160,6 +160,42 @@ export function previewTextOf(documentId) {
   return topText?.text.trim().slice(0, 200) || "";
 }
 
+// Page backgrounds are CSS strings and are usually gradients, which a canvas
+// fillStyle cannot take. Callers that need pixels rather than a CSS layer
+// behind the image (see_document, which hands the result straight to the
+// model) only need the right contrast, so the first colour stop stands in for
+// the whole gradient.
+function flatBackdropColor(background) {
+  const css = String(background || "");
+  if (!css) return null;
+  const rgb = css.match(/rgba?\(\s*\d+[,\s]+\d+[,\s]+\d+[^)]*\)/i);
+  if (rgb) return rgb[0].replace(/rgba\(([^)]*?),\s*[\d.]+\s*\)/i, "rgb($1)");
+  const hex = css.match(/#[0-9a-f]{3,8}\b/i);
+  return hex ? hex[0] : null;
+}
+
+// Greedy word wrap against the measured font already set on the context.
+// A single word wider than the box stays on its own line rather than being
+// broken mid-word, which matches how the DOM box overflows it.
+function wrapText(context, text, maxWidth) {
+  const limit = maxWidth > 0 ? maxWidth : Infinity;
+  const lines = [];
+  for (const paragraph of text.split("\n")) {
+    let current = "";
+    for (const word of paragraph.split(" ")) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (current && context.measureText(candidate).width > limit) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+    lines.push(current);
+  }
+  return lines;
+}
+
 function drawPreviewObject(context, object) {
   const left = Math.min(object.x, object.x + object.width);
   const top = Math.min(object.y, object.y + object.height);
@@ -185,9 +221,14 @@ function drawPreviewObject(context, object) {
     context.font = `${object.bold ? "700" : "400"} ${object.italic ? "italic " : ""}${object.fontSize}px ${fontStackOf(object.fontFamily)}`;
     context.textBaseline = "top";
     const lineHeight = object.lineHeight || object.fontSize * 1.25;
-    String(object.text)
-      .split("\n")
-      .forEach((line, index) => context.fillText(line, object.x, object.y + index * lineHeight));
+    // The live editor renders text in a DOM box that wraps at the object's
+    // width; this canvas has to wrap it itself or long lines run off the page
+    // edge. That matters beyond thumbnails: see_document shows the agent its
+    // own page through this renderer, so without wrapping the model reviews a
+    // layout that does not match what it actually wrote.
+    wrapText(context, String(object.text), object.width).forEach((line, index) =>
+      context.fillText(line, object.x, object.y + index * lineHeight),
+    );
     context.restore();
     if (object.rotation) context.restore();
     return;
@@ -247,13 +288,21 @@ function drawPreviewObject(context, object) {
 // real page (ruling behind, an ink canvas on top): an eraser stroke uses
 // "destination-out" and would otherwise punch it right through the ruling
 // too if both shared one canvas.
-function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, offsetX, offsetY, view, mimeType = "image/png", quality }) {
+function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, offsetX, offsetY, view, mimeType = "image/png", quality, paintBackground = false }) {
   if (typeof document === "undefined") return "";
   const canvas = document.createElement("canvas");
   canvas.width = pixelWidth;
   canvas.height = pixelHeight;
   const context = canvas.getContext("2d");
   if (!context) return "";
+
+  if (paintBackground) {
+    const backdrop = flatBackdropColor(page?.background);
+    if (backdrop) {
+      context.fillStyle = backdrop;
+      context.fillRect(0, 0, pixelWidth, pixelHeight);
+    }
+  }
 
   const inkCanvas = document.createElement("canvas");
   inkCanvas.width = pixelWidth;
@@ -366,7 +415,11 @@ function fullPageBounds(inkDoc, page) {
 // One full page (the whole page area, not just the top) - used by the note
 // detail view, which has room to show a page in full and to swipe between
 // several of them (see renderNotePagesOf).
-function renderFullPage(inkDoc, page, { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality } = {}) {
+function renderFullPage(
+  inkDoc,
+  page,
+  { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality, paintBackground } = {},
+) {
   const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, page);
   const pageWidth = Math.max(1, maxX - minX);
   const pageHeight = Math.max(1, maxY - minY);
@@ -384,6 +437,7 @@ function renderFullPage(inkDoc, page, { maxDimension = FULL_PAGE_MAX_DIMENSION, 
     view: { minX, minY, maxX, maxY },
     mimeType,
     quality,
+    paintBackground,
   });
 }
 
