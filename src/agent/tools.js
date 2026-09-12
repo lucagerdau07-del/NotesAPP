@@ -132,17 +132,15 @@ export const AGENT_TOOLS = [
           underline: { type: "boolean" },
           align: { type: "string", enum: ["left", "center", "right"] },
           font: { type: "string", enum: FONT_STACKS.map((font) => font.id) },
-          role: {
-            type: "string",
-            enum: STYLE_ROLES,
-            description:
-              "Farbrolle statt eigener Hex-Wert — passt sich hellem und dunklem Papier an. color überschreibt sie.",
-          },
+          // Both concepts (which role means what, when to reach for a
+          // one-word highlight block) are explained once in the system
+          // prompt; only the one fact that isn't — that color wins over
+          // role — needs saying again here.
+          role: { type: "string", enum: STYLE_ROLES, description: "Farbrolle. color überschreibt sie." },
           highlight: {
             type: "string",
             enum: Object.keys(HIGHLIGHT_COLORS),
-            description:
-              "Legt einen Marker hinter die Zeilen dieses Blocks. Für einzelne Schlüsselbegriffe: eigenen kurzen Block schreiben und den markieren.",
+            description: "Marker hinter den Zeilen dieses Blocks.",
           },
         },
         required: ["pageId", "x", "y", "width", "text"],
@@ -469,7 +467,11 @@ export const AGENT_TOOLS = [
           params: {
             type: "object",
             description:
-              'Parametername auf {"default": Wert, ...Grenzen}. Grenzen wie bei insert_table (dort sind rows/cols fest auf 1-20/1-10 begrenzt): "min"/"max" für Zahlen, "minItems"/"maxItems" für Listen, "options": [...] für eine feste Auswahl, "fixed": true, wenn der Wert nie vom Aufrufer überschrieben werden darf. Beispiel: {"cols": {"default": 3, "min": 1, "max": 6}, "items": {"default": [], "maxItems": 8}}',
+              // Full explanation of min/max/minItems/maxItems/options/fixed is
+              // in the system prompt (describeRecipeLanguage) — kept in one
+              // place so the two can't drift apart. Only the concrete syntax
+              // stays here, since that's what's needed at call time.
+              'Parametername auf {"default": Wert, ...Grenzen}, siehe Rezeptsprache im Systemprompt. Beispiel: {"cols": {"default": 3, "min": 1, "max": 6}, "items": {"default": [], "maxItems": 8}}',
           },
           body: {
             type: "array",
