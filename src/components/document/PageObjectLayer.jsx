@@ -754,6 +754,12 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   // every touch point. Off by default to leave DocumentView's behavior
   // untouched; WhiteboardEditor passes false.
   perObjectTouchAction = true,
+  // The part of every object's screen position that is identical for all of
+  // them, hoisted onto a single wrapper transform. Only valid when all objects
+  // share an origin — true for the whiteboard's one infinite surface, not for
+  // DocumentView, where each page sits at its own offset. Omitted there, which
+  // leaves positioning exactly as it was.
+  containerOffset = null,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -805,11 +811,32 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
       onPointerUp={drag.end}
       onPointerCancel={drag.end}
     >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          transformOrigin: "0 0",
+          // Panning moves this one transform instead of rewriting left/top on
+          // every child. Both produce the same picture, but changing children
+          // dirties the promoted layer's contents, so the GPU has to re-raster
+          // the whole thing — every glyph on screen — before the next frame.
+          // Moving the layer itself is compositor-only work. Zoom still goes
+          // through the children (it changes their size, not just position).
+          ...(containerOffset
+            ? { transform: `translate(${containerOffset.x}px, ${containerOffset.y}px)` }
+            : null),
+        }}
+      >
       {objects.map((stored) => {
         if (stored.hidden === true) return null;
         const object = drag.draft?.id === stored.id ? drag.draft : stored;
-        const origin = mapOrigin(pageLayout, object.pageId);
-        if (!origin) return null;
+        const mapped = mapOrigin(pageLayout, object.pageId);
+        if (!mapped) return null;
+        // With the offset lifted onto the wrapper above, children position
+        // relative to it — otherwise it would be applied twice.
+        const origin = containerOffset
+          ? { x: mapped.x - containerOffset.x, y: mapped.y - containerOffset.y }
+          : mapped;
         const bounds = objectBounds(object);
         const isSelected = selectedId === object.id;
 
@@ -1222,6 +1249,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
           </div>
         );
       })}
+      </div>
     </div>
   );
 });

@@ -728,6 +728,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           pageLayout={fakePageLayout}
           mapOrigin={mapOrigin}
           perObjectTouchAction={false}
+          containerOffset={mapOrigin()}
           selectedId={selectedObjectId}
           processingObjectId={processingImageId}
           onSelect={setSelectedObjectId}
