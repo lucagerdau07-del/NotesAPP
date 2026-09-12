@@ -1,7 +1,7 @@
 import { openDB } from "idb";
 
 export const DOCUMENT_DB_NAME = "notes-app-db";
-export const DOCUMENT_DB_VERSION = 1;
+export const DOCUMENT_DB_VERSION = 2;
 
 export class DocumentRepositoryError extends Error {
   constructor(code, message, cause) {
@@ -14,19 +14,29 @@ export class DocumentRepositoryError extends Error {
 export function createDocumentRepository({ dbName = DOCUMENT_DB_NAME } = {}) {
   let dbPromise;
   const database = () => {
-    dbPromise ||= openDB(dbName, DOCUMENT_DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains("files"))
-          db.createObjectStore("files", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("importedNotes")) {
-          const notes = db.createObjectStore("importedNotes", {
-            keyPath: "id",
-          });
-          notes.createIndex("by-updated-at", "updatedAt");
-          notes.createIndex("by-subject", "subject");
+    if (!dbPromise) {
+      dbPromise = openDB(dbName, DOCUMENT_DB_VERSION, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains("files"))
+            db.createObjectStore("files", { keyPath: "id" });
+          if (!db.objectStoreNames.contains("importedNotes")) {
+            const notes = db.createObjectStore("importedNotes", {
+              keyPath: "id",
+            });
+            notes.createIndex("by-updated-at", "updatedAt");
+            notes.createIndex("by-subject", "subject");
+          }
+          if (!db.objectStoreNames.contains("ocrPages")) {
+            db.createObjectStore("ocrPages", { keyPath: "id" });
+          }
+        },
+      }).catch(async (err) => {
+        if (err?.name === "VersionError") {
+          return openDB(dbName);
         }
-      },
-    });
+        throw err;
+      });
+    }
     return dbPromise;
   };
 

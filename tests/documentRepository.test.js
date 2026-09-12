@@ -56,4 +56,24 @@ describe('document repository', () => {
     await db.delete('files', value.file.id);
     await expect(repository.getDocumentBundle('missing')).rejects.toMatchObject({ code: 'source-missing' });
   });
+
+  it('falls back gracefully without crashing if an existing DB has a higher version', async () => {
+    const dbName = `test-version-${crypto.randomUUID()}`;
+    const { openDB } = await import('idb');
+    // Pre-create database at version 5
+    const existingDb = await openDB(dbName, 5, {
+      upgrade(db) {
+        db.createObjectStore('files', { keyPath: 'id' });
+        db.createObjectStore('importedNotes', { keyPath: 'id' });
+      },
+    });
+    existingDb.close();
+
+    const repository = createDocumentRepository({ dbName });
+    repositories.push(repository);
+
+    // Opening with version 2 should catch VersionError and fall back to openDB(dbName)
+    const db = await repository.database();
+    expect(db.version).toBe(5);
+  });
 });
