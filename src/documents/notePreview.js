@@ -226,9 +226,18 @@ function drawPreviewObject(context, object) {
     // edge. That matters beyond thumbnails: see_document shows the agent its
     // own page through this renderer, so without wrapping the model reviews a
     // layout that does not match what it actually wrote.
-    wrapText(context, String(object.text), object.width).forEach((line, index) =>
-      context.fillText(line, object.x, object.y + index * lineHeight),
-    );
+    // textAlign has to be applied per line against the measured width: the
+    // canvas' own textAlign would align to object.x, not inside the box the
+    // DOM editor wraps and centres text in.
+    const align = object.textAlign || "left";
+    wrapText(context, String(object.text), object.width).forEach((line, index) => {
+      let x = object.x;
+      if (align !== "left" && object.width > 0) {
+        const slack = object.width - context.measureText(line).width;
+        x += align === "center" ? slack / 2 : slack;
+      }
+      context.fillText(line, x, object.y + index * lineHeight);
+    });
     context.restore();
     if (object.rotation) context.restore();
     return;

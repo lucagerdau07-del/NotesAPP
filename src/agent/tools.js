@@ -26,6 +26,7 @@ import {
   roleColor,
   themeOf,
 } from "./noteStyle.js";
+import { createComponentStore, runRecipe } from "./components/index.js";
 
 // Page geometry mirrors DocumentView's baseWidth/pageHeight. Coordinates are
 // page-local: origin top left of the addressed page, unit = page pixel. A
@@ -408,6 +409,80 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "list_components",
+      description:
+        "Listet die verfügbaren Bauelemente (Zeitstrahl, Ablauf, Klammer, Kolben, Glockenkurve, …) mit ihren Parametern auf.",
+      parameters: {
+        type: "object",
+        properties: {
+          tag: { type: "string", description: "Filter, z.B. chemie, mathe, struktur, annotation" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_component",
+      description:
+        "Gibt das vollständige Rezept eines Bauelements zurück — als Vorlage zum Abwandeln oder um eine Proportion zu ändern.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "insert_component",
+      description:
+        "Setzt ein Bauelement auf die Seite. args enthält die Parameter des Rezepts. Gibt die belegte Fläche und die Unterkante zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          pageId: { type: "string" },
+          id: { type: "string" },
+          x: { type: "number" },
+          y: { type: "number" },
+          args: { type: "object", description: "Parameter laut Rezept, z.B. {items: [...], width: 600}" },
+        },
+        required: ["pageId", "id", "x", "y"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "define_component",
+      description:
+        "Speichert ein eigenes Bauelement oder überschreibt ein vorhandenes unter derselben id. Das Rezept wird vor dem Speichern testweise ausgeführt, Fehler kommen als Text zurück.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Kleinbuchstaben, ohne Leerzeichen" },
+          title: { type: "string" },
+          description: { type: "string", description: "Wofür das Element gedacht ist und was die Parameter bedeuten" },
+          tags: { type: "array", items: { type: "string" } },
+          params: {
+            type: "object",
+            description: 'Parametername auf {"default": Wert}, z.B. {"width": {"default": 400}}',
+          },
+          body: {
+            type: "array",
+            items: { type: "object" },
+            description: "Elemente, repeat/when/let — siehe die Rezeptsprache im Systemprompt",
+          },
+        },
+        required: ["id", "title", "body"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -461,11 +536,57 @@ export function describeToolCall(name, args = {}) {
       return `Überschrift: ${String(args.title || "").slice(0, 40)}`;
     case "insert_callout":
       return `Kasten einfügen (${CALLOUT_VARIANTS[args.variant] ? args.variant : "definition"})`;
+    case "list_components":
+      return args.tag ? `Bauelemente suchen (${args.tag})` : "Bauelemente auflisten";
+    case "read_component":
+      return `Rezept lesen: ${args.id || "?"}`;
+    case "insert_component":
+      return `Element einfügen: ${args.id || "?"}`;
+    case "define_component":
+      return `Element speichern: ${args.id || "?"}`;
     case "done":
       return "Fertig";
     default:
       return name;
   }
+}
+
+// One store per app run unless the caller supplies its own (tests do), so the
+// agent's saved components survive between runs without being re-read on every
+// tool call.
+let sharedComponentStore = null;
+function componentStore(api) {
+  if (api?.getComponentStore) return api.getComponentStore();
+  if (!sharedComponentStore) sharedComponentStore = createComponentStore();
+  return sharedComponentStore;
+}
+
+// What a placed component actually occupies, so the model can put the next
+// block under it without guessing the recipe's internal geometry.
+function componentExtent({ objects, strokes }) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const see = (x, y) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  };
+  for (const object of objects) {
+    see(object.x, object.y);
+    see(object.x + object.width, object.y + object.height);
+  }
+  for (const stroke of strokes) for (const point of stroke.points) see(point.x, point.y);
+  if (minX === Infinity) return { width: 0, height: 0, bottom: 0 };
+  return {
+    x: Math.round(minX),
+    y: Math.round(minY),
+    width: Math.round(maxX - minX),
+    height: Math.round(maxY - minY),
+    bottom: Math.round(maxY),
+  };
 }
 
 function textPatch(args, existing, defaultColor, bounds) {
@@ -506,6 +627,7 @@ export function executeTool(name, rawArgs, api) {
     "insert_mindmap",
     "insert_section_header",
     "insert_callout",
+    "insert_component",
   ].includes(name);
   if (needsPage && !pageIds.includes(args.pageId))
     return `Fehler: pageId "${args.pageId}" gibt es nicht. Vorhanden: ${pageIds.join(", ")}`;
@@ -595,6 +717,75 @@ export function executeTool(name, rawArgs, api) {
       if (typeof built === "string") return built;
       api.apply(built.objects.map((object) => ({ type: "add-object", object })));
       return built.result;
+    }
+
+    case "list_components": {
+      const tag = typeof args.tag === "string" ? args.tag.toLowerCase() : null;
+      const entries = componentStore(api)
+        .list()
+        .filter((entry) => !tag || entry.tags.includes(tag))
+        .map((entry) => {
+          const recipe = componentStore(api).get(entry.id);
+          return {
+            ...entry,
+            params: Object.entries(recipe?.params || {}).map(
+              ([name, spec]) => `${name}=${JSON.stringify(spec?.default)}`,
+            ),
+          };
+        });
+      return { components: entries };
+    }
+
+    case "read_component": {
+      const recipe = componentStore(api).get(args.id);
+      if (!recipe) return `Fehler: Kein Bauelement mit der id "${args.id}".`;
+      return recipe;
+    }
+
+    case "insert_component": {
+      const recipe = componentStore(api).get(args.id);
+      if (!recipe) return `Fehler: Kein Bauelement mit der id "${args.id}". list_components zeigt die vorhandenen.`;
+      let built;
+      try {
+        built = runRecipe(
+          recipe,
+          { ...(args.args || {}), x: args.x, y: args.y },
+          { pageId: args.pageId, theme },
+        );
+      } catch (error) {
+        return `Fehler im Rezept "${args.id}": ${error.message}`;
+      }
+      if (built.objects.length === 0 && built.strokes.length === 0)
+        return `Fehler: "${args.id}" hat nichts erzeugt. Sind die Listen-Parameter gefüllt?`;
+      api.apply([
+        ...built.objects.map((object) => ({ type: "add-object", object })),
+        ...built.strokes.map((stroke) => ({ type: "commit-stroke", stroke })),
+      ]);
+      return { id: args.id, ...componentExtent(built) };
+    }
+
+    case "define_component": {
+      const id = String(args.id || "").trim().toLowerCase().replace(/\s+/g, "-");
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(id))
+        return "Fehler: id braucht Kleinbuchstaben, Ziffern, - oder _.";
+      const recipe = {
+        id,
+        title: String(args.title || id),
+        description: String(args.description || ""),
+        tags: Array.isArray(args.tags) ? args.tags.map((tag) => String(tag).toLowerCase()) : [],
+        params: args.params && typeof args.params === "object" ? args.params : {},
+        body: args.body,
+      };
+      // Run it once before saving: a recipe that throws is worth far less to
+      // the model as a stored element than as an error it can still fix.
+      try {
+        runRecipe(recipe, {}, { pageId: pageIds[0], theme });
+      } catch (error) {
+        return `Fehler im Rezept: ${error.message}`;
+      }
+      if (!componentStore(api).save(recipe))
+        return "Fehler: Bauelement konnte nicht gespeichert werden (Speicher voll?).";
+      return { id, saved: true };
     }
 
     case "edit_text": {

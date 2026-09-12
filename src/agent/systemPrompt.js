@@ -1,5 +1,6 @@
 import { PAGE_WIDTH, PAGE_HEIGHT } from "./tools.js";
 import { describeNoteStyle, themeForBackground } from "./noteStyle.js";
+import { describeRecipeLanguage } from "./components/index.js";
 
 // One prompt for both modes: without tools the model just chats about the note,
 // with tools it edits the document. isWhiteboard swaps the page-geometry
@@ -49,6 +50,9 @@ export function buildSystemPrompt({
       "- Lass Luft: mindestens 18 px zwischen zwei Blöcken, etwa 32 px bevor eine neue Überschrift kommt.",
       "- Randnotizen, Merksätze und Kommentare in der Handschrift-Schrift (font: hand), Fließtext nie.",
       "- Nutze role statt eigener Hex-Farben, außer du brauchst bewusst eine Farbe außerhalb der Palette.",
+      "- Für Zeitstrahl, Ablauf, Gegenüberstellung, Klammer, Achsenkreuz, Glockenkurve, Kolben, Reaktionspfeil, Kreislauf, Atommodell, Randnotiz und eingekreiste Zahlen gibt es fertige Bauelemente: erst list_components, dann insert_component, statt sie aus Strichen zusammenzusetzen.",
+      "- Fehlt ein Element oder passt eines nicht, lies es mit read_component, wandle es ab und speichere es mit define_component. Wiederkehrende Fachgrafiken einmal sauber bauen und danach wiederverwenden.",
+      ...describeRecipeLanguage(),
       "Für unterstrichenen Text setze bei write_text/edit_text underline: true statt eine Linie mit add_shape darunter zu zeichnen — der Strich sitzt dann exakt und farblich passend unter der Schrift.",
       "Für eine Tabelle, ein Flussdiagramm oder eine Mindmap nutze insert_table/insert_diagram/insert_mindmap statt die Kästen und Texte einzeln mit add_shape/write_text zusammenzusetzen — danach einzelne Zellen/Knoten bei Bedarf mit edit_text anpassen.",
       "Für Unterpunkte an Mindmap-Zweigen nutze das `subs`-Array (1-4 Einträge) pro Zweig in insert_mindmap statt separate write_text-Aufrufe — sonst landen die Texte unverbunden irgendwo auf der Seite. Für mehr Tiefe: gib pro Zweig mehrere konkrete Unterpunkte statt nur einem an.",

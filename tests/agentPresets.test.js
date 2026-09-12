@@ -296,3 +296,89 @@ describe("write_text highlighting", () => {
     expect(text.color).toBe("#FF5C5C");
   });
 });
+
+describe("component tools", () => {
+  function withStore(api) {
+    const saved = new Map();
+    return {
+      ...api,
+      getComponentStore: () => ({
+        get: (id) =>
+          saved.get(id) ||
+          (id === "zeitstrahl"
+            ? {
+                id: "zeitstrahl",
+                title: "Zeitstrahl",
+                params: { width: { default: 200 }, items: { default: [] } },
+                body: [{ type: "stroke", points: [[0, 0], ["width", 0]] }],
+              }
+            : null),
+        list: () => [{ id: "zeitstrahl", title: "Zeitstrahl", tags: ["geschichte"], description: "…", source: "eingebaut" }],
+        save: (recipe) => {
+          saved.set(recipe.id, recipe);
+          return true;
+        },
+      }),
+      saved,
+    };
+  }
+
+  it("places a component and reports the space it took", () => {
+    const api = withStore(createApi());
+    const before = api.undoSteps();
+    const result = executeTool(
+      "insert_component",
+      { pageId: "note-1-page-1", id: "zeitstrahl", x: 100, y: 300, args: { width: 400 } },
+      api,
+    );
+    expect(result.id).toBe("zeitstrahl");
+    expect(result.width).toBeGreaterThan(300);
+    expect(api.getDocument().strokes.length).toBeGreaterThan(0);
+    expect(api.undoSteps()).toBe(before + 1);
+    // Placed where it was asked for, not at the recipe's own origin.
+    expect(api.getDocument().strokes[0].points[0].x).toBeCloseTo(100, 0);
+  });
+
+  it("names a component that does not exist", () => {
+    const api = withStore(createApi());
+    const result = executeTool(
+      "insert_component",
+      { pageId: "note-1-page-1", id: "gibtsnicht", x: 0, y: 0 },
+      api,
+    );
+    expect(result).toMatch(/^Fehler:/);
+  });
+
+  it("saves a recipe the agent wrote", () => {
+    const api = withStore(createApi());
+    const result = executeTool(
+      "define_component",
+      {
+        id: "Mein Element",
+        title: "Mein Element",
+        params: { size: { default: 40 } },
+        body: [{ type: "rect", x: 0, y: 0, width: "size", height: "size" }],
+      },
+      api,
+    );
+    expect(result).toMatchObject({ saved: true, id: "mein-element" });
+    expect(api.saved.get("mein-element")).toBeTruthy();
+  });
+
+  it("refuses a broken recipe and says what is wrong", () => {
+    const api = withStore(createApi());
+    const result = executeTool(
+      "define_component",
+      { id: "kaputt", title: "Kaputt", body: [{ type: "rect", x: "unbekannt", y: 0 }] },
+      api,
+    );
+    expect(result).toMatch(/unbekannt/i);
+    expect(api.saved.get("kaputt")).toBeUndefined();
+  });
+
+  it("does not need a page to list or define", () => {
+    const api = withStore(createApi());
+    expect(executeTool("list_components", {}, api).components).toHaveLength(1);
+    expect(executeTool("read_component", { id: "zeitstrahl" }, api).id).toBe("zeitstrahl");
+  });
+});
