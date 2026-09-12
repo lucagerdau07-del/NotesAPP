@@ -29,7 +29,7 @@ export function buildSystemPrompt({
       // will never call. Call enable_tools once with every name a task needs
       // (several at a time is fine) before the first use of any of them —
       // after that they work exactly like the tools above.
-      `Weitere Werkzeuge sind nicht sofort aktiv, um den Kontext klein zu halten. Vor der ersten Nutzung eines davon: enable_tools mit den passenden Namen aufrufen (mehrere auf einmal möglich), danach normal benutzbar.\n${describeExtendedToolManifest()}`,
+      `Weitere Werkzeuge sind nicht sofort aktiv, um den Kontext klein zu halten. Vor der ersten Nutzung eines davon: enable_tools mit den passenden Namen aufrufen (mehrere auf einmal möglich), danach normal benutzbar. Zeigt der Auftrag schon vorher, was du brauchen wirst (z.B. "lösche ..." → delete_objects), ruf enable_tools direkt in der ersten Antwort zusammen mit read_document auf, statt es erst später zu merken.\n${describeExtendedToolManifest()}`,
     );
     if (isWhiteboard) {
       lines.push(

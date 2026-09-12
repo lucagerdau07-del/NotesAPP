@@ -515,15 +515,21 @@ export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
 // array for the rest of a run once the model calls enable_tools for it -
 // the same shape as this environment's own ToolSearch: named upfront,
 // fetched in full on demand.
+// Only tools whose need can't be told upfront from the task, or that are cheap
+// enough that deferring them would cost more in a forced extra round trip
+// than just sending them stays core. delete_objects/add_shape/draw/erase are
+// usually obvious from the task text itself ("lösche ...", "zeichne einen
+// Pfeil...") - the model can enable_tools for them in the same turn as the
+// read_document call it makes anyway, so deferring costs nothing there. What
+// see_document/add_page need is only known *after* a tool result comes back
+// (read_document's stroke count; the page actually filling up), one turn too
+// late to bundle - and both are small enough (~90/~80 tokens) that forcing a
+// dedicated round trip whenever they are needed would cost more than they do.
 const CORE_TOOL_NAMES = new Set([
   "read_document",
   "see_document",
   "write_text",
   "edit_text",
-  "delete_objects",
-  "add_shape",
-  "draw",
-  "erase",
   "add_page",
   "done",
 ]);

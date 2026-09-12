@@ -208,3 +208,66 @@ describe("useAgent tool activation", () => {
     }
   });
 });
+
+describe("core set only holds what nearly every task needs", () => {
+  it("no longer treats add_shape/draw/erase/delete_objects as always-on", () => {
+    const coreNames = new Set(AGENT_CORE_TOOLS.map((t) => t.function.name));
+    for (const name of ["add_shape", "draw", "erase", "delete_objects"]) {
+      expect(coreNames.has(name), name).toBe(false);
+      expect(AGENT_EXTENDED_BY_NAME.has(name), name).toBe(true);
+    }
+  });
+
+  it("keeps see_document and add_page core (their need surfaces one turn late)", () => {
+    const coreNames = new Set(AGENT_CORE_TOOLS.map((t) => t.function.name));
+    expect(coreNames.has("see_document")).toBe(true);
+    expect(coreNames.has("add_page")).toBe(true);
+  });
+});
+
+describe("enable_tools bundled with another call in the same turn", () => {
+  it("unlocks a deferred tool without a dedicated round trip when the model asks for it upfront", async () => {
+    requestCompletion
+      .mockResolvedValueOnce({
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call-1",
+              function: { name: "enable_tools", arguments: JSON.stringify({ names: ["delete_objects"] }) },
+            },
+            { id: "call-2", function: { name: "read_document", arguments: "{}" } },
+          ],
+        },
+        usage: null,
+      })
+      .mockResolvedValueOnce({
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call-3", function: { name: "delete_objects", arguments: JSON.stringify({ ids: ["x"] }) } }],
+        },
+        usage: null,
+      })
+      .mockResolvedValueOnce({ message: { role: "assistant", content: "Fertig." }, usage: null })
+      .mockResolvedValueOnce(TITLE_CALL);
+    const inkControllerRef = { current: fakeController() };
+    const { result } = renderHook(() =>
+      useAgent({ documentId: "doc-6", noteTitle: "Test", inkControllerRef }),
+    );
+
+    await act(async () => {
+      await result.current.send("Lösche den Absatz über X.");
+    });
+
+    // Turn 1 already batched enable_tools + read_document (delete_objects not
+    // sent yet, it isn't unlocked until the *next* request); turn 2 has it.
+    expect(toolNames(requestCompletion.mock.calls[0][0])).not.toContain("delete_objects");
+    expect(toolNames(requestCompletion.mock.calls[1][0])).toContain("delete_objects");
+    // Exactly one extra request for the actual delete_objects call, not a
+    // dedicated round trip just to unlock it - 4 total: batched enable+read,
+    // the delete, the closing "Fertig.", and the title call.
+    expect(requestCompletion).toHaveBeenCalledTimes(4);
+  });
+});
