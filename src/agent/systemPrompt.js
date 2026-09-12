@@ -1,4 +1,4 @@
-import { PAGE_WIDTH, PAGE_HEIGHT } from "./tools.js";
+import { PAGE_WIDTH, PAGE_HEIGHT, describeExtendedToolManifest } from "./tools.js";
 import { describeNoteStyle, themeForBackground } from "./noteStyle.js";
 import { describeRecipeLanguage } from "./components/index.js";
 
@@ -21,7 +21,16 @@ export function buildSystemPrompt({
   ];
 
   if (canEdit) {
-    lines.push("Du kannst die geöffnete Notiz mit Werkzeugen selbst bearbeiten.");
+    lines.push(
+      "Du kannst die geöffnete Notiz mit Werkzeugen selbst bearbeiten.",
+      // Only the tools used on nearly every turn are active by default; the
+      // rest exist but aren't sent in full until asked for, so a plain
+      // "schreib einen Satz" doesn't carry table/diagram/component schemas it
+      // will never call. Call enable_tools once with every name a task needs
+      // (several at a time is fine) before the first use of any of them —
+      // after that they work exactly like the tools above.
+      `Weitere Werkzeuge sind nicht sofort aktiv, um den Kontext klein zu halten. Vor der ersten Nutzung eines davon: enable_tools mit den passenden Namen aufrufen (mehrere auf einmal möglich), danach normal benutzbar.\n${describeExtendedToolManifest()}`,
+    );
     if (isWhiteboard) {
       lines.push(
         "Dies ist ein Whiteboard: eine einzige, unbegrenzte Fläche statt mehrerer Seiten. Koordinaten sind Weltkoordinaten, kein Rand, kein Satzspiegel. add_page gibt es hier nicht — alles landet auf derselben Fläche, platziere neue Inhalte einfach daneben oder darunter.",

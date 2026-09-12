@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestCompletion } from "../agent/agentClient.js";
-import { AGENT_TOOLS, AGENT_READ_TOOLS, describeToolCall, executeTool } from "../agent/tools.js";
+import {
+  AGENT_CORE_TOOLS,
+  AGENT_READ_TOOLS,
+  AGENT_EXTENDED_BY_NAME,
+  describeToolCall,
+  executeTool,
+} from "../agent/tools.js";
 import { buildSystemPrompt } from "../agent/systemPrompt.js";
 
 const MAX_STEPS = 30;
@@ -301,11 +307,21 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       ];
       setMessages((current) => [...current, { role: "user", content: task }]);
 
+      // Table/diagram/component builders etc. only join the payload once the
+      // model calls enable_tools for them (see describeExtendedToolManifest
+      // in the system prompt) — grows across steps within this one run, reset
+      // fresh on the next send() the same as steps/tokens below.
+      const enabledExtra = new Set();
+
       try {
         for (let step = 0; step < MAX_STEPS; step += 1) {
           const { message: reply, usage } = await requestCompletion({
             messages: wireMessages(conversation),
-            tools: canEdit ? AGENT_TOOLS : canRead ? AGENT_READ_TOOLS : undefined,
+            tools: canEdit
+              ? [...AGENT_CORE_TOOLS, ...[...enabledExtra].map((name) => AGENT_EXTENDED_BY_NAME.get(name))]
+              : canRead
+                ? AGENT_READ_TOOLS
+                : undefined,
             signal: controller.signal,
           });
           totalTokens += usage?.total_tokens ?? 0;
@@ -340,6 +356,18 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             let result;
             if (args === null) {
               result = "Fehler: Die Argumente waren kein gültiges JSON.";
+            } else if (name === "enable_tools") {
+              // Not a document tool: it only widens what the next step's
+              // `tools` payload includes, so it's handled here rather than
+              // going through executeTool/api at all.
+              const requested = Array.isArray(args.names) ? args.names : [];
+              const known = requested.filter((n) => AGENT_EXTENDED_BY_NAME.has(n));
+              const unknown = requested.filter((n) => !AGENT_EXTENDED_BY_NAME.has(n));
+              for (const n of known) enabledExtra.add(n);
+              result =
+                known.length > 0
+                  ? { enabled: known, ...(unknown.length ? { unbekannt: unknown } : {}) }
+                  : `Fehler: Kein bekanntes Werkzeug unter ${JSON.stringify(requested)}.`;
             } else {
               try {
                 result = executeTool(name, args, api);

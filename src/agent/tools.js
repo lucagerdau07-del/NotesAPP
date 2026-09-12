@@ -506,6 +506,69 @@ export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
   READ_ONLY_TOOL_NAMES.has(tool.function.name),
 );
 
+// Edit mode splits into a core the model reaches for on nearly every turn
+// (full schema, always sent) and an extended set it only names occasionally -
+// full table/diagram/component builders run 300-950 chars each, and most
+// turns ("schreib einen Satz", "was steht auf Seite 2") touch none of them.
+// The extended set is described in one line each instead (see
+// describeExtendedToolManifest below) and only actually added to the `tools`
+// array for the rest of a run once the model calls enable_tools for it -
+// the same shape as this environment's own ToolSearch: named upfront,
+// fetched in full on demand.
+const CORE_TOOL_NAMES = new Set([
+  "read_document",
+  "see_document",
+  "write_text",
+  "edit_text",
+  "delete_objects",
+  "add_shape",
+  "draw",
+  "erase",
+  "add_page",
+  "done",
+]);
+
+export const ENABLE_TOOLS_TOOL = {
+  type: "function",
+  function: {
+    name: "enable_tools",
+    description:
+      "Schaltet weitere Werkzeuge für den Rest dieses Laufs frei (siehe die Liste im Systemprompt). Vor der ersten Nutzung eines dort aufgeführten Werkzeugs aufrufen; danach steht es wie jedes andere zur Verfügung.",
+    parameters: {
+      type: "object",
+      properties: { names: { type: "array", items: { type: "string" } } },
+      required: ["names"],
+    },
+  },
+};
+
+export const AGENT_CORE_TOOLS = [
+  ...AGENT_TOOLS.filter((tool) => CORE_TOOL_NAMES.has(tool.function.name)),
+  ENABLE_TOOLS_TOOL,
+];
+
+const AGENT_EXTENDED_TOOLS = AGENT_TOOLS.filter(
+  (tool) => !CORE_TOOL_NAMES.has(tool.function.name),
+);
+
+export const AGENT_EXTENDED_BY_NAME = new Map(
+  AGENT_EXTENDED_TOOLS.map((tool) => [tool.function.name, tool]),
+);
+
+// One line per extended tool, name plus its own first sentence — read off the
+// full description rather than authored separately, so the manifest can't
+// say something the real schema doesn't.
+export function describeExtendedToolManifest() {
+  return AGENT_EXTENDED_TOOLS.map((tool) => {
+    // Split on a sentence-ending period only, not every colon — several of
+    // these descriptions use a colon mid-sentence to introduce a list (e.g.
+    // insert_diagram's "Kästen ... : Kästen mit Beschriftung ..."), and
+    // cutting there would lose exactly the part naming what the tool does.
+    const first = tool.function.description.split(/(?<=\.)\s+/)[0];
+    return `${tool.function.name} — ${first}`;
+  }).join("\n");
+}
+
 // Short line per tool call for the step list in the panel.
 export function describeToolCall(name, args = {}) {
   switch (name) {
@@ -547,6 +610,8 @@ export function describeToolCall(name, args = {}) {
       return `Element einfügen: ${args.id || "?"}`;
     case "define_component":
       return `Element speichern: ${args.id || "?"}`;
+    case "enable_tools":
+      return `Werkzeuge freischalten: ${(args.names || []).join(", ") || "?"}`;
     case "done":
       return "Fertig";
     default:
