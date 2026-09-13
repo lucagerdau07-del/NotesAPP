@@ -97,6 +97,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [placingTool, setPlacingTool] = useState(null);
   const [draftPlacement, setDraftPlacement] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  const [editingObjectId, setEditingObjectId] = useState(null);
   const [processingImageId, setProcessingImageId] = useState(null);
   const imageInputRef = useRef(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
@@ -212,6 +213,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   };
 
   const handlePointerDown = (event) => {
+    if (selectedObjectId && !event.target.closest('[data-testid="object-container"]')) {
+      setSelectedObjectId(null);
+    }
+    if (editingObjectId && !event.target.closest('[data-testid="object-container"]')) {
+      setEditingObjectId(null);
+    }
     if (event.pointerType === "touch") {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2) {
@@ -751,6 +758,8 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           containerOffset={mapOrigin()}
           containerScale={camera.scale}
           selectedId={selectedObjectId}
+          editingId={editingObjectId}
+          onEditingChange={setEditingObjectId}
           processingObjectId={processingImageId}
           onSelect={setSelectedObjectId}
           onChange={(id, changes) => inkController.updateObject?.(id, changes)}

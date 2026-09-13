@@ -267,7 +267,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "insert_table",
       description:
-        "Fügt eine Tabelle als Raster aus Zellrechtecken mit Textblöcken ein — schneller als jede Zelle einzeln zu zeichnen. Gibt je Zelle eine id zurück; einzelne Zellen danach mit edit_text anpassen.",
+        "Fügt eine Tabelle als ein einziges Element mit echten, durchgehenden Gitterlinien ein — kein Haufen einzelner Rechtecke. Gibt die id der Tabelle zurück; einzelne Zellen danach mit edit_table_cell anpassen.",
       parameters: {
         type: "object",
         properties: {
@@ -287,6 +287,23 @@ export const AGENT_TOOLS = [
           color: { type: "string", description: "#rrggbb, Rahmenfarbe" },
         },
         required: ["pageId", "x", "y", "rows", "cols"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_table_cell",
+      description: "Ändert den Text einer einzelnen Zelle einer bestehenden Tabelle.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "id der Tabelle, von insert_table" },
+          row: { type: "number", description: "0-basiert" },
+          col: { type: "number", description: "0-basiert" },
+          text: { type: "string" },
+        },
+        required: ["id", "row", "col", "text"],
       },
     },
   },
@@ -600,6 +617,8 @@ export function describeToolCall(name, args = {}) {
       return "Seite anhängen";
     case "insert_table":
       return `Tabelle einfügen (${args.rows || "?"}x${args.cols || "?"})`;
+    case "edit_table_cell":
+      return `Zelle ändern (Zeile ${args.row ?? "?"}, Spalte ${args.col ?? "?"})`;
     case "insert_diagram":
       return `Diagramm einfügen (${args.nodes?.length ?? 0} Knoten)`;
     case "insert_mindmap":
@@ -968,6 +987,20 @@ export function executeTool(name, rawArgs, api) {
       if (typeof built === "string") return built;
       api.apply(built.objects.map((object) => ({ type: "add-object", object })));
       return built.result;
+    }
+
+    case "edit_table_cell": {
+      const existing = objects.find((object) => object.id === args.id);
+      if (!existing || existing.type !== "table")
+        return `Fehler: Keine Tabelle mit der ID "${args.id}".`;
+      const row = Math.round(args.row);
+      const col = Math.round(args.col);
+      if (row < 0 || row >= existing.rows || col < 0 || col >= existing.cols)
+        return `Fehler: Zelle (${args.row}, ${args.col}) liegt außerhalb der Tabelle (${existing.rows}x${existing.cols}).`;
+      const cellText = existing.cellText.map((r) => [...r]);
+      cellText[row][col] = String(args.text ?? "");
+      api.apply([{ type: "update-object", objectId: existing.id, changes: { cellText } }]);
+      return { id: existing.id };
     }
 
     case "insert_diagram": {

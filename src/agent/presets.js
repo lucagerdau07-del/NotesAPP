@@ -26,51 +26,29 @@ export function buildTablePreset(args, bounds, defaultColor) {
   const y = clamp(args.y, bounds.minY, bounds.maxY, 0);
   const lineColor = color(args.color, defaultColor);
   const headers = Array.isArray(args.headers) ? args.headers : null;
-  const cellText = Array.isArray(args.cellText) ? args.cellText : null;
+  const cellText = Array.isArray(args.cellText) ? args.cellText.map((row) => [...row]) : [];
+  if (headers) cellText[0] = headers.map((cell) => String(cell ?? ""));
 
-  const objects = [];
-  const cells = [];
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      const cellX = x + col * columnWidth;
-      const cellY = y + row * rowHeight;
-      objects.push(
-        createPageObject({
-          id: newId("shape"),
-          pageId: args.pageId,
-          type: "rect",
-          x: cellX,
-          y: cellY,
-          width: columnWidth,
-          height: rowHeight,
-          color: lineColor,
-          strokeWidth: 2,
-        }),
-      );
-      const isHeaderRow = row === 0 && Boolean(headers);
-      const text = isHeaderRow
-        ? String(headers[col] ?? "")
-        : String(cellText?.[row]?.[col] ?? "");
-      const textObject = createPageObject({
-        id: newId("text"),
-        pageId: args.pageId,
-        type: "text",
-        x: cellX + CELL_TEXT_MARGIN,
-        y: cellY + CELL_TEXT_MARGIN,
-        width: Math.max(20, columnWidth - CELL_TEXT_MARGIN * 2),
-        height: Math.max(16, rowHeight - CELL_TEXT_MARGIN * 2),
-        text,
-        fontSize: 16,
-        color: defaultColor,
-        bold: isHeaderRow,
-      });
-      objects.push(textObject);
-      cells.push({ id: textObject.id, row, col });
-    }
-  }
+  const table = createPageObject({
+    id: newId("table"),
+    pageId: args.pageId,
+    type: "table",
+    x,
+    y,
+    width: cols * columnWidth,
+    height: rows * rowHeight,
+    rows,
+    cols,
+    cellText: cellText.map((row) => row.map((cell) => String(cell ?? ""))),
+    headerRow: Boolean(headers),
+    color: lineColor,
+    strokeWidth: 1,
+    fontSize: 16,
+  });
+
   return {
-    objects,
-    result: { cells, rows, cols, width: cols * columnWidth, height: rows * rowHeight },
+    objects: [table],
+    result: { id: table.id, rows, cols, width: table.width, height: table.height },
   };
 }
 

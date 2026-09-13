@@ -16,7 +16,7 @@ function createApi(pages = 1, pageDefaults = {}) {
 }
 
 describe("insert_table", () => {
-  it("creates rows x cols cells at grid coordinates in one undo step", () => {
+  it("creates one table object sized to rows x cols in one undo step", () => {
     const api = createApi();
     const before = api.undoSteps();
     const result = executeTool(
@@ -33,29 +33,33 @@ describe("insert_table", () => {
       },
       api,
     );
-    expect(result.cells).toHaveLength(6);
     expect(result.rows).toBe(2);
     expect(result.cols).toBe(3);
-    // 6 text cells + 6 border rects
-    expect(pageObjectsOf(api.getDocument())).toHaveLength(12);
-    expect(api.undoSteps()).toBe(before + 1);
+    expect(pageObjectsOf(api.getDocument())).toHaveLength(1);
 
-    const headerCellId = result.cells.find((cell) => cell.row === 0 && cell.col === 1).id;
-    const headerText = pageObjectsOf(api.getDocument()).find((o) => o.id === headerCellId);
-    expect(headerText).toMatchObject({ text: "B", x: 208, y: 58, bold: true });
+    const table = pageObjectsOf(api.getDocument()).find((o) => o.id === result.id);
+    expect(table).toMatchObject({
+      type: "table",
+      x: 100,
+      y: 50,
+      width: 300,
+      height: 60,
+      headerRow: true,
+    });
+    expect(table.cellText[0]).toEqual(["A", "B", "C"]);
+    expect(api.undoSteps()).toBe(before + 1);
   });
 
-  it("lets the agent adjust a single cell afterwards with edit_text", () => {
+  it("lets the agent adjust a single cell afterwards with edit_table_cell", () => {
     const api = createApi();
     const result = executeTool(
       "insert_table",
       { pageId: "note-1-page-1", x: 0, y: 0, rows: 1, cols: 1 },
       api,
     );
-    const cellId = result.cells[0].id;
-    executeTool("edit_text", { id: cellId, text: "neu" }, api);
-    const cell = pageObjectsOf(api.getDocument()).find((o) => o.id === cellId);
-    expect(cell.text).toBe("neu");
+    executeTool("edit_table_cell", { id: result.id, row: 0, col: 0, text: "neu" }, api);
+    const table = pageObjectsOf(api.getDocument()).find((o) => o.id === result.id);
+    expect(table.cellText[0][0]).toBe("neu");
   });
 });
 

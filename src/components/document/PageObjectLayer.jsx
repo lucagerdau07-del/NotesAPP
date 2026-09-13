@@ -14,6 +14,7 @@ import {
   ArrowDownToLine,
   Check,
   X,
+  Plus,
 } from "lucide-react";
 import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
@@ -413,7 +414,95 @@ function useDrag(onCommit) {
   return { draft, start, move, end };
 }
 
-function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false }) {
+// A real <table>: one shared grid of borders instead of separate rect+text
+// objects glued together cell by cell. Cells are only committed on blur (not
+// per keystroke), so cellText in the object never changes mid-edit and React
+// never stomps on a caret mid-word — same trick the text object above relies on.
+function TableContent({ object, editable, onResize, focusCell }) {
+  const tableRef = useRef(null);
+  const rows = object.rows || 1;
+  const cols = object.cols || 1;
+
+  // Entering edit mode (double-click) drops the caret in the cell that was
+  // actually double-clicked (focusCell), falling back to the first cell —
+  // mirroring the text object's own focus-on-edit behavior above.
+  useEffect(() => {
+    if (!editable) return;
+    const row = focusCell?.row ?? 0;
+    const col = focusCell?.col ?? 0;
+    const cell = tableRef.current?.querySelectorAll("td")[row * cols + col];
+    if (!cell) return;
+    cell.focus();
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(false);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable]);
+
+  const commitCell = (row, col, value) => {
+    const cellText = object.cellText.map((r) => [...r]);
+    if (!cellText[row]) cellText[row] = [];
+    cellText[row][col] = value;
+    onResize?.(object.id, { cellText });
+  };
+
+  return (
+    <table
+      ref={tableRef}
+      style={{
+        width: "100%",
+        // Fills the object's box at minimum but is free to grow if a cell's
+        // wrapped content needs more room than the stored row heights give it
+        // — clipping would lose text the user just typed.
+        height: "100%",
+        minHeight: "100%",
+        borderCollapse: "collapse",
+        tableLayout: "fixed",
+      }}
+    >
+      <tbody>
+        {Array.from({ length: rows }, (_, row) => (
+          <tr key={row}>
+            {Array.from({ length: cols }, (_, col) => (
+              <td
+                key={col}
+                contentEditable={editable}
+                suppressContentEditableWarning
+                onPointerDown={(event) => {
+                  // Stops the object container's own handler from starting a
+                  // drag/select underneath a click meant to place the caret.
+                  if (editable) event.stopPropagation();
+                }}
+                onBlur={(event) => {
+                  if (editable) commitCell(row, col, readText(event.currentTarget));
+                }}
+                style={{
+                  border: `${Math.max(1, object.strokeWidth)}px solid ${object.color}`,
+                  padding: "4px 8px",
+                  fontSize: object.fontSize,
+                  fontFamily: "system-ui, sans-serif",
+                  fontWeight: object.headerRow && row === 0 ? 700 : 400,
+                  color: object.color,
+                  verticalAlign: "top",
+                  outline: "none",
+                  overflowWrap: "break-word",
+                  cursor: editable ? "text" : "inherit",
+                }}
+              >
+                {object.cellText?.[row]?.[col] ?? ""}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null }) {
   const editableRef = useRef(null);
   const bounds = objectBounds(object);
   const strokeStyle = {
@@ -532,6 +621,17 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
           {object.text || object.href}
         </span>
       </span>
+    );
+  }
+
+  if (object.type === "table") {
+    return (
+      <TableContent
+        object={object}
+        editable={editable}
+        onResize={onResize}
+        focusCell={focusCell}
+      />
     );
   }
 
@@ -782,6 +882,10 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
+  // Which table cell a double-click should drop the caret into once edit mode
+  // turns on — read once by TableContent's own focus effect, not reactive
+  // state, since it only ever matters for the instant editable flips true.
+  const pendingTableFocus = useRef(null);
   const drag = useDrag(onChange);
   const tapSelect = useTapSelect(onSelect);
   const zoom = pageLayout?.zoom || 1;
@@ -897,9 +1001,28 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 tapSelect(event, object.id);
               }
             }}
-            onDoubleClick={() => {
-              if (object.type === "text") onEditingChange?.(object.id);
-              else if (object.type === "image") setCroppingId(object.id);
+            onDoubleClick={(event) => {
+              if (object.type === "table") {
+                // Which cell the click actually landed on, so edit mode drops
+                // the caret there instead of always the first cell.
+                const rect = event.currentTarget.getBoundingClientRect();
+                const localX = (event.clientX - rect.left) / pointerScale;
+                const localY = (event.clientY - rect.top) / pointerScale;
+                const col = Math.min(
+                  object.cols - 1,
+                  Math.max(0, Math.floor((localX / bounds.width) * object.cols)),
+                );
+                const row = Math.min(
+                  object.rows - 1,
+                  Math.max(0, Math.floor((localY / bounds.height) * object.rows)),
+                );
+                pendingTableFocus.current = { objectId: object.id, row, col };
+                onEditingChange?.(object.id);
+              } else if (object.type === "text") {
+                onEditingChange?.(object.id);
+              } else if (object.type === "image") {
+                setCroppingId(object.id);
+              }
             }}
             style={{
               position: "absolute",
@@ -934,6 +1057,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 pageWidth={pageLayout?.pageWidth}
                 editable={editingId === object.id}
                 isProcessing={processingObjectId === object.id}
+                focusCell={
+                  pendingTableFocus.current?.objectId === object.id ? pendingTableFocus.current : null
+                }
                 onCommitText={(id, text) => {
                   onEditingChange?.(null);
                   // An empty text box has nothing to show and nothing to
@@ -1035,11 +1161,111 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                   </>
                 )}
 
+                {object.type === "table" && !object.locked && (
+                  <>
+                    {/* Column controls: centered on the right edge, like Google
+                        Docs' hover affordance for adding/removing a column. */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: bounds.width * zoom + 8,
+                        top: (bounds.height * zoom) / 2,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        padding: 3,
+                        borderRadius: 8,
+                        background: "rgba(20,20,24,0.92)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        transform: "translateY(-50%)",
+                        ...counterScale(containerScale, "0 50%"),
+                        zIndex: 1000,
+                      }}
+                    >
+                      <IconButton
+                        label="Spalte hinzufügen"
+                        onClick={() => {
+                          const colWidth = object.width / object.cols;
+                          onChange?.(object.id, {
+                            cols: object.cols + 1,
+                            width: object.width + colWidth,
+                            cellText: object.cellText.map((row) => [...row, ""]),
+                          });
+                        }}
+                      >
+                        <Plus size={14} />
+                      </IconButton>
+                      <IconButton
+                        label="Spalte entfernen"
+                        disabled={object.cols <= 1}
+                        onClick={() => {
+                          if (object.cols <= 1) return;
+                          const colWidth = object.width / object.cols;
+                          onChange?.(object.id, {
+                            cols: object.cols - 1,
+                            width: object.width - colWidth,
+                            cellText: object.cellText.map((row) => row.slice(0, -1)),
+                          });
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </IconButton>
+                    </div>
+
+                    {/* Row controls: centered under the bottom edge. */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: (bounds.width * zoom) / 2,
+                        top: bounds.height * zoom + 8,
+                        display: "flex",
+                        gap: 2,
+                        padding: 3,
+                        borderRadius: 8,
+                        background: "rgba(20,20,24,0.92)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        transform: "translateX(-50%)",
+                        ...counterScale(containerScale, "50% 0"),
+                        zIndex: 1000,
+                      }}
+                    >
+                      <IconButton
+                        label="Zeile hinzufügen"
+                        onClick={() => {
+                          const rowHeight = object.height / object.rows;
+                          onChange?.(object.id, {
+                            rows: object.rows + 1,
+                            height: object.height + rowHeight,
+                            cellText: [...object.cellText, new Array(object.cols).fill("")],
+                          });
+                        }}
+                      >
+                        <Plus size={14} />
+                      </IconButton>
+                      <IconButton
+                        label="Zeile entfernen"
+                        disabled={object.rows <= 1}
+                        onClick={() => {
+                          if (object.rows <= 1) return;
+                          const rowHeight = object.height / object.rows;
+                          onChange?.(object.id, {
+                            rows: object.rows - 1,
+                            height: object.height - rowHeight,
+                            cellText: object.cellText.slice(0, -1),
+                          });
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </IconButton>
+                    </div>
+                  </>
+                )}
+
                 <div
                   style={{
                     position: "absolute",
                     left: 0,
-                    top: -34,
+                    top: -44,
                     display: "flex",
                     gap: 2,
                     padding: 3,
@@ -1049,7 +1275,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                     // Anchored at its bottom-left so it stays tucked against
                     // the object's top edge as it scales back to screen size.
                     ...counterScale(containerScale, "0 100%"),
-                    zIndex: 40,
+                    zIndex: 1000,
                   }}
                 >
                   {object.href && (

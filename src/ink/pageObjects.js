@@ -14,7 +14,27 @@ export const PAGE_OBJECT_TYPES = [
   // whatever ink/shape outlines enclosed the click. Rendered behind the ink
   // canvas so hand-drawn strokes stay on top of the wash.
   "fill",
+  // A real grid: one object with shared borders and a rows x cols text grid,
+  // instead of separate rect+text objects glued together cell by cell.
+  "table",
 ];
+
+// Rebuilds a rows x cols grid of strings from whatever was stored, keeping
+// existing cell text lined up by [row][col] when rows/cols shrink or grow
+// (e.g. an added column) instead of discarding it.
+function normalizeTableCells(source, rows, cols) {
+  const grid = Array.isArray(source) ? source : [];
+  const result = [];
+  for (let row = 0; row < rows; row += 1) {
+    const sourceRow = Array.isArray(grid[row]) ? grid[row] : [];
+    const outRow = [];
+    for (let col = 0; col < cols; col += 1) {
+      outRow.push(typeof sourceRow[col] === "string" ? sourceRow[col] : "");
+    }
+    result.push(outRow);
+  }
+  return result;
+}
 
 const finite = (value, fallback) =>
   Number.isFinite(value) ? value : fallback;
@@ -70,6 +90,19 @@ export function createPageObject(input = {}) {
     // fill are the same object then, so moving/resizing/deleting it carries
     // both — no separate fill layer to drift out of sync.
     fillColor: text(source.fillColor),
+    // Table-only fields: rows/cols pin the grid shape, cellText holds its
+    // content by [row][col]. Every other type ignores these.
+    rows: type === "table" ? Math.max(1, Math.round(finite(source.rows, 3))) : 0,
+    cols: type === "table" ? Math.max(1, Math.round(finite(source.cols, 3))) : 0,
+    cellText:
+      type === "table"
+        ? normalizeTableCells(
+            source.cellText,
+            Math.max(1, Math.round(finite(source.rows, 3))),
+            Math.max(1, Math.round(finite(source.cols, 3))),
+          )
+        : [],
+    headerRow: source.headerRow === true,
     rotation: ((finite(source.rotation, 0) % 360) + 360) % 360,
     locked: source.locked === true,
     hidden: source.hidden === true,

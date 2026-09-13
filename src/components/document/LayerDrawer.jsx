@@ -12,6 +12,7 @@ import {
   Square,
   Circle,
   ArrowRight,
+  Table2,
   PaintBucket,
   Layers,
   ChevronUp,
@@ -87,6 +88,9 @@ function getItemIcon(item) {
   if (item.type === "text") {
     return <Type size={16} className="layer-type-icon" />;
   }
+  if (item.type === "table") {
+    return <Table2 size={16} className="layer-type-icon" />;
+  }
   if (item.type === "fill") {
     return (
       <PaintBucket
@@ -120,6 +124,9 @@ function getItemLabel(item) {
   }
   if (item.type === "fill") {
     return "Hintergrund-Füllung";
+  }
+  if (item.type === "table") {
+    return "Tabelle";
   }
   return item.type || "Ebene";
 }

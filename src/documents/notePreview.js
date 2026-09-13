@@ -263,6 +263,48 @@ function drawPreviewObject(context, object) {
     return;
   }
 
+  if (object.type === "table") {
+    const rows = object.rows || 1;
+    const cols = object.cols || 1;
+    const cellWidth = w / cols;
+    const cellHeight = h / rows;
+    context.save();
+    context.strokeStyle = object.color;
+    context.lineWidth = Math.max(1, object.strokeWidth);
+    for (let row = 0; row <= rows; row += 1) {
+      context.beginPath();
+      context.moveTo(left, top + row * cellHeight);
+      context.lineTo(left + w, top + row * cellHeight);
+      context.stroke();
+    }
+    for (let col = 0; col <= cols; col += 1) {
+      context.beginPath();
+      context.moveTo(left + col * cellWidth, top);
+      context.lineTo(left + col * cellWidth, top + h);
+      context.stroke();
+    }
+    context.fillStyle = object.color;
+    context.textBaseline = "top";
+    const cellPadding = 4;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const value = object.cellText?.[row]?.[col];
+        if (!value) continue;
+        context.font = `${object.headerRow && row === 0 ? "700" : "400"} ${object.fontSize}px system-ui, sans-serif`;
+        wrapText(context, value, cellWidth - cellPadding * 2).forEach((line, index) => {
+          context.fillText(
+            line,
+            left + col * cellWidth + cellPadding,
+            top + row * cellHeight + cellPadding + index * object.fontSize * 1.25,
+          );
+        });
+      }
+    }
+    context.restore();
+    if (object.rotation) context.restore();
+    return;
+  }
+
   context.save();
   context.strokeStyle = object.color;
   context.fillStyle = object.fillColor || object.color;
