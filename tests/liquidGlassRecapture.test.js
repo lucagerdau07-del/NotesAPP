@@ -63,6 +63,53 @@ describe("recaptureBackgroundOnChange", () => {
     vi.useRealTimers();
   });
 
+  it("ignores style changes on elements that only carry the viewport", async () => {
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup();
+    const viewport = document.createElement("div");
+    viewport.setAttribute("data-glass-ignore-style", "");
+    body.append(viewport);
+    await settle();
+    captureElement.mockClear();
+
+    // What a pan or zoom commits: one transform, nothing else.
+    viewport.style.transform = "translate(40px, 12px) scale(1.4)";
+    await settle();
+    expect(captureElement).not.toHaveBeenCalled();
+
+    // Anything else about the same element still counts as real content.
+    viewport.textContent = "Inhalt";
+    await settle();
+    expect(captureElement).toHaveBeenCalledWith(body, true);
+
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("stops re-capturing a wrapper whose capture blows the time budget", async () => {
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup();
+    let clock = 0;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    captureElement.mockImplementation(() => {
+      clock += 1900; // a Galaxy Tab A7 capture of the document wrapper
+      return Promise.resolve();
+    });
+
+    body.textContent = "erste Änderung";
+    await settle();
+    await Promise.resolve();
+    expect(captureElement).toHaveBeenCalledTimes(1);
+
+    body.textContent = "zweite Änderung";
+    await settle();
+    expect(captureElement).toHaveBeenCalledTimes(1);
+
+    now.mockRestore();
+    stop();
+    vi.useRealTimers();
+  });
+
   it("coalesces a burst of mutations into a single capture", async () => {
     vi.useFakeTimers();
     const { body, captureElement, stop } = setup();
