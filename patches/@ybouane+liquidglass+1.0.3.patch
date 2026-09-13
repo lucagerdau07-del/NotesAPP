@@ -1,0 +1,85 @@
+diff --git a/node_modules/@ybouane/liquidglass/dist/index.js b/node_modules/@ybouane/liquidglass/dist/index.js
+index 10897f2..23fda0b 100644
+--- a/node_modules/@ybouane/liquidglass/dist/index.js
++++ b/node_modules/@ybouane/liquidglass/dist/index.js
+@@ -377,6 +377,44 @@ async function cloneChildren(nativeNode, clonedNode, options) {
+   }), Promise.resolve());
+   return clonedNode;
+ }
++// NotesAPP patch: copy only the computed values that differ from what the clone
++// would get anyway, written as one cssText. Copying all ~360 properties per
++// node with setProperty was ~6ms per node on a Galaxy Tab A7 and bloated every
++// serialized clone with defaults. An inherited property is only needed where
++// it differs from the parent (the cloned parent carries it down); any other
++// property only where it differs from a pristine element of the same tag.
++// Colors are always written: their initial value is currentcolor, which
++// resolves against the clone's own color rather than the baseline's.
++var captureRoots = /* @__PURE__ */ new WeakSet();
++var INHERITED = new Set(["border-collapse", "border-spacing", "caption-side", "color", "cursor", "direction", "empty-cells", "letter-spacing", "line-height", "list-style-image", "list-style-position", "list-style-type", "orphans", "quotes", "tab-size", "visibility", "white-space", "white-space-collapse", "widows", "word-break", "word-spacing", "overflow-wrap", "word-wrap", "hyphens", "hyphenate-character", "line-break", "writing-mode", "pointer-events", "image-rendering", "color-scheme", "accent-color", "caret-color", "paint-order", "shape-rendering", "clip-rule", "color-interpolation", "color-interpolation-filters", "color-rendering", "dominant-baseline", "ruby-position", "speak", "print-color-adjust", "-webkit-print-color-adjust", "forced-color-adjust", "user-select", "-webkit-user-select", "-webkit-user-modify", "-webkit-locale", "-webkit-rtl-ordering", "-webkit-tap-highlight-color", "-webkit-text-security", "-webkit-font-smoothing", "-webkit-line-break", "-webkit-highlight", "-webkit-hyphenate-character", "math-depth", "math-style", "math-shift"]);
++var NOT_INHERITED_TEXT = new Set(["text-decoration", "text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness", "text-overflow", "text-box-trim", "text-box-edge", "text-spacing-trim"]);
++function isInherited(name) {
++  if (INHERITED.has(name)) return true;
++  if (name.startsWith("font")) return true;
++  if (name.startsWith("text-") || name.startsWith("-webkit-text-")) return !NOT_INHERITED_TEXT.has(name);
++  return name.startsWith("fill") || name.startsWith("stroke") || name.startsWith("marker");
++}
++var baselineHost = null;
++var baselines = /* @__PURE__ */ new Map();
++function baselineFor(node, names) {
++  const key = `${node.namespaceURI}|${node.localName}`;
++  let values = baselines.get(key);
++  if (values) return values;
++  if (!baselineHost) {
++    baselineHost = document.createElement("div");
++    baselineHost.setAttribute("aria-hidden", "true");
++    baselineHost.style.display = "none";
++    document.documentElement.appendChild(baselineHost);
++  }
++  const probe = document.createElementNS(node.namespaceURI || "http://www.w3.org/1999/xhtml", node.localName);
++  baselineHost.appendChild(probe);
++  const style = window.getComputedStyle(probe);
++  values = /* @__PURE__ */ new Map();
++  for (const name of names) values.set(name, style.getPropertyValue(name));
++  baselineHost.removeChild(probe);
++  baselines.set(key, values);
++  return values;
++}
+ function cloneCSSStyle(nativeNode, clonedNode, options) {
+   const targetStyle = clonedNode.style;
+   if (!targetStyle) {
+@@ -387,7 +425,13 @@ function cloneCSSStyle(nativeNode, clonedNode, options) {
+     targetStyle.cssText = sourceStyle.cssText;
+     targetStyle.transformOrigin = sourceStyle.transformOrigin;
+   } else {
+-    getStyleProperties(options).forEach((name) => {
++    const names = getStyleProperties(options);
++    const baseline = baselineFor(nativeNode, names);
++    // The root clone has no cloned parent to inherit from.
++    const parent = !captureRoots.has(nativeNode) && nativeNode.parentElement;
++    const parentStyle = parent ? window.getComputedStyle(parent) : null;
++    const declarations = [];
++    for (const name of names) {
+       let value = sourceStyle.getPropertyValue(name);
+       if (isInstanceOfElement(nativeNode, HTMLIFrameElement) && name === "display" && value === "inline") {
+         value = "block";
+@@ -395,8 +439,10 @@ function cloneCSSStyle(nativeNode, clonedNode, options) {
+       if (name === "d" && clonedNode.getAttribute("d")) {
+         value = `path(${clonedNode.getAttribute("d")})`;
+       }
+-      targetStyle.setProperty(name, value, sourceStyle.getPropertyPriority(name));
+-    });
++      const needed = name.endsWith("-color") || (isInherited(name) ? !parentStyle || parentStyle.getPropertyValue(name) !== value : baseline.get(name) !== value);
++      if (needed && value !== "") declarations.push(`${name}: ${value}`);
++    }
++    targetStyle.cssText = declarations.join("; ");
+   }
+ }
+ function cloneInputValue(nativeNode, clonedNode) {
+@@ -465,6 +511,7 @@ async function cloneNode(node, options, isRoot) {
+   if (!isRoot && options.filter && !options.filter(node)) {
+     return null;
+   }
++  if (isRoot) captureRoots.add(node);
+   return Promise.resolve(node).then((clonedNode) => cloneSingleNode(clonedNode, options)).then((clonedNode) => cloneChildren(node, clonedNode, options)).then((clonedNode) => decorate(node, clonedNode, options)).then((clonedNode) => ensureSVGSymbols(clonedNode, options));
+ }
+ 
