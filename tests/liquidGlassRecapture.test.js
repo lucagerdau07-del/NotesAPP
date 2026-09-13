@@ -86,26 +86,24 @@ describe("recaptureBackgroundOnChange", () => {
     vi.useRealTimers();
   });
 
-  it("stops re-capturing a wrapper whose capture blows the time budget", async () => {
+  it("keeps re-capturing a wrapper even when one capture is slow", async () => {
+    // A single expensive capture (a big note, a slow device) must not
+    // permanently freeze the background — later real content changes still
+    // need to land eventually.
     vi.useFakeTimers();
     const { body, captureElement, stop } = setup();
-    let clock = 0;
-    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
-    captureElement.mockImplementation(() => {
-      clock += 1900; // a Galaxy Tab A7 capture of the document wrapper
-      return Promise.resolve();
-    });
+    captureElement.mockImplementationOnce(() => new Promise((r) => setTimeout(r, 2000)));
 
     body.textContent = "erste Änderung";
     await settle();
-    await Promise.resolve();
     expect(captureElement).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(2000);
+    await Promise.resolve();
 
     body.textContent = "zweite Änderung";
     await settle();
-    expect(captureElement).toHaveBeenCalledTimes(1);
+    expect(captureElement).toHaveBeenCalledTimes(2);
 
-    now.mockRestore();
     stop();
     vi.useRealTimers();
   });

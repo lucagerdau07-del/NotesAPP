@@ -186,13 +186,6 @@ const BACKGROUND_QUIET_MS = 250;
 // about them still counts.
 const IGNORED_STYLE_TARGET = "data-glass-ignore-style";
 
-// Even when a capture is warranted, it can cost more than the staleness it
-// fixes. Time each wrapper's first one and drop the ones that blow this: they
-// keep their last good capture, which is exactly what a slow device had before
-// this re-capture existed. Self-measuring rather than device-sniffing, so a
-// fast machine keeps live refraction and a slow one stops paying for it.
-const CAPTURE_BUDGET_MS = 150;
-
 export function recaptureBackgroundOnChange(instance, root) {
   const noop = () => {};
   const wrappers = Array.from(root.children).filter(
@@ -208,7 +201,6 @@ export function recaptureBackgroundOnChange(instance, root) {
   // A7), so re-shooting all of them because one pill changed is three of those
   // for nothing.
   const dirty = new Set();
-  const overBudget = new Set();
   const ignorable = (record) =>
     record.type === "attributes" &&
     record.attributeName === "style" &&
@@ -218,7 +210,7 @@ export function recaptureBackgroundOnChange(instance, root) {
     for (const record of records) {
       if (ignorable(record)) continue;
       const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
-      if (wrapper && !overBudget.has(wrapper)) dirty.add(wrapper);
+      if (wrapper) dirty.add(wrapper);
     }
     // Every record was one we ignore: leave any capture already scheduled alone
     // rather than pushing it back a gesture at a time.
@@ -227,15 +219,8 @@ export function recaptureBackgroundOnChange(instance, root) {
     timer = setTimeout(() => {
       const pending = [...dirty];
       dirty.clear();
-      for (const wrapper of pending) {
-        const started = performance.now();
-        Promise.resolve(instance.capture.captureElement(wrapper, true))
-          .then(() => {
-            if (performance.now() - started > CAPTURE_BUDGET_MS)
-              overBudget.add(wrapper);
-          })
-          .catch(noop);
-      }
+      for (const wrapper of pending)
+        Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(noop);
     }, BACKGROUND_QUIET_MS);
   });
   for (const wrapper of wrappers)
