@@ -819,10 +819,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
     <div
       ref={containerRef}
       data-testid="page-object-layer"
-      // Both this element and the wrapper below carry only the viewport: their
-      // transforms move on every pan/zoom and mean nothing to the glass
-      // background, which would otherwise re-shoot the whole document for them.
-      data-glass-ignore-style=""
+      // Camera layers: the glass background shifts its capture by these
+      // transforms instead of re-capturing the page on every pan/zoom.
+      data-glass-viewport="outer"
       style={{
         position: "absolute",
         inset: 0,
@@ -839,7 +838,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
       onPointerCancel={drag.end}
     >
       <div
-        data-glass-ignore-style=""
+        data-glass-viewport="inner"
         style={{
           position: "absolute",
           inset: 0,

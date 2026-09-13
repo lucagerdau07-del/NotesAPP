@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { recaptureBackgroundOnChange, samplesEachOther } from "../src/hooks/useLiquidGlass";
+import {
+  cullCaptureToGlass,
+  recaptureBackgroundOnChange,
+  samplesEachOther,
+} from "../src/hooks/useLiquidGlass";
 
 function boxed(left, top, width, height) {
   const element = document.createElement("div");
@@ -26,6 +30,34 @@ describe("samplesEachOther", () => {
   });
 });
 
+describe("cullCaptureToGlass", () => {
+  it("leaves page objects far from every glass panel out of the capture", async () => {
+    const rail = boxed(0, 0, 100, 700);
+    const body = boxed(0, 0, 1300, 700);
+    const behindRail = boxed(60, 100, 200, 50);
+    behindRail.setAttribute("data-object-id", "near");
+    const farAway = boxed(700, 100, 200, 50);
+    farAway.setAttribute("data-object-id", "far");
+    body.append(behindRail, farAway);
+
+    const rendered = { width: 1300, height: 700 };
+    const capture = {
+      cache: new Map(),
+      onCacheUpdate: vi.fn(),
+      captureToCanvas: vi.fn().mockResolvedValue(rendered),
+      drawCachedElement: vi.fn(),
+      _captureWithHtmlToImage: vi.fn(),
+    };
+    cullCaptureToGlass({ capture, glassSet: new Set([rail]) });
+
+    await capture._captureWithHtmlToImage(body, 1300, 700, 1300, 700);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 1300, 700, [farAway]);
+    expect(capture.cache.get(body)).toMatchObject({ canvas: rendered, w: 1300, h: 700 });
+    expect(capture.onCacheUpdate).toHaveBeenCalledWith(body);
+  });
+});
+
 function setup() {
   const root = document.createElement("div");
   const rail = document.createElement("div");
@@ -34,8 +66,9 @@ function setup() {
   root.append(rail, body);
   document.body.append(root);
   const captureElement = vi.fn().mockResolvedValue(undefined);
-  const stop = recaptureBackgroundOnChange({ capture: { captureElement } }, root);
-  return { body, rail, captureElement, stop };
+  const markChanged = vi.fn();
+  const stop = recaptureBackgroundOnChange({ capture: { captureElement }, markChanged }, root);
+  return { body, rail, captureElement, markChanged, stop };
 }
 
 // MutationObserver callbacks are microtasks, the debounce is a timer.
@@ -63,23 +96,21 @@ describe("recaptureBackgroundOnChange", () => {
     vi.useRealTimers();
   });
 
-  it("ignores style changes on elements that only carry the viewport", async () => {
+  it("repaints on a camera move and re-captures only once the view settles", async () => {
     vi.useFakeTimers();
-    const { body, captureElement, stop } = setup();
+    const { body, captureElement, markChanged, stop } = setup();
     const viewport = document.createElement("div");
-    viewport.setAttribute("data-glass-ignore-style", "");
+    viewport.setAttribute("data-glass-viewport", "inner");
     body.append(viewport);
     await settle();
     captureElement.mockClear();
 
-    // What a pan or zoom commits: one transform, nothing else.
     viewport.style.transform = "translate(40px, 12px) scale(1.4)";
     await settle();
+    expect(markChanged).toHaveBeenCalledWith(body);
     expect(captureElement).not.toHaveBeenCalled();
 
-    // Anything else about the same element still counts as real content.
-    viewport.textContent = "Inhalt";
-    await settle();
+    vi.advanceTimersByTime(1500);
     expect(captureElement).toHaveBeenCalledWith(body, true);
 
     stop();

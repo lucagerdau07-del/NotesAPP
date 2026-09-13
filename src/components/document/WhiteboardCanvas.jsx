@@ -81,9 +81,8 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
       ref={canvasRef}
       className="whiteboard-ink-canvas"
       data-testid="whiteboard-canvas"
-      // Its transform is the live viewport, rewritten on every gesture frame —
-      // not a content change worth re-capturing the glass background for.
-      data-glass-ignore-style=""
+      // Its preview transform mirrors the object layer's "outer" camera layer.
+      data-glass-viewport="mirror"
       style={{
         position: "absolute",
         top: 0,

@@ -96,6 +96,13 @@ function keepGlassPaintedWhileResizing() {
     return;
   const repainting = function () {
     const resized = checkSizes.call(this);
+    // A panel that just finished growing now covers page objects the last
+    // capture culled (see cullCaptureToGlass), and nothing in the DOM behind
+    // it changed to trigger a re-capture on its own.
+    if (this.__glassResizing && !resized)
+      for (const child of this.root?.children ?? [])
+        if (!this.glassSet.has(child) && !["CANVAS", "IMG", "VIDEO"].includes(child.tagName))
+          this.capture?.captureElement(child, true);
     this.__glassResizing = resized;
     if (resized) this._globalDirty = true;
     return resized;
@@ -174,17 +181,103 @@ function sceneCapturesIdle(
 // either way. Fixing that needs a patch-package patch on the bundled clone step.
 const BACKGROUND_QUIET_MS = 250;
 
-// A whiteboard pan or zoom commits by writing one `transform` onto the layers
-// that carry the viewport, and nothing else in the document changes. That was
-// still a DOM mutation, so it scheduled a full re-capture of the document
-// wrapper — measured at 1.9s of blocked main thread on a Galaxy Tab A7, ~250ms
-// after the fingers came off, once per gesture. That is the freeze. The content
-// behind the glass really did move, so the capture goes stale; a strip of
-// slightly stale refraction behind the rail is worth two seconds of frozen
-// screen. Elements opting out carry this attribute (see WhiteboardCanvas and
-// PageObjectLayer) and only their `style` changes are ignored — anything else
-// about them still counts.
-const IGNORED_STYLE_TARGET = "data-glass-ignore-style";
+// Page objects this far outside every glass panel are left out of a capture.
+// Covers the panel's shadow/blur sampling margin and an object's selection
+// chrome, which sits just outside its box.
+const CULL_MARGIN_PX = 48;
+
+// A pan or zoom is not re-captured straight away (see viewport handling in
+// recaptureBackgroundOnChange); the refreshed capture is taken once the view
+// has been still this long, so it lands while nobody is touching the screen.
+const VIEWPORT_SETTLE_MS = 1500;
+
+// Layers that carry a whiteboard's camera as a CSS transform (origin 0 0,
+// filling the captured wrapper). "outer" holds the live gesture preview,
+// "inner" the committed camera; the ink canvas mirrors "outer".
+const VIEWPORT_ATTR = "data-glass-viewport";
+
+function transformOf(node) {
+  const value = node ? getComputedStyle(node).transform : "none";
+  return !value || value === "none" ? new DOMMatrix() : new DOMMatrix(value);
+}
+
+// The camera transform applied to page content inside element, in element
+// CSS pixels. Identity when element holds no whiteboard.
+export function viewportMatrix(element) {
+  if (typeof DOMMatrix === "undefined") return null;
+  const outer = element.querySelector(`[${VIEWPORT_ATTR}="outer"]`);
+  const inner = element.querySelector(`[${VIEWPORT_ATTR}="inner"]`);
+  return transformOf(outer).multiply(transformOf(inner));
+}
+
+function intersects(a, b, margin) {
+  return (
+    a.left < b.right + margin &&
+    b.left - margin < a.right &&
+    a.top < b.bottom + margin &&
+    b.top - margin < a.bottom
+  );
+}
+
+// A capture clones the wrapper and copies every computed style onto every
+// node, in one uninterruptible task: ~6-7ms per node on a Galaxy Tab A7, 1.9s
+// for a 79-object whiteboard. It is only ever sampled where a glass panel sits,
+// so page objects nowhere near one are left out of the clone (html-to-image's
+// filter prunes the clone; the live DOM is untouched).
+//
+// Even culled it stays ~600ms whenever a column of objects sits behind the
+// rail — too slow to run after every pan. So a capture also remembers the
+// camera it was taken at, and drawing it applies the camera change since:
+// the refraction follows a pan or zoom for the cost of one drawImage, and a
+// real re-capture only has to fill in what newly slid behind the glass.
+//
+// ponytail: replaces a private and a public method on this instance's
+// capture. If the library renames them this is a no-op — full-cost captures,
+// refraction frozen between them. Upgrade path: patch-package.
+export function cullCaptureToGlass(instance) {
+  const capture = instance?.capture;
+  if (
+    typeof capture?._captureWithHtmlToImage !== "function" ||
+    typeof capture.captureToCanvas !== "function" ||
+    typeof capture.drawCachedElement !== "function"
+  )
+    return;
+
+  capture._captureWithHtmlToImage = async function (element, w, h, cssW, cssH) {
+    if (cssW <= 0 || cssH <= 0 || w <= 0 || h <= 0) return;
+    const viewport = viewportMatrix(element);
+    const glassRects = [...instance.glassSet].map((glass) => glass.getBoundingClientRect());
+    const offGlass = [...element.querySelectorAll("[data-object-id]")].filter((object) => {
+      const box = object.getBoundingClientRect();
+      return !glassRects.some((glass) => intersects(box, glass, CULL_MARGIN_PX));
+    });
+    const canvas = await this.captureToCanvas(element, cssW, cssH, offGlass);
+    if (!canvas) return;
+    this.cache.set(element, { canvas, w, h, viewport });
+    this.onCacheUpdate?.(element);
+  };
+
+  const draw = capture.drawCachedElement;
+  capture.drawCachedElement = function (element, ctx, x, y, w, h) {
+    const entry = this.cache.get(element);
+    const now = entry && viewportMatrix(element);
+    if (!now) return draw.call(this, element, ctx, x, y, w, h);
+    // A capture the library took before this patch: best baseline is now.
+    entry.viewport ??= now;
+    const delta = now.multiply(entry.viewport.inverse());
+    if (delta.isIdentity) return draw.call(this, element, ctx, x, y, w, h);
+    const box = element.getBoundingClientRect();
+    if (box.width <= 0) return draw.call(this, element, ctx, x, y, w, h);
+    const pixels = w / box.width;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pixels, pixels);
+    ctx.transform(delta.a, delta.b, delta.c, delta.d, delta.e, delta.f);
+    const drawn = draw.call(this, element, ctx, 0, 0, box.width, box.height);
+    ctx.restore();
+    return drawn;
+  };
+}
 
 export function recaptureBackgroundOnChange(instance, root) {
   const noop = () => {};
@@ -201,27 +294,41 @@ export function recaptureBackgroundOnChange(instance, root) {
   // A7), so re-shooting all of them because one pill changed is three of those
   // for nothing.
   const dirty = new Set();
-  const ignorable = (record) =>
-    record.type === "attributes" &&
-    record.attributeName === "style" &&
-    record.target.hasAttribute?.(IGNORED_STYLE_TARGET);
+  let viewportTimer = 0;
+  const viewportMoved = new Set();
+  const capture = (targets) => {
+    const pending = [...targets];
+    targets.clear();
+    for (const wrapper of pending)
+      Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(noop);
+  };
 
   const observer = new MutationObserver((records) => {
+    let contentChanged = false;
     for (const record of records) {
-      if (ignorable(record)) continue;
       const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
-      if (wrapper) dirty.add(wrapper);
+      if (!wrapper) continue;
+      // A camera move: the existing capture is redrawn shifted (see
+      // cullCaptureToGlass), so only the glass needs repainting now.
+      if (
+        record.type === "attributes" &&
+        record.attributeName === "style" &&
+        record.target.hasAttribute?.(VIEWPORT_ATTR)
+      ) {
+        viewportMoved.add(wrapper);
+        instance.markChanged?.(wrapper);
+        continue;
+      }
+      dirty.add(wrapper);
+      contentChanged = true;
     }
-    // Every record was one we ignore: leave any capture already scheduled alone
-    // rather than pushing it back a gesture at a time.
-    if (dirty.size === 0) return;
+    if (viewportMoved.size > 0) {
+      clearTimeout(viewportTimer);
+      viewportTimer = setTimeout(() => capture(viewportMoved), VIEWPORT_SETTLE_MS);
+    }
+    if (!contentChanged) return;
     clearTimeout(timer);
-    timer = setTimeout(() => {
-      const pending = [...dirty];
-      dirty.clear();
-      for (const wrapper of pending)
-        Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(noop);
-    }, BACKGROUND_QUIET_MS);
+    timer = setTimeout(() => capture(dirty), BACKGROUND_QUIET_MS);
   });
   for (const wrapper of wrappers)
     observer.observe(wrapper, {
@@ -234,6 +341,7 @@ export function recaptureBackgroundOnChange(instance, root) {
   return () => {
     observer.disconnect();
     clearTimeout(timer);
+    clearTimeout(viewportTimer);
   };
 }
 
@@ -272,6 +380,7 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         }
         instance = created;
         instanceRef.current = created;
+        cullCaptureToGlass(created);
         instanceRef.current.markChanged();
         await sceneCapturesIdle(created);
         if (cancelled) return;
