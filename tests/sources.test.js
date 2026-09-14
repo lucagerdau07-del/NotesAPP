@@ -52,16 +52,30 @@ describe("source search", () => {
     expect(rankPages([bookPage(0, text)], "Revolutionen")).toHaveLength(1);
   });
 
-  it("reads the printed page number off the first line of an OCR reply", () => {
+  it("reads printed page and the visual-content flag off the OCR reply's header lines", () => {
     expect(parseOcrReply("SEITE: 47\n[Z. 5] Er kam zurück.")).toEqual({
       printedPage: "47",
+      hasVisual: false,
       text: "[Z. 5] Er kam zurück.",
     });
     expect(parseOcrReply("**SEITE:** 112\nText").printedPage).toBe("112");
-    expect(parseOcrReply("SEITE: -\nText")).toEqual({ printedPage: null, text: "Text" });
+    expect(parseOcrReply("SEITE: -\nText")).toEqual({ printedPage: null, hasVisual: false, text: "Text" });
     expect(parseOcrReply("Seite 3 beginnt hier")).toEqual({
       printedPage: null,
+      hasVisual: false,
       text: "Seite 3 beginnt hier",
+    });
+    // Beide Kopfzeilen, in der verlangten Reihenfolge.
+    expect(parseOcrReply("SEITE: 12\nABBILDUNG: ja\n# Aufgabe 1")).toEqual({
+      printedPage: "12",
+      hasVisual: true,
+      text: "# Aufgabe 1",
+    });
+    // Reihenfolge vertauscht: beide Kopfzeilen werden trotzdem erkannt.
+    expect(parseOcrReply("ABBILDUNG: ja\nSEITE: -\nText")).toEqual({
+      printedPage: null,
+      hasVisual: true,
+      text: "Text",
     });
   });
 
@@ -69,6 +83,26 @@ describe("source search", () => {
     expect(citeOf({ title: "Faust", kind: "pdf", page: 12, printedPage: "47" })).toBe("Faust, S. 47");
     expect(citeOf({ title: "Faust", kind: "pdf", page: 12 })).toBe("Faust, PDF-S. 12");
     expect(citeOf({ title: "Arbeitsblatt", kind: "image", page: 1 })).toBe("Arbeitsblatt");
+  });
+
+  it("flags a search hit and a read page whose scan noted a visual element", async () => {
+    const repository = {
+      listOcrPages: async () => [
+        { pageIndex: 0, text: "Der Wasserkreislauf zeigt Verdunstung.", printedPage: "3", hasVisual: true },
+      ],
+    };
+    const note = {
+      id: "arbeitsblatt-1",
+      title: "Arbeitsblatt",
+      updatedAt: 1,
+      source: { type: "pdf" },
+      pages: [{}],
+    };
+    const scope = { imported: [note] };
+    const result = await searchSources("Verdunstung", scope, repository);
+    expect(result.hits[0]).toMatchObject({ hasVisual: true });
+    const read = await readSource({ noteId: "arbeitsblatt-1", page: 1 }, scope, repository);
+    expect(read.pages[0]).toMatchObject({ hasVisual: true });
   });
 
   it("searches stored pages, reports sources still being read, and refuses unread pages", async () => {

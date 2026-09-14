@@ -45,6 +45,7 @@ const WORD = /[\p{L}\p{N}]+/gu;
 export const OCR_PROMPT = [
   "Du überträgst eine Seite aus einem Buch, Schulbuch oder Arbeitsblatt in Markdown, so dass man ohne das Bild alles Wichtige versteht.",
   "Erste Zeile deiner Antwort: SEITE: und die auf der Seite gedruckte Seitenzahl, oder SEITE: - wenn keine zu sehen ist.",
+  "Zweite Zeile: ABBILDUNG: ja, wenn die Seite ein Foto, ein Diagramm, eine Karte, eine Grafik, eine farbige Markierung oder ein Layout enthält, das deine Markdown-Version nicht vollständig wiedergibt, sonst ABBILDUNG: nein.",
   "Text wortgetreu und vollständig in Lesereihenfolge, Spalten nacheinander. Nichts zusammenfassen, nichts ergänzen, nichts korrigieren. Unleserliches als [unleserlich].",
   "Struktur beibehalten: Überschriften mit #, Aufgaben mit ihrer Nummer, Tabellen als Markdown-Tabelle, Kästen als > Block, Lücken als ____, Ankreuzfelder als [ ].",
   "Abbildungen, Diagramme, Karten, Zeitstrahlen und Skizzen als [Abbildung: ...] mit dem, was sie zeigen, allen Beschriftungen und Werten und wohin Pfeile zeigen.",
@@ -102,7 +103,7 @@ export function citeOf({ title, kind, page, printedPage }) {
   return `${title}, ${kind === "pdf" ? "PDF-S." : "S."} ${page}`;
 }
 
-export function toPage({ noteId, title, kind, index, text, printedPage = null }) {
+export function toPage({ noteId, title, kind, index, text, printedPage = null, hasVisual = false }) {
   const clean = String(text ?? "").normalize("NFC");
   const folded = fold(clean);
   return {
@@ -110,6 +111,7 @@ export function toPage({ noteId, title, kind, index, text, printedPage = null })
     page: index + 1,
     cite: citeOf({ title, kind, page: index + 1, printedPage }),
     text: clean,
+    hasVisual,
     folded,
     length: (folded.match(WORD) || []).length,
   };
@@ -175,19 +177,30 @@ function excerptOf(page, patterns) {
   return excerpt.replace(/\s+/g, " ").trim();
 }
 
-// Erste Zeile "SEITE: 47" oder "SEITE: -", danach der Seitentext. Klartext
-// statt JSON: ein Anführungszeichen im Buchtext kann so nichts zerbrechen.
+const HEAD_LINE = /^[\s*_#]*(SEITE|ABBILDUNG)[\s*_]*:[\s*_]*(.*?)[\s*_]*$/i;
+
+// Erste Zeile "SEITE: 47" oder "SEITE: -", zweite Zeile "ABBILDUNG: ja/nein",
+// danach der Seitentext. Beide Kopfzeilen optional und in beliebiger
+// Reihenfolge, damit eine Antwort ohne ABBILDUNG-Zeile (ältere Notizen-Scans,
+// ein Modell, das die Anweisung ignoriert) nicht kaputtgeht. Klartext statt
+// JSON: ein Anführungszeichen im Buchtext kann so nichts zerbrechen.
 export function parseOcrReply(content) {
   const lines = String(content ?? "")
     .replace(/```[a-z]*\n?/gi, "")
     .trim()
     .split("\n");
-  const head = lines[0].match(/^[\s*_#]*SEITE[\s*_]*:[\s*_]*(.*?)[\s*_]*$/i);
-  const printed = head?.[1];
-  return {
-    printedPage: printed && printed !== "-" ? printed.slice(0, 12) : null,
-    text: (head ? lines.slice(1) : lines).join("\n").trim(),
-  };
+  let printedPage = null;
+  let hasVisual = false;
+  let consumed = 0;
+  for (let i = 0; i < 2 && i < lines.length; i += 1) {
+    const match = lines[i].match(HEAD_LINE);
+    if (!match) break;
+    const [, key, value] = match;
+    if (/^SEITE$/i.test(key)) printedPage = value && value !== "-" ? value.slice(0, 12) : null;
+    else hasVisual = /^ja/i.test(value.trim());
+    consumed += 1;
+  }
+  return { printedPage, hasVisual, text: lines.slice(consumed).join("\n").trim() };
 }
 
 // pdf.js liefert positionierte Textstücke, hasEOL markiert ein Zeilenende. Am
@@ -357,6 +370,7 @@ async function pagesOfImported(note, repository) {
         index: record.pageIndex,
         text: record.text,
         printedPage: record.printedPage,
+        hasVisual: record.hasVisual,
       }),
     );
   pageCache.set(note.id, { stamp: note.updatedAt, pages });
@@ -398,7 +412,16 @@ export async function searchSources(
     imported.map((note) => pagesOfImported(note, repository)),
   );
   const hits = rankPages([...notes.flatMap(pagesOfNote), ...importedPages.flat()], query).map(
-    ({ page, excerpt }) => ({ noteId: page.noteId, page: page.page, cite: page.cite, excerpt }),
+    ({ page, excerpt }) => ({
+      noteId: page.noteId,
+      page: page.page,
+      cite: page.cite,
+      excerpt,
+      // Nur bei Bedarf im Ergebnis, damit ein normaler Texttreffer nicht mit
+      // hasVisual: false aufgebläht wird - der Agent fragt nur nach, wenn es
+      // etwas zu sehen gibt.
+      ...(page.hasVisual ? { hasVisual: true } : {}),
+    }),
   );
   // Sonst hält das Modell "kein Treffer" für "steht nicht drin", während die
   // Texterkennung eines Buchs noch läuft.
@@ -450,6 +473,7 @@ export async function readSource(
       page: entry.page,
       cite: entry.cite,
       text: entry.text.slice(0, MAX_PAGE_CHARS),
+      ...(entry.hasVisual ? { hasVisual: true } : {}),
     })),
   };
 }
