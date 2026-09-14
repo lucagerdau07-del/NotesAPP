@@ -13,6 +13,9 @@ export default function SplitLayout({
   documentId: propDocumentId,
   note,
   railSlot,
+  panelSlot,
+  panelMode,
+  setPanelMode,
   onPageCountChange,
   onCurrentPageChange,
   onPagesChange,
@@ -119,6 +122,9 @@ export default function SplitLayout({
           toolbarState={toolState}
           onBack={onBack}
           railSlot={railSlot}
+          panelSlot={panelSlot}
+          panelMode={panelMode}
+          setPanelMode={setPanelMode}
           onCurrentPageChange={onCurrentPageChange}
           isImmersive={isImmersive}
           imageDropRequest={imageDropRequest}

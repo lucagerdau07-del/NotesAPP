@@ -1029,6 +1029,19 @@ body::after {
   opacity: 1;
 }
 
+.rail-btn.confirm {
+  background: rgba(216, 97, 91, 0.25);
+  color: #d8615b;
+}
+
+.rail-layers-slot {
+  display: contents;
+}
+
+.rail-layers-slot[hidden] {
+  display: none;
+}
+
 .rail-tools {
   flex: 0 0 72px;
   width: 72px;

@@ -39,6 +39,7 @@ function Editor({ activeNote, onBack }) {
   // portals its buttons in. Keeping it as a state-backed element rather than a
   // ref means the portal target is available on the render after mount.
   const [railSlot, setRailSlot] = useState(null);
+  const [panelSlot, setPanelSlot] = useState(null);
   const [railWidth, setRailWidth] = useState(savedRailWidth);
   const [isRailResizing, setRailResizing] = useState(false);
   const [panelMode, setPanelMode] = useState(null);
@@ -269,6 +270,7 @@ function Editor({ activeNote, onBack }) {
         }}
       >
         <div className="rail-tools" ref={setRailSlot}>
+          <div style={{ order: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
           <button
             className={`rail-btn rail-ai-btn ${panelMode === "agent" ? "active" : ""}`}
             onClick={() => {
@@ -311,7 +313,13 @@ function Editor({ activeNote, onBack }) {
             <Files size={18} />
           </button>
           <div className="rail-divider" />
+          </div>
         </div>
+        <div
+          className="rail-layers-slot"
+          hidden={panelMode !== "layers"}
+          ref={setPanelSlot}
+        />
         {hasOpenedAgent && (
           <Suspense fallback={null}>
             <AiChatPanel
@@ -384,6 +392,9 @@ function Editor({ activeNote, onBack }) {
           documentId={activeNote.id}
           onBack={onBack}
           railSlot={railSlot}
+          panelSlot={panelSlot}
+          panelMode={panelMode}
+          setPanelMode={setPanelMode}
           onPageCountChange={setPageCount}
           onCurrentPageChange={setCurrentPage}
           onPagesChange={setPages}

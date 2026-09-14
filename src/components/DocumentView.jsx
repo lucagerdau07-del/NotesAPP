@@ -1101,6 +1101,9 @@ export default function DocumentView({
   toolbarState,
   onBack,
   railSlot,
+  panelSlot,
+  panelMode,
+  setPanelMode,
   onCurrentPageChange,
   isImmersive,
   imageDropRequest,
@@ -1163,7 +1166,16 @@ export default function DocumentView({
   const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
   const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
-  const [isLayersOpen, setIsLayersOpen] = useState(false);
+  const [localLayersOpen, setLocalLayersOpen] = useState(false);
+  const isLayersOpen = setPanelMode ? panelMode === "layers" : localLayersOpen;
+  const toggleLayers = () =>
+    setPanelMode
+      ? setPanelMode((prev) => (prev === "layers" ? null : "layers"))
+      : setLocalLayersOpen((prev) => !prev);
+  const openLayers = () =>
+    setPanelMode ? setPanelMode("layers") : setLocalLayersOpen(true);
+  const closeLayers = () =>
+    setPanelMode ? setPanelMode(null) : setLocalLayersOpen(false);
   const [popoverTop, setPopoverTop] = useState(120);
   const documentViewRef = useRef(null);
   const designButtonRef = useRef(null);
@@ -1276,8 +1288,22 @@ export default function DocumentView({
   const handleRedo = () => {
     inkController?.redo?.();
   };
+  const [confirmClearCanvas, setConfirmClearCanvas] = useState(false);
+  const confirmClearTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(confirmClearTimerRef.current), []);
   const handleClearCanvas = () => {
-    inkController?.clearDocument?.();
+    if (confirmClearCanvas) {
+      clearTimeout(confirmClearTimerRef.current);
+      setConfirmClearCanvas(false);
+      inkController?.clearDocument?.();
+      return;
+    }
+    setConfirmClearCanvas(true);
+    clearTimeout(confirmClearTimerRef.current);
+    confirmClearTimerRef.current = setTimeout(
+      () => setConfirmClearCanvas(false),
+      2500,
+    );
   };
 
   const [draftFocusBox, setDraftFocusBox] = useState(null);
@@ -3140,7 +3166,11 @@ export default function DocumentView({
         />
       ))}
       <div className="rail-divider" />
-      <button className="rail-btn" onClick={handleClearCanvas} title="Leeren">
+      <button
+        className={`rail-btn ${confirmClearCanvas ? "confirm" : ""}`}
+        onClick={handleClearCanvas}
+        title={confirmClearCanvas ? "Nochmal tippen zum Leeren" : "Leeren"}
+      >
         <Trash2 size={18} />
       </button>
       <div className="rail-divider" />
@@ -3164,7 +3194,7 @@ export default function DocumentView({
         style={{ marginTop: "auto" }}
         title="Ebenen"
         data-testid="layers-toggle-btn"
-        onClick={() => setIsLayersOpen((prev) => !prev)}
+        onClick={toggleLayers}
       >
         <Layers size={19} />
       </button>
@@ -3252,23 +3282,30 @@ export default function DocumentView({
           top={popoverTop}
         />
       )}
-      {/* Canva Layer Drawer */}
-      <LayerDrawer
-        isOpen={isLayersOpen}
-        objects={pageObjects}
-        inkLayerIndex={activeInkLayerIndex}
-        inkLayerHidden={inkController?.inkLayerHidden}
-        inkLayerLocked={inkController?.inkLayerLocked}
-        strokeCount={inkDocument.strokes.length}
-        selectedObjectId={selectedObjectId}
-        onSelect={(id) => {
-          setSelectedObjectId(id === "__ink__" ? null : id);
-        }}
-        onToggleLock={inkController?.setLayerLock}
-        onToggleVisibility={inkController?.setLayerVisibility}
-        onReorder={inkController?.reorderLayers}
-        onClose={() => setIsLayersOpen(false)}
-      />
+      {/* Layers panel — slides out of the same sidebar as agent/browser/pages
+          when panelSlot is given, or renders in place (tests, standalone). */}
+      {isLayersOpen &&
+        (() => {
+          const drawer = (
+            <LayerDrawer
+              isOpen={isLayersOpen}
+              objects={pageObjects}
+              inkLayerIndex={activeInkLayerIndex}
+              inkLayerHidden={inkController?.inkLayerHidden}
+              inkLayerLocked={inkController?.inkLayerLocked}
+              strokeCount={inkDocument.strokes.length}
+              selectedObjectId={selectedObjectId}
+              onSelect={(id) => {
+                setSelectedObjectId(id === "__ink__" ? null : id);
+              }}
+              onToggleLock={inkController?.setLayerLock}
+              onToggleVisibility={inkController?.setLayerVisibility}
+              onReorder={inkController?.reorderLayers}
+              onClose={closeLayers}
+            />
+          );
+          return panelSlot ? createPortal(drawer, panelSlot) : drawer;
+        })()}
       <input
         ref={imageInputRef}
         type="file"
@@ -3528,7 +3565,7 @@ export default function DocumentView({
             onRestoreBackground={handleRestoreBackground}
             onToggleLock={inkController?.setLayerLock}
             onShiftOrder={inkController?.shiftLayerOrder}
-            onOpenLayers={() => setIsLayersOpen(true)}
+            onOpenLayers={openLayers}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -3564,7 +3601,7 @@ export default function DocumentView({
             onRestoreBackground={handleRestoreBackground}
             onToggleLock={inkController?.setLayerLock}
             onShiftOrder={inkController?.shiftLayerOrder}
-            onOpenLayers={() => setIsLayersOpen(true)}
+            onOpenLayers={openLayers}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg
