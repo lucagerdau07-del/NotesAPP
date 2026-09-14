@@ -16,10 +16,10 @@ function createApi(pages = 1, pageDefaults = {}) {
 }
 
 describe("insert_table", () => {
-  it("creates one table object sized to rows x cols in one undo step", () => {
+  it("creates one table object sized to rows x cols in one undo step", async () => {
     const api = createApi();
     const before = api.undoSteps();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_table",
       {
         pageId: "note-1-page-1",
@@ -50,23 +50,23 @@ describe("insert_table", () => {
     expect(api.undoSteps()).toBe(before + 1);
   });
 
-  it("lets the agent adjust a single cell afterwards with edit_table_cell", () => {
+  it("lets the agent adjust a single cell afterwards with edit_table_cell", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_table",
       { pageId: "note-1-page-1", x: 0, y: 0, rows: 1, cols: 1 },
       api,
     );
-    executeTool("edit_table_cell", { id: result.id, row: 0, col: 0, text: "neu" }, api);
+    await executeTool("edit_table_cell", { id: result.id, row: 0, col: 0, text: "neu" }, api);
     const table = pageObjectsOf(api.getDocument()).find((o) => o.id === result.id);
     expect(table.cellText[0][0]).toBe("neu");
   });
 });
 
 describe("insert_diagram", () => {
-  it("connects nodes by index with real arrow ids", () => {
+  it("connects nodes by index with real arrow ids", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_diagram",
       {
         pageId: "note-1-page-1",
@@ -84,9 +84,9 @@ describe("insert_diagram", () => {
     expect(arrow.width).toBeGreaterThan(0);
   });
 
-  it("rejects an empty node list", () => {
+  it("rejects an empty node list", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_diagram",
       { pageId: "note-1-page-1", x: 0, y: 0, nodes: [] },
       api,
@@ -96,9 +96,9 @@ describe("insert_diagram", () => {
 });
 
 describe("insert_mindmap", () => {
-  it("places branches around the root without overlapping it", () => {
+  it("places branches around the root without overlapping it", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_mindmap",
       {
         pageId: "note-1-page-1",
@@ -119,9 +119,9 @@ describe("insert_mindmap", () => {
     }
   });
 
-  it("works unbounded on a whiteboard document", () => {
+  it("works unbounded on a whiteboard document", async () => {
     const api = createApi(1, { kind: "whiteboard" });
-    const result = executeTool(
+    const result = await executeTool(
       "insert_mindmap",
       { pageId: "note-1-page-1", x: -9000, y: 9000, root: "Weit weg", branches: [{ label: "A" }] },
       api,
@@ -132,9 +132,9 @@ describe("insert_mindmap", () => {
 });
 
 describe("insert_section_header", () => {
-  it("puts a tinted bar behind the title so the bar is drawn first", () => {
+  it("puts a tinted bar behind the title so the bar is drawn first", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_section_header",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Diazotierung" },
       api,
@@ -150,14 +150,14 @@ describe("insert_section_header", () => {
     expect(result.bottom).toBeGreaterThan(100);
   });
 
-  it("fits the pill variant to the words instead of the column", () => {
+  it("fits the pill variant to the words instead of the column", async () => {
     const api = createApi();
-    const banner = executeTool(
+    const banner = await executeTool(
       "insert_section_header",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Kurz", variant: "banner" },
       api,
     );
-    const pill = executeTool(
+    const pill = await executeTool(
       "insert_section_header",
       { pageId: "note-1-page-1", x: 64, y: 300, width: 672, title: "Kurz", variant: "pill" },
       api,
@@ -166,9 +166,9 @@ describe("insert_section_header", () => {
     expect(pill.width).toBeLessThan(banner.width);
   });
 
-  it("draws a rule under the title for the underline variant", () => {
+  it("draws a rule under the title for the underline variant", async () => {
     const api = createApi();
-    executeTool(
+    await executeTool(
       "insert_section_header",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "Evolution", variant: "underline" },
       api,
@@ -180,9 +180,9 @@ describe("insert_section_header", () => {
     expect(rule.height).toBeLessThan(8);
   });
 
-  it("rejects an empty title", () => {
+  it("rejects an empty title", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_section_header",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 672, title: "   " },
       api,
@@ -193,10 +193,10 @@ describe("insert_section_header", () => {
 });
 
 describe("insert_callout", () => {
-  it("builds a box with a spine, label and body in one undo step", () => {
+  it("builds a box with a spine, label and body in one undo step", async () => {
     const api = createApi();
     const before = api.undoSteps();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_callout",
       {
         pageId: "note-1-page-1",
@@ -222,14 +222,14 @@ describe("insert_callout", () => {
     expect(api.undoSteps()).toBe(before + 1);
   });
 
-  it("grows the box for longer text", () => {
+  it("grows the box for longer text", async () => {
     const api = createApi();
-    const short = executeTool(
+    const short = await executeTool(
       "insert_callout",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 400, text: "Kurz." },
       api,
     );
-    const long = executeTool(
+    const long = await executeTool(
       "insert_callout",
       {
         pageId: "note-1-page-1",
@@ -243,9 +243,9 @@ describe("insert_callout", () => {
     expect(long.height).toBeGreaterThan(short.height);
   });
 
-  it("falls back to the definition variant for an unknown one", () => {
+  it("falls back to the definition variant for an unknown one", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_callout",
       { pageId: "note-1-page-1", x: 64, y: 100, width: 400, text: "Test", variant: "quatsch" },
       api,
@@ -255,9 +255,9 @@ describe("insert_callout", () => {
 });
 
 describe("write_text highlighting", () => {
-  it("lays marker bars behind the text they mark", () => {
+  it("lays marker bars behind the text they mark", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "write_text",
       {
         pageId: "note-1-page-1",
@@ -279,9 +279,9 @@ describe("write_text highlighting", () => {
     expect(markers[0].y).toBeGreaterThanOrEqual(text.y);
   });
 
-  it("writes no marker without the highlight argument", () => {
+  it("writes no marker without the highlight argument", async () => {
     const api = createApi();
-    executeTool(
+    await executeTool(
       "write_text",
       { pageId: "note-1-page-1", x: 64, y: 120, width: 300, text: "Schlicht" },
       api,
@@ -289,9 +289,9 @@ describe("write_text highlighting", () => {
     expect(pageObjectsOf(api.getDocument()).filter((o) => o.type === "rect")).toHaveLength(0);
   });
 
-  it("takes its colour from the role when no colour is given", () => {
+  it("takes its colour from the role when no colour is given", async () => {
     const api = createApi();
-    const result = executeTool(
+    const result = await executeTool(
       "write_text",
       { pageId: "note-1-page-1", x: 64, y: 120, width: 300, text: "Achtung", role: "signal" },
       api,
@@ -327,10 +327,10 @@ describe("component tools", () => {
     };
   }
 
-  it("places a component and reports the space it took", () => {
+  it("places a component and reports the space it took", async () => {
     const api = withStore(createApi());
     const before = api.undoSteps();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_component",
       { pageId: "note-1-page-1", id: "zeitstrahl", x: 100, y: 300, args: { width: 400 } },
       api,
@@ -343,9 +343,9 @@ describe("component tools", () => {
     expect(api.getDocument().strokes[0].points[0].x).toBeCloseTo(100, 0);
   });
 
-  it("names a component that does not exist", () => {
+  it("names a component that does not exist", async () => {
     const api = withStore(createApi());
-    const result = executeTool(
+    const result = await executeTool(
       "insert_component",
       { pageId: "note-1-page-1", id: "gibtsnicht", x: 0, y: 0 },
       api,
@@ -353,9 +353,9 @@ describe("component tools", () => {
     expect(result).toMatch(/^Fehler:/);
   });
 
-  it("saves a recipe the agent wrote", () => {
+  it("saves a recipe the agent wrote", async () => {
     const api = withStore(createApi());
-    const result = executeTool(
+    const result = await executeTool(
       "define_component",
       {
         id: "Mein Element",
@@ -369,9 +369,9 @@ describe("component tools", () => {
     expect(api.saved.get("mein-element")).toBeTruthy();
   });
 
-  it("refuses a broken recipe and says what is wrong", () => {
+  it("refuses a broken recipe and says what is wrong", async () => {
     const api = withStore(createApi());
-    const result = executeTool(
+    const result = await executeTool(
       "define_component",
       { id: "kaputt", title: "Kaputt", body: [{ type: "rect", x: "unbekannt", y: 0 }] },
       api,
@@ -380,10 +380,10 @@ describe("component tools", () => {
     expect(api.saved.get("kaputt")).toBeUndefined();
   });
 
-  it("does not need a page to list or define", () => {
+  it("does not need a page to list or define", async () => {
     const api = withStore(createApi());
-    expect(executeTool("list_components", {}, api).components).toHaveLength(1);
-    expect(executeTool("read_component", { id: "zeitstrahl" }, api).id).toBe("zeitstrahl");
+    expect((await executeTool("list_components", {}, api)).components).toHaveLength(1);
+    expect((await executeTool("read_component", { id: "zeitstrahl" }, api)).id).toBe("zeitstrahl");
   });
 });
 
@@ -409,9 +409,9 @@ describe("component tools with constraints", () => {
     };
   }
 
-  it("ignores an attempt to override a fixed parameter", () => {
+  it("ignores an attempt to override a fixed parameter", async () => {
     const api = withFixedCols();
-    const result = executeTool(
+    const result = await executeTool(
       "insert_component",
       { pageId: "note-1-page-1", id: "tabelle3", x: 0, y: 0, args: { cols: 12, rows: 2 } },
       api,
@@ -421,9 +421,9 @@ describe("component tools with constraints", () => {
     expect(result.saved).toBeUndefined();
   });
 
-  it("still honours a min/max range alongside a fixed sibling", () => {
+  it("still honours a min/max range alongside a fixed sibling", async () => {
     const api = withFixedCols();
-    executeTool(
+    await executeTool(
       "insert_component",
       { pageId: "note-1-page-1", id: "tabelle3", x: 0, y: 0, args: { rows: 999 } },
       api,

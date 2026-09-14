@@ -14,6 +14,7 @@ import {
   Plus,
   Pencil,
   ScanSearch,
+  Globe,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -26,13 +27,13 @@ const SUGGESTIONS = [
 
 // Rounds to the unit Claude Code itself uses in its status line: plain below
 // 1000, "K" from 1000, "M" from 1_000_000.
-function formatTokens(n) {
+export function formatTokens(n) {
   if (n >= 1_000_000) return `${Math.round(n / 1_000_000)}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}K`;
   return String(n);
 }
 
-function formatElapsed(ms) {
+export function formatElapsed(ms) {
   return `${Math.round(ms / 1000)}s`;
 }
 
@@ -55,7 +56,7 @@ function formatRelativeWhen(timestamp) {
 
 // Eases the displayed number toward `target` instead of jumping straight to
 // it, so a big token update after a slow request still reads as motion.
-function useCountUp(target, duration = 500) {
+export function useCountUp(target, duration = 500) {
   const [value, setValue] = useState(target);
   const fromRef = useRef(target);
 
@@ -86,7 +87,7 @@ function useCountUp(target, duration = 500) {
 
 // Same glyph as lucide's PenLine, split in two: the pen tilts (animated
 // group), the paper line underneath stays put.
-function WritingPen() {
+export function WritingPen() {
   return (
     <svg
       width="13"
@@ -107,7 +108,12 @@ function WritingPen() {
   );
 }
 
-function StepList({ steps, elapsedMs }) {
+// Same status slot as WritingPen, shown instead of it while search_web runs.
+export function WritingGlobe() {
+  return <Globe size={13} className="rail-chat-status-globe" />;
+}
+
+export function StepList({ steps, elapsedMs }) {
   const [expanded, setExpanded] = useState(elapsedMs == null);
 
   if (elapsedMs != null && !expanded) {
@@ -159,7 +165,7 @@ function StepList({ steps, elapsedMs }) {
   );
 }
 
-function HistoryMenu({ sessions, activeId, onSelect, onStartNew, onDelete, onRename }) {
+export function HistoryMenu({ sessions, activeId, onSelect, onStartNew, onDelete, onRename }) {
   const [open, setOpen] = useState(false);
   const [renamingId, setRenamingId] = useState(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -269,7 +275,7 @@ function HistoryMenu({ sessions, activeId, onSelect, onStartNew, onDelete, onRen
   );
 }
 
-function CopyButton({ text }) {
+export function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -425,15 +431,18 @@ export default function AiChatPanel({
 
         {isRunning && steps.length > 0 && <StepList steps={steps} />}
 
-        {isRunning && (
-          <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
-            <WritingPen />
-            <span className="rail-chat-status-shimmer">Arbeitet…</span>
-            <span className="rail-chat-status-meta">
-              {formatElapsed(elapsedMs)} · {formatTokens(displayedTokens)} Tokens
-            </span>
-          </div>
-        )}
+        {isRunning && (() => {
+          const researching = steps.some((step) => step.state === "running" && step.name === "search_web");
+          return (
+            <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
+              {researching ? <WritingGlobe /> : <WritingPen />}
+              <span className="rail-chat-status-shimmer">{researching ? "Recherchiert…" : "Arbeitet…"}</span>
+              <span className="rail-chat-status-meta">
+                {formatElapsed(elapsedMs)} · {formatTokens(displayedTokens)} Tokens
+              </span>
+            </div>
+          );
+        })()}
 
         {error && (
           <div className="rail-chat-error">

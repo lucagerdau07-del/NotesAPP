@@ -1549,6 +1549,12 @@ body::after {
   50% { transform: rotate(12deg) translateX(1px); }
 }
 
+.rail-chat-status-globe {
+  flex-shrink: 0;
+  color: rgba(241, 238, 231, 0.75);
+  animation: rail-chat-spin 1.8s linear infinite;
+}
+
 .rail-chat-status-meta {
   color: rgba(241, 238, 231, 0.4);
   font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2626,6 +2632,25 @@ body::after {
   pointer-events: none;
 }
 
+/* The agent panel opened by pulling the Ask-AI pill down: instead of sliding
+   in from the side, it grows straight down out of the pill via clip-path,
+   like a drop being pulled into the full window. --drop (0-1) is written
+   live to this element's inline style during the drag (see Library.jsx);
+   removing that inline value on release lets this transition snap it the
+   rest of the way open or closed. */
+.agent-panel.agent-panel-drop {
+  --drop: 0;
+  clip-path: inset(0 0 calc(100% - var(--drop) * 100%) 0 round 30px);
+  opacity: var(--drop);
+  transition: clip-path 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.32s ease;
+}
+.agent-panel.agent-panel-drop[data-open="false"] {
+  transform: none;
+}
+.agent-panel.agent-panel-drop[data-open="true"] {
+  --drop: 1;
+}
+
 .agent-panel-head {
   padding: 18px 16px 12px;
   display: flex;
@@ -2685,6 +2710,14 @@ body::after {
 }
 .agent-panel-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
+}
+
+/* This chat's input isn't inside the panel — it's the same floating pill
+   from the Ask-AI capsule, absolutely positioned at bottom: 20 (52px tall),
+   overlapping the card's own bottom: 20. Without this, the last message
+   scrolls in right behind the pill instead of stopping above it. */
+.agent-panel-body.rail-chat-messages {
+  padding-bottom: 76px;
 }
 
 .agent-card {

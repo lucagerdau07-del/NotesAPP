@@ -32,7 +32,20 @@ import {
   Pencil,
   Image as ImageIcon,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
+import Markdown from "./Markdown";
+import useAgent from "../hooks/useAgent";
+import {
+  StepList,
+  CopyButton,
+  HistoryMenu,
+  WritingPen,
+  WritingGlobe,
+  formatElapsed,
+  formatTokens,
+  useCountUp,
+} from "./AiChatPanel";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
 import kunstCard from "../assets/subjects/kunst-card.jpg";
@@ -3008,11 +3021,64 @@ export default function Library({
   const [isNewDocDialogOpen, setIsNewDocDialogOpen] = useState(false);
   const [sortToast, setSortToast] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
-  const [agentTasks, setAgentTasks] = useState([]);
   const [detailNote, setDetailNote] = useState(null);
   const [folderDialog, setFolderDialog] = useState(null); // null | { mode: "create", parentId } | { mode: "rename", folder }
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
+  const agentScrollRef = useRef(null);
+  const agentDropRef = useRef(null);
+  const pillDragRef = useRef(null);
+
+  // Pulling the Ask-AI pill down grows the agent panel out of it live, like
+  // pulling a drop into the full window — tracked 1:1 with the finger via
+  // a CSS var (--drop) written straight to the DOM, no re-render per frame.
+  // Pointer capture keeps the gesture even once the panel's growth carries
+  // the pointer over other elements; without it a fast drag loses the
+  // pointerup/move to whatever now sits under the finger.
+  const DROP_COMMIT_PX = 120;
+
+  const onPillPointerDown = (event) => {
+    if (agentOpen) return;
+    // Capture is best-effort — a rejected pointerId must not stop the drag
+    // itself from being tracked below.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // no active pointer with this id yet — track it via move/up anyway.
+    }
+    pillDragRef.current = event.clientY;
+    if (agentDropRef.current) agentDropRef.current.style.transition = "none";
+  };
+  const onPillPointerMove = (event) => {
+    if (agentOpen || pillDragRef.current == null) return;
+    const dy = Math.max(0, event.clientY - pillDragRef.current);
+    agentDropRef.current?.style.setProperty(
+      "--drop",
+      String(Math.min(1, dy / DROP_COMMIT_PX)),
+    );
+  };
+  const onPillPointerUp = (event) => {
+    if (agentOpen || pillDragRef.current == null) return;
+    const dy = Math.max(0, event.clientY - pillDragRef.current);
+    pillDragRef.current = null;
+    if (agentDropRef.current) {
+      agentDropRef.current.style.transition = "";
+      agentDropRef.current.style.removeProperty("--drop");
+    }
+    if (dy > DROP_COMMIT_PX * 0.4) setAgentOpen(true);
+  };
+
+  const agent = useAgent({
+    documentId: "library",
+    noteTitle: selectedSubject?.name,
+    subject: selectedSubject?.name,
+  });
+  const agentDisplayedTokens = useCountUp(agent.tokens);
+
+  useEffect(() => {
+    const node = agentScrollRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [agent.messages, agent.steps, agent.isRunning]);
 
   // Card previews with an image/fill object draw blank on the first pass
   // (the src decodes async - see notePreview.js) - this re-renders once any
@@ -3079,15 +3145,9 @@ export default function Library({
   const askAgent = (text) => {
     const q = text.trim();
     if (!q) return;
-    setAgentTasks((prev) =>
-      [
-        { id: Date.now(), text: q, subject: selectedSubject?.name || null },
-        ...prev,
-      ].slice(0, 6),
-    );
     setAgentOpen(true);
     setSearchQuery("");
-    showToast("An den Agenten übergeben");
+    agent.send(q);
   };
 
   const handleOpenFolder = (folder) => setSelectedSubject(folder);
@@ -3428,7 +3488,7 @@ export default function Library({
         style={{
           position: "absolute",
           left: 106,
-          top: agentOpen ? "auto" : 20,
+          top: agentOpen ? "auto" : "calc(20px + env(safe-area-inset-top, 0px))",
           bottom: agentOpen ? 20 : "auto",
           zIndex: 30,
           height: 52,
@@ -3436,9 +3496,14 @@ export default function Library({
           padding: "0 20px 0 16px",
           gap: 12,
           cursor: "text",
+          touchAction: "none",
           transition:
             "top 0.42s cubic-bezier(0.16, 1, 0.3, 1), bottom 0.42s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
+        onPointerDown={onPillPointerDown}
+        onPointerMove={onPillPointerMove}
+        onPointerUp={onPillPointerUp}
+        onPointerCancel={onPillPointerUp}
       >
         <button
           onClick={() => setIsNewDocDialogOpen(true)}
@@ -4016,7 +4081,10 @@ export default function Library({
         className="agent-panel"
         data-open={!agentOpen && !detailNote}
         data-testid="left-overview-panel"
-        style={{ top: 82, bottom: 20 }}
+        style={{
+          top: "calc(82px + env(safe-area-inset-top, 0px))",
+          bottom: 20,
+        }}
       >
         <div className="lib-glass agent-panel-card" style={{ flex: "0 0 68%" }}>
           <div className="agent-panel-head">
@@ -4063,188 +4131,107 @@ export default function Library({
 
       {/* agent panel */}
       <div
-        className="agent-panel"
+        ref={agentDropRef}
+        className="agent-panel agent-panel-drop"
         data-open={agentOpen && !detailNote}
         data-testid="agent-panel"
+        style={{
+          top: "calc(20px + env(safe-area-inset-top, 0px))",
+          bottom: 20,
+        }}
       >
         <div className="lib-glass agent-panel-card">
           <div className="agent-panel-head">
-            <span className="agent-badge">{2 + agentTasks.length} AKTIV</span>
-            <button
-              className="agent-close"
-              onClick={() => setAgentOpen(false)}
-              title="Agent schließen"
-              data-testid="agent-close-btn"
-            >
-              <X size={14} strokeWidth={2.4} />
-            </button>
-          </div>
-
-          <div className="agent-panel-body">
-            {agentTasks.map((t) => (
-              <div
-                key={t.id}
-                className="agent-card agent-card-new"
-                data-testid="agent-task"
-              >
-                <div className="agent-card-head">
-                  <Sparkles size={12} color="oklch(0.8 0.12 90)" />
-                  <span>
-                    NEUE ANFRAGE
-                    {t.subject ? ` · ${t.subject.toUpperCase()}` : ""}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    font: "500 12.5px/1.42 Manrope,sans-serif",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  {t.text}
-                </div>
-                <div className="agent-progress">
-                  <span style={{ width: "18%" }} />
-                </div>
-              </div>
-            ))}
-            <div className="agent-card">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 7,
-                }}
-              >
-                <Globe size={12} color="oklch(0.76 0.06 320)" />
-                <span
-                  style={{
-                    font: "700 9.5px ui-monospace,monospace",
-                    letterSpacing: ".05em",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  RECHERCHIERT
-                </span>
-              </div>
-              <div
-                style={{
-                  font: "500 12.5px/1.42 Manrope,sans-serif",
-                  color: "#FFFFFF",
-                }}
-              >
-                {selectedSubject
-                  ? `${selectedSubject.name}: Fachbegriffe & Zusammenfassung`
-                  : "Wahlsystem BRD vs. USA — Vergleichstabelle"}
-              </div>
-              <div className="agent-progress">
-                <span style={{ width: "64%" }} />
-              </div>
-              <div
-                style={{
-                  marginTop: 7,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  font: "600 9.5px ui-monospace,monospace",
-                  color: "#FFFFFF",
-                }}
-              >
-                <span>Quelle 4 von 6</span>
-                <span>~2 min</span>
-              </div>
-            </div>
-
-            <div className="agent-card">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 7,
-                }}
-              >
-                <ScanText size={12} color="oklch(0.76 0.055 235)" />
-                <span
-                  style={{
-                    font: "700 9.5px ui-monospace,monospace",
-                    letterSpacing: ".05em",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  LIEST HANDSCHRIFT
-                </span>
-              </div>
-              <div
-                style={{
-                  font: "500 12.5px/1.42 Manrope,sans-serif",
-                  color: "#FFFFFF",
-                }}
-              >
-                {selectedSubject
-                  ? `${selectedSubject.name}-Notizen der Woche → Formelsammlung`
-                  : "Mathe-Notizen der Woche → Formelsammlung"}
-              </div>
-              <div style={{ marginTop: 9, display: "flex", gap: 4 }}>
-                {[1, 1, 1, 0, 0].map((on, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      height: 3,
-                      flex: 1,
-                      borderRadius: 2,
-                      background: on
-                        ? "oklch(0.68 0.055 235)"
-                        : "rgba(255,255,255,.2)",
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div
+            <span
               style={{
-                marginTop: 4,
-                font: "600 9.5px ui-monospace,monospace",
-                letterSpacing: ".08em",
+                font: "700 15px \"Bricolage Grotesque\",sans-serif",
                 color: "#FFFFFF",
-                paddingLeft: 4,
               }}
             >
-              FERTIG · HEUTE
-            </div>
-
-            {[
-              'Zusammenfassung „Franz. Revolution" → PGW',
-              "Vokabeltest Unidad 3 erstellt — 24 Karten",
-            ].map((t, i) => (
-              <div
-                key={i}
-                className="lib-agent-done"
-                style={{
-                  borderRadius: 18,
-                  padding: "12px 14px",
-                  cursor: "pointer",
-                }}
-              >
-                <div
-                  style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
+              KI-Assistent
+            </span>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+              <HistoryMenu
+                sessions={agent.sessions}
+                activeId={agent.activeId}
+                onSelect={agent.selectSession}
+                onStartNew={agent.startNew}
+                onDelete={agent.deleteSession}
+                onRename={agent.renameSession}
+              />
+              {agent.messages.length > 0 && (
+                <button
+                  className="agent-close"
+                  onClick={agent.clear}
+                  title="Unterhaltung löschen"
                 >
-                  <Check
-                    size={13}
-                    color="oklch(0.7 0.08 150)"
-                    style={{ marginTop: 2, flexShrink: 0 }}
-                  />
-                  <span
-                    style={{
-                      font: "500 12.5px/1.4 Manrope,sans-serif",
-                      color: "#FFFFFF",
-                    }}
-                  >
-                    {t}
+                  <Trash2 size={13} />
+                </button>
+              )}
+              <button
+                className="agent-close"
+                onClick={() => setAgentOpen(false)}
+                title="Agent schließen"
+                data-testid="agent-close-btn"
+              >
+                <X size={14} strokeWidth={2.4} />
+              </button>
+            </div>
+          </div>
+
+          <div className="agent-panel-body rail-chat-messages" ref={agentScrollRef}>
+            {agent.messages.length === 0 && !agent.isRunning && (
+              <div className="rail-chat-empty-wrap">
+                <p className="rail-chat-empty">
+                  Frag den Agenten etwas — oder gib ihm einen Auftrag.
+                </p>
+              </div>
+            )}
+
+            {agent.messages.map((message, index) => (
+              <React.Fragment key={index}>
+                {message.role === "assistant" && message.steps?.length > 0 && (
+                  <StepList steps={message.steps} elapsedMs={message.elapsedMs} />
+                )}
+                <div className={`rail-chat-msg ${message.role}`}>
+                  {message.role === "assistant" ? (
+                    <>
+                      <Markdown text={message.content} />
+                      <CopyButton text={message.content} />
+                    </>
+                  ) : (
+                    <>
+                      {message.content}
+                      <CopyButton text={message.content} />
+                    </>
+                  )}
+                </div>
+              </React.Fragment>
+            ))}
+
+            {agent.isRunning && agent.steps.length > 0 && <StepList steps={agent.steps} />}
+
+            {agent.isRunning && (() => {
+              const researching = agent.steps.some(
+                (step) => step.state === "running" && step.name === "search_web",
+              );
+              return (
+                <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
+                  {researching ? <WritingGlobe /> : <WritingPen />}
+                  <span className="rail-chat-status-shimmer">{researching ? "Recherchiert…" : "Arbeitet…"}</span>
+                  <span className="rail-chat-status-meta">
+                    {formatElapsed(agent.elapsedMs)} · {formatTokens(agentDisplayedTokens)} Tokens
                   </span>
                 </div>
+              );
+            })()}
+
+            {agent.error && (
+              <div className="rail-chat-error">
+                <AlertTriangle size={13} />
+                <span>{agent.error}</span>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -4254,7 +4241,10 @@ export default function Library({
         className="agent-panel"
         data-open={Boolean(detailNote)}
         data-testid="note-detail-overlay"
-        style={{ top: 82, bottom: 20 }}
+        style={{
+          top: "calc(82px + env(safe-area-inset-top, 0px))",
+          bottom: 20,
+        }}
       >
         <NoteDetailPanel
           note={detailNote}

@@ -89,6 +89,13 @@ export function createDocumentRepository({ dbName = DOCUMENT_DB_NAME } = {}) {
         );
       return { note, file };
     },
+    async getOcrPage(noteId, pageIndex) {
+      return (await database()).get("ocrPages", `${noteId}:${pageIndex}`);
+    },
+    async saveOcrPage(noteId, pageIndex, words) {
+      const db = await database();
+      await db.put("ocrPages", { id: `${noteId}:${pageIndex}`, noteId, pageIndex, words, recognizedAt: Date.now() });
+    },
     async close() {
       if (dbPromise) (await dbPromise).close();
     },

@@ -1,6 +1,10 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
-import { renderPagesFromDocument } from "../documents/notePreview.js";
+import { renderPagesFromDocument, previewTextOf } from "../documents/notePreview.js";
+import { browserFolderRepository } from "../storage/folderRepository.js";
+import { browserNoteRepository } from "../storage/noteRepository.js";
+import { browserDocumentRepository } from "../storage/documentRepository.js";
+import { requestSearch } from "./agentClient.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
   PAGE_WIDTH,
@@ -81,6 +85,123 @@ export function estimateTextHeight(text, width, fontSize, lineHeight, fontFamily
   const height = host.scrollHeight;
   document.body.removeChild(host);
   return height > 0 ? height : estimateTextHeightByCharCount(text, width, fontSize, resolvedLineHeight);
+}
+
+const MAX_LISTED_NOTES = 40;
+
+// Same rule as Library.jsx's matchesFolder (kept separate rather than
+// imported - a UI component isn't a dependency of the tool layer): a note
+// belongs to a folder when its subject string matches the folder's id or name.
+function matchesFolder(note, folder) {
+  const subject = String(note?.subject || "").toLowerCase();
+  return !!subject && (subject === folder.name.toLowerCase() || subject === folder.id.toLowerCase());
+}
+
+// Imported PDFs/Bilder haben keinen extrahierten Text (kein OCR) - der
+// Auszug nennt statt Inhalt nur Seitenzahl und Quelltyp, wie schon die
+// Bibliothekskarte für importierte Dokumente (Library.jsx's importedCards).
+function importedNoteEntry(note) {
+  const pageCount = Array.isArray(note.pages) ? note.pages.length : 1;
+  const kind = note.source?.type === "pdf" ? "PDF" : "Bild";
+  return {
+    id: note.id,
+    title: note.title || "",
+    subject: note.subject || "",
+    updatedAt: note.updatedAt || 0,
+    preview: `${pageCount} ${pageCount === 1 ? "Seite" : "Seiten"} · ${kind}`,
+  };
+}
+
+// Wikipedia statt einer allgemeinen Suchmaschine: kostenlos, ohne Schlüssel,
+// per origin=* direkt aus dem Browser abrufbar und für Unterrichtsfakten die
+// verlässlichste Quelle. Ein Aufruf liefert die Einleitungen der besten
+// Treffer als Klartext, deutsch mit englischem Fallback.
+const SEARCH_LANGS = ["de", "en"];
+const SEARCH_RESULTS = 3;
+const MAX_EXTRACT = 1200;
+const SEARCH_TIMEOUT_MS = 8000;
+
+async function searchWikipedia(query, lang, signal) {
+  const params = new URLSearchParams({
+    action: "query",
+    format: "json",
+    origin: "*",
+    redirects: "1",
+    generator: "search",
+    gsrsearch: query,
+    gsrlimit: String(SEARCH_RESULTS),
+    prop: "extracts",
+    exintro: "1",
+    explaintext: "1",
+    // Ohne exlimit bekäme nur der erste Treffer einen Auszug (API-Default 1).
+    exlimit: String(SEARCH_RESULTS),
+  });
+  const response = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  const pages = data?.query?.pages;
+  if (!pages || typeof pages !== "object") return [];
+  return Object.values(pages)
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((page) => ({
+      title: String(page?.title || "").trim(),
+      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(page?.title || "").replace(/ /g, "_"))}`,
+      extract: String(page?.extract || "").trim().slice(0, MAX_EXTRACT),
+    }))
+    .filter((result) => result.title && result.extract);
+}
+
+// Die Quellenwahl (Wikipedia vs. allgemeine Websuche) trifft das Modell selbst
+// über den source-Parameter im Tool-Aufruf, nicht diese Funktion — sie führt
+// nur aus, was verlangt wurde. "auto" bleibt als Sicherheitsnetz: erst
+// Wikipedia (kein Backend-Hop, kein Kontingent), bei leerem Treffer zusätzlich
+// der serverseitig geschlüsselte Tavily-Proxy.
+async function searchWikipediaAllLangs(trimmed, signal) {
+  let lastError = null;
+  for (const lang of SEARCH_LANGS) {
+    try {
+      const results = await searchWikipedia(trimmed, lang, signal);
+      if (results.length > 0) return { source: `${lang}.wikipedia.org`, results };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return { error: lastError };
+}
+
+export async function searchWeb(query, source = "auto") {
+  const trimmed = String(query || "").trim();
+  if (!trimmed) return "Fehler: query ist leer.";
+  const mode = ["wikipedia", "web"].includes(source) ? source : "auto";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  let lastError = null;
+
+  try {
+    if (mode !== "web") {
+      const wiki = await searchWikipediaAllLangs(trimmed, controller.signal);
+      if (wiki.results) return { query: trimmed, source: wiki.source, results: wiki.results };
+      lastError = wiki.error;
+      if (mode === "wikipedia") {
+        return lastError
+          ? `Fehler: Suche fehlgeschlagen (${lastError.message}).`
+          : `Keine Wikipedia-Treffer für "${trimmed}".`;
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+
+  try {
+    const results = await requestSearch({ query: trimmed });
+    if (results.length > 0) return { query: trimmed, source: "web-search", results };
+  } catch (error) {
+    lastError = error;
+  }
+
+  return lastError
+    ? `Fehler: Suche fehlgeschlagen (${lastError.message}).`
+    : `Keine Treffer für "${trimmed}".`;
 }
 
 export const AGENT_TOOLS = [
@@ -503,6 +624,57 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "search_web",
+      description:
+        "Sucht Fakten im Internet und liefert Titel, Link und Auszug der besten Treffer. Nutze es, sobald du dir bei einem Fakt, Datum, Namen oder einer Zahl nicht sicher bist, statt zu raten — bei stabilem Schulwissen reicht meist ein Aufruf.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Suchbegriff, am besten ein Stichwort oder Lemma statt einer ganzen Frage",
+          },
+          source: {
+            type: "string",
+            enum: ["wikipedia", "web", "auto"],
+            description:
+              "wikipedia: stabiles Wissen mit eigenem Artikel — Definitionen, historische Fakten, Naturwissenschaft, Personen/Werke von enzyklopädischer Bedeutung. " +
+              "web: alles ohne festen Wikipedia-Artikel — aktuelle Ereignisse, Nachrichten, Ergebnisse, Preise, Personen/Firmen des Alltags. " +
+              "auto (Standard, falls unsicher): erst Wikipedia, bei leerem Treffer zusätzlich Websuche.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_folders",
+      description:
+        "Listet alle Ordner der Bibliothek mit id, name, parentId (null bei Ordnern oberster Ebene) und Notizanzahl. Rufe das zuerst auf, um die Ordnerstruktur günstig zu überblicken, bevor du list_notes für einen bestimmten Ordner aufrufst.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_notes",
+      description:
+        "Listet Notizen (eigene und importierte PDFs/Bilder) mit id, title, subject, updatedAt und einem kurzen Auszug (kein voller Inhalt) — günstig, um die richtige Notiz zu finden, ohne jede einzeln zu öffnen. Ohne folderId werden alle durchsucht.",
+      parameters: {
+        type: "object",
+        properties: {
+          folderId: { type: "string", description: "Nur Notizen aus diesem Ordner (id oder Name)" },
+          query: { type: "string", description: "Filtert Titel und Textauszug per Teilstring, optional" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -514,13 +686,28 @@ export const AGENT_TOOLS = [
   },
 ];
 
-const READ_ONLY_TOOL_NAMES = new Set(["read_document", "see_document", "done"]);
+const READ_ONLY_TOOL_NAMES = new Set([
+  "read_document",
+  "see_document",
+  "list_folders",
+  "list_notes",
+  "search_web",
+  "done",
+]);
 
 // Chat mode (editDocument: false) still lets the model look at the note, just
 // not change it — read_document/see_document/done from the same schema list,
 // so the read path is never a second definition to drift out of sync.
 export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
   READ_ONLY_TOOL_NAMES.has(tool.function.name),
+);
+
+const NO_DOCUMENT_TOOL_NAMES = new Set(["list_folders", "list_notes", "search_web", "done"]);
+
+// Start screen chat (Library.jsx): no open note at all, so read_document/
+// see_document have nothing to read — only search_web/done/list_folders/list_notes apply there.
+export const AGENT_NO_DOCUMENT_TOOLS = AGENT_TOOLS.filter((tool) =>
+  NO_DOCUMENT_TOOL_NAMES.has(tool.function.name),
 );
 
 // Edit mode splits into a core the model reaches for on nearly every turn
@@ -548,6 +735,9 @@ const CORE_TOOL_NAMES = new Set([
   "write_text",
   "edit_text",
   "add_page",
+  "search_web",
+  "list_folders",
+  "list_notes",
   "done",
 ]);
 
@@ -597,6 +787,10 @@ export function describeToolCall(name, args = {}) {
   switch (name) {
     case "read_document":
       return "Dokument lesen";
+    case "list_folders":
+      return "Ordner auflisten";
+    case "list_notes":
+      return args.folderId ? `Notizen in ${args.folderId} auflisten` : "Notizen auflisten";
     case "see_document":
       return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":
@@ -637,6 +831,10 @@ export function describeToolCall(name, args = {}) {
       return `Element speichern: ${args.id || "?"}`;
     case "enable_tools":
       return `Werkzeuge freischalten: ${(args.names || []).join(", ") || "?"}`;
+    case "search_web": {
+      const label = args.source === "web" ? "Websuche" : args.source === "wikipedia" ? "Wikipedia" : "Suche";
+      return `${label}: ${String(args.query || "").slice(0, 40)}`;
+    }
     case "done":
       return "Fertig";
     default:
@@ -702,10 +900,68 @@ function textPatch(args, existing, defaultColor, bounds) {
 // Executes one tool call against the live document. Never throws on bad model
 // arguments: the error text goes back to the model as the tool result so it can
 // correct itself, and the run continues.
-export function executeTool(name, rawArgs, api) {
+export async function executeTool(name, rawArgs, api) {
   const args = rawArgs && typeof rawArgs === "object" ? rawArgs : {};
-  const inkColor = color(api.getColor?.(), "#1A1A1A");
-  const document = api.getDocument();
+
+  // search_web/done need no open document — the start-screen chat (Library.jsx)
+  // calls executeTool without one at all, so api.getDocument below would throw.
+  if (name === "search_web") return searchWeb(args.query, args.source);
+  if (name === "done") return { summary: String(args.summary || "") };
+
+  if (name === "list_folders") {
+    const folders = browserFolderRepository.listFolders();
+    const notes = browserNoteRepository.listNotes();
+    return browserDocumentRepository.listImportedNotes().then((imported) => {
+      const allNotes = [...notes, ...imported];
+      return folders.map((folder) => ({
+        id: folder.id,
+        name: folder.name,
+        parentId: folder.parentId || null,
+        noteCount: allNotes.filter((n) => matchesFolder(n, folder)).length,
+      }));
+    });
+  }
+
+  if (name === "list_notes") {
+    const notes = browserNoteRepository.listNotes();
+    const folders = browserFolderRepository.listFolders();
+    const folder = args.folderId
+      ? folders.find(
+          (f) => f.id === args.folderId || f.name.toLowerCase() === String(args.folderId).toLowerCase(),
+        )
+      : null;
+    if (args.folderId && !folder)
+      return `Fehler: Ordner "${args.folderId}" gibt es nicht. Vorhanden: ${folders.map((f) => f.name).join(", ")}`;
+    const query = String(args.query || "").trim().toLowerCase();
+    return browserDocumentRepository.listImportedNotes().then((imported) => {
+      const entries = [
+        ...notes.map((n) => ({
+          id: n.id,
+          title: n.title || "",
+          subject: n.subject || "",
+          updatedAt: n.updatedAt || 0,
+          preview: previewTextOf(n.id),
+        })),
+        ...imported.map((n) => importedNoteEntry(n)),
+      ];
+      return entries
+        .filter((n) => !folder || matchesFolder(n, folder))
+        .filter(
+          (n) =>
+            !query ||
+            n.title.toLowerCase().includes(query) ||
+            n.preview.toLowerCase().includes(query),
+        )
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, MAX_LISTED_NOTES);
+    });
+  }
+
+  const inkColor = color(api?.getColor?.(), "#1A1A1A");
+  const document = api?.getDocument ? api.getDocument() : null;
+  if (!document) {
+    return `Fehler: Kein Dokument geöffnet für "${name}".`;
+  }
   const pageIds = document.pages.map((page) => page.id);
   const objects = pageObjectsOf(document);
   const bounds = boundsFor(document);

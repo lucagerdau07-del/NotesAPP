@@ -2,6 +2,16 @@ import { PAGE_WIDTH, PAGE_HEIGHT, describeExtendedToolManifest } from "./tools.j
 import { describeNoteStyle, themeForBackground } from "./noteStyle.js";
 import { describeRecipeLanguage } from "./components/index.js";
 
+// Formatiert "jetzt" auf Deutsch, lokale Zeit des Geräts — das Modell kennt
+// sonst weder das heutige Datum noch, wie weit sein Trainingsstand zurückliegt,
+// und kann "aktuell"/"heute"/relative Datumsangaben nicht einordnen.
+function formatNow(date) {
+  const weekday = new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date);
+  const day = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long", year: "numeric" }).format(date);
+  const time = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return `${weekday}, ${day}, ${time} Uhr`;
+}
+
 // One prompt for both modes: without tools the model just chats about the note,
 // with tools it edits the document. isWhiteboard swaps the page-geometry
 // paragraph for one describing the whiteboard's unbounded canvas instead.
@@ -12,12 +22,18 @@ export function buildSystemPrompt({
   canRead = canEdit,
   isWhiteboard = false,
   background,
+  now = new Date(),
 }) {
   const lines = [
     "Du bist der Assistent in einer Schul-Notizbuch-App. Du antwortest immer auf Deutsch.",
     "Antworte im Chat in Markdown: Überschriften, Listen, **fett**, `Code`, Codeblöcke, Tabellen.",
     "Nutze nie \"-\" als Gedankenstrich und nie \";\" — schreibe stattdessen mit Punkt, Komma oder \"und\"/\"aber\" als eigenem Satz. \"-\" bleibt als Aufzählungszeichen am Zeilenanfang erlaubt.",
     noteTitle ? `Geöffnete Notiz: "${noteTitle}"${subject ? ` (Fach: ${subject})` : ""}.` : "",
+    `Heute ist ${formatNow(now)} (Gerätezeit). Rechne Angaben wie "heute", "dieses Jahr", "vor zwei Wochen" oder ein Schuljahr immer relativ zu diesem Datum um, nicht relativ zu deinem Trainingsstand.`,
+    "Dein Trainingsstand kann Monate oder Jahre hinter dem heutigen Datum liegen. Bei allem, was sich seitdem geändert haben kann (aktuelle Amtsinhaber, letzte Ereignisse, Rekorde, Versionsnummern, Preise, Daten in der Zukunft aus deiner Sicht), verlasse dich nicht auf dein Training, sondern rufe search_web auf statt zu raten oder einen Vorbehalt wie \"Stand meines Wissens\" zu schreiben.",
+    "Recherchiere außerdem, sobald du dir bei einem konkreten Fakt, Datum, Namen oder einer Zahl nicht sicher bist. Bei allgemeinem Schulwissen, stabilen Definitionen oder reinen Meinungs-/Kreativaufträgen ist keine Recherche nötig.",
+    "Wähle bei search_web die Quelle passend zur Frage: source: \"wikipedia\" für stabiles Wissen mit eigenem Artikel (Definitionen, Geschichte, Naturwissenschaft), source: \"web\" für aktuelle Ereignisse, Nachrichten oder Themen ohne Wikipedia-Artikel, source: \"auto\" nur wenn du dir unsicher bist, welche Quelle passt.",
+    "Schreibe niemals \"Quelle: ...\" oder einen Link, ohne dass in diesem Gespräch tatsächlich ein search_web-Ergebnis zu dieser Frage zurückkam — ein erfundener Beleg ist schlimmer als gar keiner. Rufe das Werkzeug wirklich über einen echten Tool-Aufruf auf, nie durch Text wie \"<searchweb>...\" im Antworttext vortäuschen.",
   ];
 
   if (canEdit) {
@@ -45,6 +61,10 @@ export function buildSystemPrompt({
   } else if (canRead) {
     lines.push(
       "Du darfst die Notiz nicht bearbeiten, nur darüber reden. Nutze read_document für Text/Formen und see_document, um Handschrift oder Zeichnungen als Bild zu sehen, bevor du zum Inhalt der Notiz antwortest.",
+    );
+  } else {
+    lines.push(
+      "Es ist keine Notiz geöffnet. Wenn nach einer bestimmten Notiz oder einem Thema gefragt wird, rufe zuerst list_folders auf, um die Ordnerstruktur zu sehen, dann list_notes (bei Bedarf mit folderId oder query) statt zu raten — das ist günstiger als alle Notizen einzeln zu durchsuchen. Nenne am Ende Titel und Ordner der passenden Notiz.",
     );
   }
 

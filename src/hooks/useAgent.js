@@ -3,6 +3,7 @@ import { requestCompletion } from "../agent/agentClient.js";
 import {
   AGENT_CORE_TOOLS,
   AGENT_READ_TOOLS,
+  AGENT_NO_DOCUMENT_TOOLS,
   AGENT_EXTENDED_BY_NAME,
   describeToolCall,
   executeTool,
@@ -328,7 +329,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               ? [...AGENT_CORE_TOOLS, ...[...enabledExtra].map((name) => AGENT_EXTENDED_BY_NAME.get(name))]
               : canRead
                 ? AGENT_READ_TOOLS
-                : undefined,
+                : AGENT_NO_DOCUMENT_TOOLS,
             signal: controller.signal,
           });
           totalTokens += usage?.total_tokens ?? 0;
@@ -357,7 +358,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             const name = call.function?.name;
             const args = parseArguments(call.function?.arguments);
             const label = describeToolCall(name, args || {});
-            currentSteps = [...currentSteps, { id: call.id, label, state: "running" }];
+            currentSteps = [...currentSteps, { id: call.id, name, label, state: "running" }];
             setSteps(currentSteps);
 
             let result;
@@ -377,7 +378,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                   : `Fehler: Kein bekanntes Werkzeug unter ${JSON.stringify(requested)}.`;
             } else {
               try {
-                result = executeTool(name, args, api);
+                result = await executeTool(name, args, api);
               } catch (toolError) {
                 result = `Fehler: ${toolError.message}`;
               }

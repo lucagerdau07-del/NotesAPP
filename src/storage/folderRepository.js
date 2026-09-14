@@ -72,7 +72,20 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
 
     removeFolder(id) {
       const key = String(id);
-      write(read().filter((f) => f.id !== key));
+      const folders = read();
+      const toRemove = new Set([key]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const f of folders) {
+          if (f.parentId && toRemove.has(f.parentId) && !toRemove.has(f.id)) {
+            toRemove.add(f.id);
+            grew = true;
+          }
+        }
+      }
+      write(folders.filter((f) => !toRemove.has(f.id)));
+      return [...toRemove];
     },
   };
 }
