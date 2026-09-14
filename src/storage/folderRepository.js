@@ -41,12 +41,13 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
       return read();
     },
 
-    createFolder({ name, color, icon }) {
+    createFolder({ name, color, icon, parentId }) {
       const folder = {
         id: nextId(),
         name: String(name || "").trim(),
         color: color || null,
         icon: icon || null,
+        parentId: parentId || null,
         createdAt: now(),
       };
       write([...read(), folder]);

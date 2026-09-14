@@ -16,8 +16,17 @@ import {
   X,
   Plus,
 } from "lucide-react";
-import { hitTestObject, objectBounds } from "../../ink/pageObjects.js";
+import { hitTestObject, objectBounds, objectLayoutBounds, curveControlPoint, elbowBendX } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
+import {
+  dashArrayFor,
+  roughRectPaths,
+  roughEllipsePaths,
+  roughLinePaths,
+  roughCurvePaths,
+  roughElbowPaths,
+  roughArrowheadPaths,
+} from "../../ink/handDrawn.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
 import { renderInline } from "../Markdown.jsx";
 
@@ -50,7 +59,10 @@ const readText = (node) => node.innerText ?? node.textContent;
 
 // wraps — via an offscreen clone, so the real field never flickers or loses
 // its caret while this runs on every keystroke.
-function measureTextBox(node, maxWidth) {
+// fixedWidth skips the natural-width measurement entirely — a box the user
+// pinned by hand (autoWidth: false) wraps inside whatever width it already
+// has instead of growing to fit a long word or line.
+function measureTextBox(node, maxWidth, fixedWidth = null) {
   const clone = document.createElement("div");
   const computed = window.getComputedStyle(node);
   clone.style.position = "absolute";
@@ -62,18 +74,28 @@ function measureTextBox(node, maxWidth) {
   clone.style.letterSpacing = computed.letterSpacing;
   clone.style.lineHeight = computed.lineHeight;
   clone.style.padding = computed.padding;
-  clone.style.whiteSpace = "pre";
-  clone.style.width = "auto";
+  // Matches the real box's own wrapping (see its overflowWrap) so a fixed
+  // width that's narrower than one word measures the same broken height.
+  clone.style.overflowWrap = "break-word";
   // Must keep the breaks, or the clone measures one long line and the box
   // never grows for the row Enter just added.
   clone.textContent = readText(node) || " ";
-  document.body.appendChild(clone);
-  const width = Math.max(
-    MIN_TEXT_WIDTH,
-    Math.min(clone.scrollWidth + TEXT_WIDTH_BUFFER, maxWidth),
-  );
+  let width;
+  if (fixedWidth != null) {
+    width = fixedWidth;
+  } else {
+    clone.style.whiteSpace = "pre";
+    clone.style.width = "auto";
+    document.body.appendChild(clone);
+    width = Math.max(
+      MIN_TEXT_WIDTH,
+      Math.min(clone.scrollWidth + TEXT_WIDTH_BUFFER, maxWidth),
+    );
+    document.body.removeChild(clone);
+  }
   clone.style.whiteSpace = "pre-wrap";
   clone.style.width = `${width}px`;
+  document.body.appendChild(clone);
   const height = clone.scrollHeight;
   document.body.removeChild(clone);
   return { width, height };
@@ -93,7 +115,16 @@ function useTapSelect(onSelect) {
   const pending = useRef(null);
 
   const start = (event, objectId) => {
-    pending.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, objectId };
+    // Carried through to onSelect on release — a ctrl/cmd-held tap adds the
+    // object to the current selection instead of replacing it.
+    pending.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      objectId,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+    };
 
     const cancel = () => {
       pending.current = null;
@@ -111,7 +142,7 @@ function useTapSelect(onSelect) {
       const p = pending.current;
       if (!p || e.pointerId !== p.pointerId) return;
       cancel();
-      onSelect?.(p.objectId);
+      onSelect?.(p.objectId, { ctrlKey: p.ctrlKey, metaKey: p.metaKey });
     };
     // A second finger touching down mid-gesture means this was the start of a
     // pinch, not a tap — even if the first finger never moved.
@@ -355,8 +386,14 @@ function useDrag(onCommit) {
       return;
     }
 
-    const dx = (event.clientX - active.startX) / active.zoom;
-    const dy = (event.clientY - active.startY) / active.zoom;
+    let dx = (event.clientX - active.startX) / active.zoom;
+    let dy = (event.clientY - active.startY) / active.zoom;
+    const rad = ((object.rotation || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    // A rotated object's handles move in its own frame, so the pointer delta
+    // has to be un-rotated first.
+    if (rad && mode !== "move") [dx, dy] = [dx * cos + dy * sin, -dx * sin + dy * cos];
     let next;
     if (mode === "move") {
       next = { ...object, x: object.x + dx, y: object.y + dy };
@@ -368,12 +405,61 @@ function useDrag(onCommit) {
         width: object.width - dx,
         height: object.height - dy,
       };
+    } else if (mode === "bow") {
+      // The handle sits at the curve's peak, which is free to move in both
+      // directions: perpendicular to the chord (bow, a pixel offset) and
+      // along it (curveBend, a 0-1 fraction) — decompose the raw drag into
+      // those two components.
+      const ldx = object.width;
+      const ldy = object.height;
+      const len = Math.hypot(ldx, ldy) || 1;
+      const perpX = -ldy / len;
+      const perpY = ldx / len;
+      const paraX = ldx / len;
+      const paraY = ldy / len;
+      const baseBow = typeof object.bow === "number" ? object.bow : Math.min(40, len * 0.2);
+      const baseT = typeof object.curveBend === "number" ? object.curveBend : 0.5;
+      next = {
+        ...object,
+        bow: baseBow + dx * perpX + dy * perpY,
+        curveBend: baseT + (dx * paraX + dy * paraY) / len,
+      };
+    } else if (mode === "elbow") {
+      // The bend is a fraction (0-1) along the chord, not a pixel offset, so
+      // it stays put relative to the endpoints if they're later moved/resized.
+      const baseT = typeof object.elbowBend === "number" ? object.elbowBend : 0.5;
+      next = { ...object, elbowBend: object.width ? baseT + dx / object.width : baseT };
     } else {
+      const nextHeight = object.height + dy;
       next = {
         ...object,
         width: object.width + dx,
-        height: object.height + dy,
+        height: nextHeight,
       };
+      // Stretching a text box is "make the text bigger", not "add blank
+      // space" — scale the font (and a custom line height, if set) with it.
+      // Ratio is against the height at drag start, not the previous frame's,
+      // so repeated moves during one drag don't compound rounding error.
+      if (object.type === "text" && object.height !== 0) {
+        const scale = Math.abs(nextHeight) / Math.abs(object.height);
+        next.fontSize = Math.max(6, Math.round(object.fontSize * scale));
+        if (object.lineHeight > 0) next.lineHeight = Math.round(object.lineHeight * scale);
+      }
+    }
+    if (rad && (mode === "start" || mode === "end")) {
+      // Resizing moves the rotation center, which would drag the opposite,
+      // untouched corner/endpoint along — shift it back to where it was.
+      const pinned = (o) => {
+        const px = mode === "start" ? o.x + o.width : o.x;
+        const py = mode === "start" ? o.y + o.height : o.y;
+        const vx = px - (o.x + o.width / 2);
+        const vy = py - (o.y + o.height / 2);
+        return { x: o.x + o.width / 2 + vx * cos - vy * sin, y: o.y + o.height / 2 + vx * sin + vy * cos };
+      };
+      const before = pinned(object);
+      const after = pinned(next);
+      next.x += before.x - after.x;
+      next.y += before.y - after.y;
     }
     draftRef.current = next;
     setDraft(next);
@@ -390,9 +476,22 @@ function useDrag(onCommit) {
     if (committed) {
       if (active.mode === "rotate") {
         onCommitRef.current?.(active.object.id, { rotation: committed.rotation ?? 0 });
+      } else if (active.mode === "bow") {
+        onCommitRef.current?.(active.object.id, { bow: committed.bow, curveBend: committed.curveBend });
+      } else if (active.mode === "elbow") {
+        onCommitRef.current?.(active.object.id, { elbowBend: committed.elbowBend });
       } else {
-        const { x, y, width, height } = committed;
-        onCommitRef.current?.(active.object.id, { x, y, width, height });
+        const { x, y, width, height, fontSize, lineHeight } = committed;
+        const patch = { x, y, width, height };
+        if (active.object.type === "text") {
+          patch.fontSize = fontSize;
+          if (active.object.lineHeight > 0) patch.lineHeight = lineHeight;
+          // A resize handle (not a plain move) is the user picking a width by
+          // hand — from here on, typing should wrap inside it rather than
+          // stretching it wider again.
+          if (active.mode === "start" || active.mode === "end") patch.autoWidth = false;
+        }
+        onCommitRef.current?.(active.object.id, patch);
       }
     }
   }, []);
@@ -504,77 +603,82 @@ function TableContent({ object, editable, onResize, focusCell }) {
 
 function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null }) {
   const editableRef = useRef(null);
-  const bounds = objectBounds(object);
-  const strokeStyle = {
-    stroke: object.color,
-    strokeWidth: object.strokeWidth,
-    fill: "none",
-    strokeLinecap: "round",
-  };
+  const bounds = objectLayoutBounds(object);
+  const dashArray = dashArrayFor(object.strokeStyle);
+  const opacity = (object.opacity ?? 100) / 100;
 
   if (object.type === "arrow" || object.type === "line") {
     // Signed extents decide which corner the line runs from, so an arrow drawn
-    // leftwards keeps its head at the end the user dragged to.
-    const pad = object.strokeWidth * 4;
-    const headId = `head-${object.id}`;
+    // leftwards keeps its head at the end the user dragged to. Measured from
+    // bounds directly (not a width-sign shortcut) because a curved arrow's
+    // layout box isn't the straight chord — see objectLayoutBounds.
+    const pad = object.strokeWidth * 4 + 12;
+    const x1 = object.x - bounds.x;
+    const y1 = object.y - bounds.y;
+    const x2 = object.x + object.width - bounds.x;
+    const y2 = object.y + object.height - bounds.y;
+    // Each arrowhead points along this end's actual tangent, not the
+    // straight start-to-end direction — a curved/elbow path approaches its
+    // endpoints from a different angle than a straight line would.
+    let endAngle = Math.atan2(y2 - y1, x2 - x1);
+    let startAngle = endAngle + Math.PI;
+    if (object.arrowType === "curved") {
+      const { x: cx, y: cy } = curveControlPoint(x1, y1, x2, y2, object.bow, object.curveBend);
+      endAngle = Math.atan2(y2 - cy, x2 - cx);
+      startAngle = Math.atan2(y1 - cy, x1 - cx);
+    } else if (object.arrowType === "elbow") {
+      const midX = elbowBendX(x1, x2, object.elbowBend);
+      endAngle = Math.atan2(0, x2 - midX);
+      startAngle = Math.atan2(0, x1 - midX);
+    }
+    const linePaths =
+      object.arrowType === "curved"
+        ? roughCurvePaths(object, x1, y1, x2, y2)
+        : object.arrowType === "elbow"
+          ? roughElbowPaths(object, x1, y1, x2, y2)
+          : roughLinePaths(object, x1, y1, x2, y2);
+    const headPaths = [];
+    if (object.endArrowhead === "arrow")
+      headPaths.push(...roughArrowheadPaths(object, x2, y2, endAngle));
+    if (object.startArrowhead === "arrow")
+      headPaths.push(...roughArrowheadPaths(object, x1, y1, startAngle));
     return (
       <svg
         width={bounds.width + pad * 2}
         height={bounds.height + pad * 2}
         viewBox={`${-pad} ${-pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}`}
-        style={{ position: "absolute", left: -pad, top: -pad, overflow: "visible" }}
+        style={{ position: "absolute", left: -pad, top: -pad, overflow: "visible", opacity }}
       >
-        {object.type === "arrow" && (
-          <defs>
-            <marker
-              id={headId}
-              markerWidth="5"
-              markerHeight="5"
-              refX="4"
-              refY="2.5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M0,0 L5,2.5 L0,5 z" fill={object.color} />
-            </marker>
-          </defs>
-        )}
-        <line
-          x1={object.width < 0 ? bounds.width : 0}
-          y1={object.height < 0 ? bounds.height : 0}
-          x2={object.width < 0 ? 0 : bounds.width}
-          y2={object.height < 0 ? 0 : bounds.height}
-          markerEnd={object.type === "arrow" ? `url(#${headId})` : undefined}
-          {...strokeStyle}
-        />
+        {linePaths.map((p, i) => (
+          <path key={`l${i}`} d={p.d} stroke={p.stroke} strokeWidth={p.strokeWidth} fill="none" strokeLinecap="round" strokeDasharray={dashArray} />
+        ))}
+        {headPaths.map((p, i) => (
+          <path key={`h${i}`} d={p.d} stroke={p.stroke} strokeWidth={p.strokeWidth} fill="none" strokeLinecap="round" />
+        ))}
       </svg>
     );
   }
 
   if (object.type === "rect" || object.type === "ellipse") {
-    const inset = object.strokeWidth / 2;
+    const paths =
+      object.type === "rect"
+        ? roughRectPaths(object, bounds.width, bounds.height)
+        : roughEllipsePaths(object, bounds.width, bounds.height);
     return (
-      <svg width="100%" height="100%" style={{ overflow: "visible" }}>
-        {object.type === "rect" ? (
-          <rect
-            x={inset}
-            y={inset}
-            width={Math.max(0, bounds.width - object.strokeWidth)}
-            height={Math.max(0, bounds.height - object.strokeWidth)}
-            rx="6"
-            {...strokeStyle}
-            fill={object.fillColor || "none"}
+      <svg width="100%" height="100%" style={{ overflow: "visible", opacity }}>
+        {paths.map((p, i) => (
+          <path
+            key={i}
+            d={p.d}
+            stroke={p.stroke}
+            strokeWidth={p.strokeWidth}
+            fill={p.fill || "none"}
+            fillRule={p.fillRule}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={p.fill ? undefined : dashArray}
           />
-        ) : (
-          <ellipse
-            cx={bounds.width / 2}
-            cy={bounds.height / 2}
-            rx={Math.max(0, bounds.width / 2 - inset)}
-            ry={Math.max(0, bounds.height / 2 - inset)}
-            {...strokeStyle}
-            fill={object.fillColor || "none"}
-          />
-        )}
+        ))}
       </svg>
     );
   }
@@ -673,7 +777,11 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
   const handleInput = (event) => {
     const node = event.currentTarget;
     const maxWidth = Math.max(MIN_TEXT_WIDTH, pageWidth - object.x - PAGE_EDGE_MARGIN);
-    const { width, height } = measureTextBox(node, maxWidth);
+    // A hand-pinned width (see autoWidth on the object) wraps inside itself —
+    // that's the whole point of dragging a text box narrower — instead of
+    // growing back out to fit whatever was just typed.
+    const fixedWidth = object.autoWidth === false ? bounds.width : null;
+    const { width, height } = measureTextBox(node, maxWidth, fixedWidth);
     // Snapped text still needs whole rows (plus the same baseline padding
     // snapTextToGrid adds — see above) so the box lands back on a rule once
     // this reaches the reducer; unsnapped text just takes the measured height.
@@ -681,7 +789,7 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
     const nextHeight = snapped ? rows * lineHeight + paddingTop : height;
     const patch = {};
     if (Math.abs(nextHeight - bounds.height) > 0.5) patch.height = nextHeight;
-    if (Math.abs(width - bounds.width) > 0.5) patch.width = width;
+    if (!fixedWidth && Math.abs(width - bounds.width) > 0.5) patch.width = width;
     if (Object.keys(patch).length > 0)
       onResize?.(object.id, { ...patch, text: readText(node) });
   };
@@ -717,6 +825,10 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
         // so a hard break advances exactly one line-height — which is a whole
         // rule, keeping the next line on the ruling.
         whiteSpace: "pre-wrap",
+        // pre-wrap alone only wraps at spaces — a box dragged narrower than
+        // one word (or one big enough font) needs this to break mid-word
+        // instead of just overflowing past the edge.
+        overflowWrap: "break-word",
         outline: "none",
         overflow: "hidden",
         cursor: editable ? "text" : "inherit",
@@ -767,7 +879,7 @@ function Handle({ position, onPointerDown, containerScale = 1 }) {
   );
 }
 
-function RotateHandle({ position, onPointerDown, containerScale = 1 }) {
+function RotateHandle({ position, onPointerDown, containerScale = 1, gap = 0 }) {
   return (
     <div
       data-testid="rotate-handle"
@@ -775,7 +887,7 @@ function RotateHandle({ position, onPointerDown, containerScale = 1 }) {
       style={{
         position: "absolute",
         left: position.left - HANDLE_HIT / 2,
-        top: position.top - HANDLE_HIT,
+        top: position.top - HANDLE_HIT - gap,
         width: HANDLE_HIT,
         height: HANDLE_HIT,
         transform:
@@ -810,6 +922,97 @@ function RotateHandle({ position, onPointerDown, containerScale = 1 }) {
           background: "#3E7BD8",
         }}
       />
+    </div>
+  );
+}
+
+// Sits above a selected text box like a zoom-percent readout — click it to
+// type an exact size instead of eyeballing a resize drag.
+function FontSizeBadge({ fontSize, containerScale = 1, onCommit }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(fontSize));
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!editing) setValue(String(fontSize));
+  }, [fontSize, editing]);
+
+  useEffect(() => {
+    if (!editing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const next = Math.max(6, Math.round(Number(value)));
+    if (Number.isFinite(next) && next !== fontSize) onCommit(next);
+  };
+
+  return (
+    <div
+      data-testid="text-font-size-badge"
+      onPointerDown={(event) => event.stopPropagation()}
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: -84,
+        transform:
+          containerScale === 1 ? "translateX(-50%)" : `translateX(-50%) scale(${1 / containerScale})`,
+        transformOrigin: "50% 100%",
+        zIndex: 1000,
+      }}
+    >
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="number"
+          min={6}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            } else if (event.key === "Escape") {
+              setEditing(false);
+              setValue(String(fontSize));
+            }
+          }}
+          style={{
+            width: 48,
+            textAlign: "center",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.2)",
+            background: "rgba(20,20,24,0.92)",
+            color: "#EFECE4",
+            padding: "3px 0",
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Schriftgröße"
+          style={{
+            display: "block",
+            padding: "3px 10px",
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(20,20,24,0.92)",
+            color: "#EFECE4",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "text",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {fontSize}px
+        </button>
+      )}
     </div>
   );
 }
@@ -972,7 +1175,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
         const origin = containerOffset
           ? { x: mapped.x - containerOffset.x, y: mapped.y - containerOffset.y }
           : mapped;
-        const bounds = objectBounds(object);
+        const bounds = objectLayoutBounds(object);
         const isSelected = selectedId === object.id;
 
         return (
@@ -982,6 +1185,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
             data-object-id={object.id}
             data-object-type={object.type}
             onPointerDown={(event) => {
+              // Right-click is the whiteboard's marquee gesture now — let it
+              // pass through untouched instead of selecting/dragging.
+              if (event.pointerType === "mouse" && event.button !== 0) return;
               if (croppingId === object.id) return;
               if (object.type === "link" && !isSelected && editingId !== object.id && onOpenLink) {
                 event.stopPropagation();
@@ -991,11 +1197,23 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               // An empty rect/ellipse only grabs the pointer near its outline —
               // missing that band lets the click fall through to the canvas
               // underneath instead of stopping propagation.
+              // Measured from the center: a rotated wrapper's client rect is its
+              // axis-aligned hull, so only the center still maps onto bounds.
               const rect = event.currentTarget.getBoundingClientRect();
-              const localX = bounds.x + (event.clientX - rect.left) / pointerScale;
-              const localY = bounds.y + (event.clientY - rect.top) / pointerScale;
+              const localX =
+                bounds.x + bounds.width / 2 + (event.clientX - (rect.left + rect.width / 2)) / pointerScale;
+              const localY =
+                bounds.y + bounds.height / 2 + (event.clientY - (rect.top + rect.height / 2)) / pointerScale;
               if (!hitTestObject(object, localX, localY)) return;
-              if (isSelected) {
+              // Past this point the click is a genuine hit, not a fallthrough
+              // — stop it here so the canvas underneath (ink draw, marquee
+              // select) never also reacts to the same press.
+              event.stopPropagation();
+              // A ctrl/cmd-held click always goes through tapSelect to toggle
+              // group membership, even on an already-selected object — plain
+              // clicks alone start a move drag.
+              const additive = event.ctrlKey || event.metaKey;
+              if (isSelected && !additive) {
                 if (!object.locked && editingId !== object.id) drag.start(event, object, "move", pointerScale);
               } else {
                 tapSelect(event, object.id);
@@ -1128,8 +1346,8 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                     {(object.type === "arrow" || object.type === "line") && (
                       <Handle
                         position={{
-                          left: (object.width < 0 ? bounds.width : 0) * zoom,
-                          top: (object.height < 0 ? bounds.height : 0) * zoom,
+                          left: (object.x - bounds.x) * zoom,
+                          top: (object.y - bounds.y) * zoom,
                         }}
                         onPointerDown={(event) => drag.start(event, object, "start", pointerScale)}
                         containerScale={containerScale}
@@ -1137,28 +1355,90 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                     )}
                     <Handle
                       position={{
-                        left: (object.width < 0 ? 0 : bounds.width) * zoom,
-                        top: (object.height < 0 ? 0 : bounds.height) * zoom,
+                        left: (object.x + object.width - bounds.x) * zoom,
+                        top: (object.y + object.height - bounds.y) * zoom,
                       }}
                       onPointerDown={(event) => drag.start(event, object, "end", pointerScale)}
                       containerScale={containerScale}
                     />
-                    {object.type !== "arrow" && object.type !== "line" && (
-                      <RotateHandle
-                        position={{
-                          left: (bounds.width * zoom) / 2,
-                          top: 0,
-                        }}
-                        onPointerDown={(event) => {
-                          const rect = event.currentTarget.parentElement?.getBoundingClientRect();
-                          const cx = rect ? rect.left + rect.width / 2 : event.clientX;
-                          const cy = rect ? rect.top + rect.height / 2 : event.clientY;
-                          drag.start(event, object, "rotate", pointerScale, { x: cx, y: cy });
-                        }}
+                    <RotateHandle
+                      position={{
+                        left: (bounds.width * zoom) / 2,
+                        top: 0,
+                      }}
+                      onPointerDown={(event) => {
+                        const rect = event.currentTarget.parentElement?.getBoundingClientRect();
+                        const cx = rect ? rect.left + rect.width / 2 : event.clientX;
+                        const cy = rect ? rect.top + rect.height / 2 : event.clientY;
+                        drag.start(event, object, "rotate", pointerScale, { x: cx, y: cy });
+                      }}
+                      containerScale={containerScale}
+                      // A line/arrow can run right along the top edge of its own
+                      // bounding box (either endpoint may sit at local y=0), so
+                      // the rotate handle's hit zone needs real clearance there
+                      // — otherwise a click meant for the line grabs the handle
+                      // instead, since rect/ellipse's default zero-gap placement
+                      // only works because their own hit area never reaches y=0.
+                      // A curved arrow's peak can bow further still (up to 40px,
+                      // see curveControlPoint), so when it bows upward past y=0
+                      // the base 22px isn't enough clearance — extend the gap to
+                      // clear the actual peak for this object.
+                      gap={
+                        object.type === "arrow" || object.type === "line"
+                          ? (() => {
+                              if (object.arrowType !== "curved") return 22;
+                              const x1 = object.x - bounds.x;
+                              const y1 = object.y - bounds.y;
+                              const x2 = object.x + object.width - bounds.x;
+                              const y2 = object.y + object.height - bounds.y;
+                              const { y: cy } = curveControlPoint(x1, y1, x2, y2, object.bow, object.curveBend);
+                              return cy < 0 ? 22 - cy : 22;
+                            })()
+                          : 0
+                      }
+                    />
+                    {object.arrowType === "curved" && (
+                      <Handle
+                        position={(() => {
+                          const x1 = object.x - bounds.x;
+                          const y1 = object.y - bounds.y;
+                          const x2 = object.x + object.width - bounds.x;
+                          const y2 = object.y + object.height - bounds.y;
+                          const { x: cx, y: cy } = curveControlPoint(x1, y1, x2, y2, object.bow, object.curveBend);
+                          return { left: cx * zoom, top: cy * zoom };
+                        })()}
+                        onPointerDown={(event) => drag.start(event, object, "bow", pointerScale)}
+                        containerScale={containerScale}
+                      />
+                    )}
+                    {object.arrowType === "elbow" && (
+                      <Handle
+                        position={(() => {
+                          const x1 = object.x - bounds.x;
+                          const y1 = object.y - bounds.y;
+                          const x2 = object.x + object.width - bounds.x;
+                          const y2 = object.y + object.height - bounds.y;
+                          const midX = elbowBendX(x1, x2, object.elbowBend);
+                          return { left: midX * zoom, top: ((y1 + y2) / 2) * zoom };
+                        })()}
+                        onPointerDown={(event) => drag.start(event, object, "elbow", pointerScale)}
                         containerScale={containerScale}
                       />
                     )}
                   </>
+                )}
+
+                {object.type === "text" && !object.locked && (
+                  <FontSizeBadge
+                    fontSize={object.fontSize}
+                    containerScale={containerScale}
+                    onCommit={(nextFontSize) => {
+                      const scale = nextFontSize / object.fontSize;
+                      const patch = { fontSize: nextFontSize };
+                      if (object.lineHeight > 0) patch.lineHeight = Math.round(object.lineHeight * scale);
+                      onChange?.(object.id, patch);
+                    }}
+                  />
                 )}
 
                 {object.type === "table" && !object.locked && (

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -9,6 +9,7 @@ import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { browserNoteRepository } from "./storage/noteRepository.js";
+import { exportDocumentAsPdf, exportPageAsPng } from "./documents/exportDocument.js";
 
 // These screens/panels are not needed on initial load (library or a plain
 // note), so they're split into their own chunks and fetched on demand.
@@ -45,6 +46,8 @@ function Editor({ activeNote, onBack }) {
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [isImmersive, setIsImmersive] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const inkControllerRef = useRef(null);
   const browserBridge = useMemo(() => createBrowserBridge(), []);
   const browserRepository = useMemo(
@@ -61,6 +64,12 @@ function Editor({ activeNote, onBack }) {
   // has room, DocumentView picks this up to arm the drag tool, and
   // onCircleToSearch (below) reopens the panel once a region comes back.
   const [armCircleSearchRequest, setArmCircleSearchRequest] = useState(null);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      import("./backup/cloudBackup.js").then((m) => m.runWeeklyBackupIfDue());
+    }, 5000);
+    return () => clearTimeout(id);
+  }, []);
   useEffect(() => {
     return browserBridge.subscribe((event) => {
       if (event.type !== "image-drop") return;
@@ -85,12 +94,44 @@ function Editor({ activeNote, onBack }) {
   const navigationSequenceRef = useRef(0);
   const railWidthRef = useRef(railWidth);
   const resizePointerRef = useRef(null);
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isExportMenuOpen) return undefined;
+    const handleDown = (event) => {
+      if (!exportMenuRef.current?.contains(event.target)) setIsExportMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [isExportMenuOpen]);
+
   const openAppLink = (url) => {
     if (!isInternalBrowserUrl(url)) return;
     navigationSequenceRef.current += 1;
     setBrowserNavigation({ id: navigationSequenceRef.current, url });
     setBrowserFullscreen(false);
     setPanelMode("browser");
+  };
+
+  const handleExport = async (kind) => {
+    setIsExportMenuOpen(false);
+    const controller = inkControllerRef.current;
+    const inkDoc = controller?.getDocument?.();
+    if (!inkDoc) return;
+    setIsExporting(true);
+    try {
+      const filenameBase = activeNote?.title || "Notiz";
+      if (kind === "pdf") {
+        await exportDocumentAsPdf(inkDoc, filenameBase);
+      } else {
+        const pageId = inkDoc.pages[currentPage - 1]?.id || inkDoc.pages[0]?.id;
+        await exportPageAsPng(inkDoc, pageId, filenameBase);
+      }
+    } catch (error) {
+      globalThis.alert?.(`Export fehlgeschlagen: ${error.message || error}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
@@ -173,9 +214,26 @@ function Editor({ activeNote, onBack }) {
         >
           <Maximize2 size={16} />
         </button>
-        <button className="rail-btn" title="Teilen">
-          <Share size={16} />
-        </button>
+        <div style={{ position: "relative" }} ref={exportMenuRef}>
+          <button
+            className={`rail-btn ${isExportMenuOpen ? "active" : ""}`}
+            title="Exportieren"
+            disabled={isExporting}
+            onClick={() => setIsExportMenuOpen((prev) => !prev)}
+          >
+            <Share size={16} />
+          </button>
+          {isExportMenuOpen && (
+            <div className="export-menu">
+              <button onClick={() => handleExport("png")}>
+                <ImageIcon size={15} /> Seite als PNG
+              </button>
+              <button onClick={() => handleExport("pdf")}>
+                <FileText size={15} /> Dokument als PDF
+              </button>
+            </div>
+          )}
+        </div>
         <button className="rail-btn" title="Mehr">
           <MoreHorizontal size={16} />
         </button>

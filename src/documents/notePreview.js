@@ -10,7 +10,7 @@ const THUMB_DPR = 2;
 // Breathing room around the content, in page units, before it's scaled to
 // fit - otherwise a stroke or text box starting right at its own edge would
 // touch the thumbnail's border.
-const CONTENT_PADDING = 24;
+export const CONTENT_PADDING = 24;
 // A single short word or tiny doodle would otherwise get blown up to fill
 // the whole thumbnail; capping how far this ever scales UP keeps that
 // readable instead of oversized. Scaling down to fit has no such cap.
@@ -113,7 +113,7 @@ function drawRuling(context, page, scale, view) {
 // and offset off this (instead of always cropping from the page's own 0,0
 // origin) is what keeps content centered and unclipped regardless of where
 // on the page it was actually drawn.
-function contentBoundsOf(inkDoc, pageId) {
+export function contentBoundsOf(inkDoc, pageId) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -165,7 +165,7 @@ export function previewTextOf(documentId) {
 // behind the image (see_document, which hands the result straight to the
 // model) only need the right contrast, so the first colour stop stands in for
 // the whole gradient.
-function flatBackdropColor(background) {
+export function flatBackdropColor(background) {
   const css = String(background || "");
   if (!css) return null;
   const rgb = css.match(/rgba?\(\s*\d+[,\s]+\d+[,\s]+\d+[^)]*\)/i);
@@ -545,7 +545,7 @@ export function renderRegionFromDocument(inkDoc, pageId, rect, options = {}) {
   const { minX, minY, maxX, maxY } = rect;
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
-  const { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality } = options;
+  const { maxDimension = FULL_PAGE_MAX_DIMENSION, mimeType, quality, paintBackground } = options;
   const scale = maxDimension / Math.max(width, height);
 
   return renderComposite({
@@ -560,5 +560,6 @@ export function renderRegionFromDocument(inkDoc, pageId, rect, options = {}) {
     view: { minX, minY, maxX, maxY },
     mimeType,
     quality,
+    paintBackground,
   });
 }

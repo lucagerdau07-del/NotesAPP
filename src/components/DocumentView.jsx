@@ -173,7 +173,7 @@ const TEXT_COLORS = ["#EFECE4", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#14
 
 // Edits the selected text object when there is one, otherwise the defaults the
 // next insert will use — same controls either way.
-function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose }) {
+export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -332,6 +332,182 @@ function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSe
           <Plus size={14} /> Text einfügen
         </button>
       )}
+    </div>
+  );
+}
+
+const SHAPE_COLORS = ["#141418", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#EFECE4"];
+const STROKE_WIDTHS = [2, 3, 5];
+const STROKE_STYLES = [
+  { id: "solid", label: "Durchgehend", dash: "0" },
+  { id: "dashed", label: "Gestrichelt", dash: "6 4" },
+  { id: "dotted", label: "Gepunktet", dash: "1.5 4" },
+];
+const ARROW_TYPES = [
+  { id: "straight", label: "Gerade" },
+  { id: "curved", label: "Kurve" },
+  { id: "elbow", label: "Eckig" },
+];
+
+// Edits the selected rect/ellipse/line/arrow object — same "no selection, no
+// popover" shape as text minus the insert button, since these objects are
+// already inserted via the shapes popover with the current pen color/width.
+export function ShapeSettingsPopover({ object, onChange, onClose }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".shape-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  if (!object) return null;
+  const isLineLike = object.type === "line" || object.type === "arrow";
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover shape-settings-popover"
+      style={{ top: 120, width: 250 }}
+      data-testid="shape-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Square size={14} /> Form-Einstellungen
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="text-setting-label">FARBE</div>
+      <div className="text-style-row">
+        {SHAPE_COLORS.map((swatch) => (
+          <button
+            key={swatch}
+            className={`text-color-btn ${
+              object.color?.toLowerCase() === swatch.toLowerCase() ? "active" : ""
+            }`}
+            style={{ background: swatch }}
+            title={swatch}
+            onClick={() => onChange({ color: swatch })}
+          />
+        ))}
+      </div>
+
+      <div className="text-setting-label">STRICHSTÄRKE</div>
+      <div className="thickness-presets">
+        {STROKE_WIDTHS.map((w) => (
+          <button
+            key={w}
+            className={`thickness-preset-btn ${object.strokeWidth === w ? "active" : ""}`}
+            onClick={() => onChange({ strokeWidth: w })}
+            title={`${w}px`}
+          >
+            <span style={{ width: 14, height: Math.max(1, w), background: "currentColor", borderRadius: 2 }} />
+          </button>
+        ))}
+      </div>
+
+      <div className="text-setting-label">STRICHSTIL</div>
+      <div className="text-style-row">
+        {STROKE_STYLES.map((s) => (
+          <button
+            key={s.id}
+            className={`text-style-btn ${object.strokeStyle === s.id ? "active" : ""}`}
+            title={s.label}
+            onClick={() => onChange({ strokeStyle: s.id })}
+            style={{ flex: 1 }}
+          >
+            <svg width="28" height="10" viewBox="0 0 28 10">
+              <line x1="2" y1="5" x2="26" y2="5" stroke="currentColor" strokeWidth="2" strokeDasharray={s.dash} strokeLinecap="round" />
+            </svg>
+          </button>
+        ))}
+      </div>
+
+      {object.type === "rect" && (
+        <>
+          <div className="text-setting-label">ECKEN</div>
+          <div className="text-style-row">
+            <button
+              className={`text-style-btn ${object.rounded ? "" : "active"}`}
+              onClick={() => onChange({ rounded: false })}
+              style={{ flex: 1 }}
+              title="Scharf"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16"><rect x="2" y="2" width="16" height="12" fill="none" stroke="currentColor" strokeWidth="2" /></svg>
+            </button>
+            <button
+              className={`text-style-btn ${object.rounded ? "active" : ""}`}
+              onClick={() => onChange({ rounded: true })}
+              style={{ flex: 1 }}
+              title="Rund"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16"><rect x="2" y="2" width="16" height="12" rx="5" fill="none" stroke="currentColor" strokeWidth="2" /></svg>
+            </button>
+          </div>
+        </>
+      )}
+
+      {isLineLike && (
+        <>
+          <div className="text-setting-label">PFEILTYP</div>
+          <div className="text-style-row">
+            {ARROW_TYPES.map((t) => (
+              <button
+                key={t.id}
+                className={`text-style-btn ${object.arrowType === t.id ? "active" : ""}`}
+                title={t.label}
+                onClick={() => onChange({ arrowType: t.id })}
+                style={{ flex: 1, fontSize: 11 }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-setting-label">PFEILSPITZEN</div>
+          <div className="text-style-row">
+            <button
+              className={`text-style-btn ${object.startArrowhead === "arrow" ? "active" : ""}`}
+              onClick={() => onChange({ startArrowhead: object.startArrowhead === "arrow" ? "none" : "arrow" })}
+              style={{ flex: 1, fontSize: 11 }}
+            >
+              Start
+            </button>
+            <button
+              className={`text-style-btn ${object.endArrowhead === "arrow" ? "active" : ""}`}
+              onClick={() => onChange({ endArrowhead: object.endArrowhead === "arrow" ? "none" : "arrow" })}
+              style={{ flex: 1, fontSize: 11 }}
+            >
+              Ende
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="text-setting-label">DECKKRAFT ({object.opacity ?? 100}%)</div>
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min="10"
+          max="100"
+          step="5"
+          value={object.opacity ?? 100}
+          onChange={(e) => onChange({ opacity: parseInt(e.target.value, 10) })}
+          className="thickness-slider"
+        />
+        <span className="thickness-val">{object.opacity ?? 100}%</span>
+      </div>
     </div>
   );
 }
@@ -986,6 +1162,7 @@ export default function DocumentView({
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
+  const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
   const [isLayersOpen, setIsLayersOpen] = useState(false);
   // Defaults for the next text insert. Editing a selected text writes to the
   // object instead, so the popover always shows what the next edit affects.
@@ -1251,11 +1428,27 @@ export default function DocumentView({
 
   const selectedTextObject =
     pageObjects.find((o) => o.id === selectedObjectId && o.type === "text") || null;
+  const SHAPE_TYPES = ["rect", "ellipse", "line", "arrow"];
+  const selectedShapeObject =
+    pageObjects.find((o) => o.id === selectedObjectId && SHAPE_TYPES.includes(o.type)) || null;
 
   const handleTextStyleChange = (patch) => {
     setTextStyle((prev) => ({ ...prev, ...patch }));
     if (selectedTextObject) handleObjectChange(selectedTextObject.id, patch);
   };
+  const handleShapeStyleChange = (patch) => {
+    if (selectedShapeObject) handleObjectChange(selectedShapeObject.id, patch);
+  };
+  // Selecting a shape opens its settings automatically, same as the text tool
+  // keeps its popover in sync with whatever text object is selected.
+  useEffect(() => {
+    if (selectedShapeObject) {
+      setIsShapeSettingsOpen(true);
+      setIsTextSettingsOpen(false);
+    } else if (!selectedTextObject) {
+      setIsShapeSettingsOpen(false);
+    }
+  }, [selectedObjectId]);
   const handleObjectDelete = (objectId) => {
     setSelectedObjectId(null);
     setEditingObjectId((prev) => (prev === objectId ? null : prev));
@@ -1709,6 +1902,8 @@ export default function DocumentView({
     // A click never starts on an object — those stop propagation before it
     // reaches here — so any page pointerdown means "away", clearing selection.
     setSelectedObjectId(null);
+    // A tap that only dismisses a selection must not also leave an ink dot.
+    if (selectedObjectId && e.pointerType !== "touch") return;
 
     if (isBucketMode) {
       inkPointer.onPointerDown(e, { preventDraw: true });
@@ -2980,6 +3175,13 @@ export default function DocumentView({
             setIsTextSettingsOpen(false);
           }}
           onClose={() => setIsTextSettingsOpen(false)}
+        />
+      )}
+      {isShapeSettingsOpen && selectedShapeObject && (
+        <ShapeSettingsPopover
+          object={selectedShapeObject}
+          onChange={handleShapeStyleChange}
+          onClose={() => setIsShapeSettingsOpen(false)}
         />
       )}
       {/* Canva Layer Drawer */}

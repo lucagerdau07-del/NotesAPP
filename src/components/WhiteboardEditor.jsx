@@ -15,9 +15,25 @@ import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
-import { DESIGN_TOOLS, TEXT_TOOL, DesignToolsPopover } from "./DocumentView.jsx";
+import {
+  DESIGN_TOOLS,
+  TEXT_TOOL,
+  DesignToolsPopover,
+  TextSettingsPopover,
+  ShapeSettingsPopover,
+} from "./DocumentView.jsx";
 
-const WORLD_UNIT_LAYOUT = { zoom: 1 };
+// No page boundary on an infinite whiteboard — autoWidth text must never wrap
+// against the 800px default ObjectContent assumes for a bounded paper page.
+const WORLD_UNIT_LAYOUT = { zoom: 1, pageWidth: Infinity };
+
+// Matches createPageObject's own default (pageObjects.js) — a plain click
+// keeps that size, only a real drag scales away from it.
+const TEXT_BASE_FONT_SIZE = 16;
+function scaledTextFontSize(height) {
+  const scale = Math.abs(height) / TEXT_TOOL.height;
+  return Math.max(6, Math.round(TEXT_BASE_FONT_SIZE * scale));
+}
 
 function relativePoint(element, event) {
   if (!element) return null;
@@ -86,6 +102,13 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const touchesRef = useRef(new Map());
   const pinchRef = useRef(null);
   const pinchCommitRef = useRef(false);
+  // Copy/duplicate/paste clipboard for page objects — kept in-memory rather
+  // than the OS clipboard, since only this app needs to read it back.
+  const clipboardRef = useRef(null);
+  // Held space pans with the mouse regardless of the active tool, same
+  // convention as Figma/Photoshop. Tracks the one pointer doing it.
+  const [isSpaceDown, setIsSpaceDown] = useState(false);
+  const panPointerRef = useRef(null);
   const [isEraser, setIsEraser] = useState(false);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [isLassoMode, setIsLassoMode] = useState(false);
@@ -98,6 +121,18 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [draftPlacement, setDraftPlacement] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
   const [editingObjectId, setEditingObjectId] = useState(null);
+  const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
+  const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 20,
+    fontFamily: "sans",
+    textAlign: "left",
+    bold: false,
+    italic: false,
+    snapToLines: false,
+    lineStep: 1,
+    color: "#EFECE4",
+  });
   const [processingImageId, setProcessingImageId] = useState(null);
   const imageInputRef = useRef(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
@@ -213,12 +248,34 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   };
 
   const handlePointerDown = (event) => {
-    if (selectedObjectId && !event.target.closest('[data-testid="object-container"]')) {
+    if (isSpaceDown && event.pointerType === "mouse" && event.button === 0) {
+      panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      return;
+    }
+    // Right-click-drag is the mouse's marquee — plain left-drag stays drawing
+    // (it always was; a mouse should be able to draw same as a stylus). A
+    // 4-corner box is just another polygon to the freehand lasso's own
+    // render/commit code below, which is why rectStart is all that marks it.
+    if (event.pointerType === "mouse" && event.button === 2) {
+      event.preventDefault();
+      const point = mapPoint(event);
+      if (!point) return;
       setSelectedObjectId(null);
+      setLassoSelection(null);
+      setLassoDraft({
+        pointerId: event.pointerId,
+        points: [{ x: point.x, y: point.y }],
+        rectStart: { x: point.x, y: point.y },
+      });
+      return;
     }
-    if (editingObjectId && !event.target.closest('[data-testid="object-container"]')) {
-      setEditingObjectId(null);
-    }
+    // A press reaching here never hit a real object — PageObjectLayer stops
+    // propagation itself the moment one does — so it always clears whatever
+    // was selected/editing, same as clicking true empty canvas.
+    const hadSelection = Boolean(selectedObjectId || lassoSelection?.objectIds?.length || editingObjectId);
+    if (selectedObjectId) setSelectedObjectId(null);
+    if (lassoSelection?.objectIds?.length) setLassoSelection(null);
+    if (editingObjectId) setEditingObjectId(null);
     if (event.pointerType === "touch") {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2) {
@@ -242,6 +299,8 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       }
       if (touchesRef.current.size > 2) return;
     }
+    // A tap that only dismisses a selection must not also leave an ink dot.
+    if (hadSelection) return;
     if (isBucketMode) {
       const point = mapPoint(event);
       handleBucketFill(point);
@@ -264,6 +323,15 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   };
 
   const handlePointerMove = (event) => {
+    const pan = panPointerRef.current;
+    if (pan && pan.pointerId === event.pointerId) {
+      const dx = event.clientX - pan.x;
+      const dy = event.clientY - pan.y;
+      pan.x = event.clientX;
+      pan.y = event.clientY;
+      panBy(dx, dy);
+      return;
+    }
     if (event.pointerType === "touch" && touchesRef.current.has(event.pointerId)) {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2 && pinchRef.current) {
@@ -293,13 +361,31 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
       const point = mapPoint(event);
       if (!point) return;
-      setLassoDraft((prev) => ({ ...prev, points: [...prev.points, { x: point.x, y: point.y }] }));
+      if (lassoDraft.rectStart) {
+        // Marquee: rebuild the 4 corners from the fixed start each move,
+        // rather than appending like the freehand lasso's own trail does.
+        const { x: sx, y: sy } = lassoDraft.rectStart;
+        const corners = [
+          { x: sx, y: sy },
+          { x: point.x, y: sy },
+          { x: point.x, y: point.y },
+          { x: sx, y: point.y },
+          { x: sx, y: sy },
+        ];
+        setLassoDraft((prev) => ({ ...prev, points: corners }));
+      } else {
+        setLassoDraft((prev) => ({ ...prev, points: [...prev.points, { x: point.x, y: point.y }] }));
+      }
       return;
     }
     inkPointer.onPointerMove(event);
   };
 
   const handlePointerUp = (event) => {
+    if (panPointerRef.current?.pointerId === event.pointerId) {
+      panPointerRef.current = null;
+      return;
+    }
     if (event.pointerType === "touch") {
       const pinch = pinchRef.current;
       if (pinch?.pointerIds.includes(event.pointerId)) {
@@ -343,12 +429,38 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         y: dragged || tool.id === "text" ? draftPlacement.startY : draftPlacement.startY - tool.height / 2,
         width: dragged ? draftPlacement.width : tool.width,
         height: dragged ? draftPlacement.height : tool.height,
-        color: inkController.color || "#3E7BD8",
+        color: draftPlacement.type === "text" ? textStyle.color : inkController.color || "#3E7BD8",
         strokeWidth: inkController.penWidth || 3,
-        text: draftPlacement.type === "text" ? (dragged ? "Text" : "") : undefined,
+        // Always empty, click or drag alike — dropping straight into edit mode
+        // below means there is no placeholder left to clear by hand, and an
+        // untouched box just deletes itself on blur (see PageObjectLayer's
+        // onCommitText).
+        text: draftPlacement.type === "text" ? "" : undefined,
+        // A dragged-out text box reads its size as "how big should this
+        // read", same as stretching an existing one via its resize handle.
+        fontSize:
+          draftPlacement.type === "text" && dragged
+            ? scaledTextFontSize(draftPlacement.height)
+            : draftPlacement.type === "text"
+              ? textStyle.fontSize
+              : undefined,
+        // A plain click keeps hugging content width as you type; a drag
+        // picked a deliberate width, so typing should wrap within it instead.
+        autoWidth: !dragged,
+        ...(draftPlacement.type === "text"
+          ? {
+              fontFamily: textStyle.fontFamily,
+              textAlign: textStyle.textAlign,
+              bold: textStyle.bold,
+              italic: textStyle.italic,
+            }
+          : {}),
       });
       inkController.addObject?.(object);
       setSelectedObjectId(object.id);
+      // A mouse user who clicked or dragged the text tool wants to type next,
+      // not click a second time to enter edit mode.
+      if (draftPlacement.type === "text") setEditingObjectId(object.id);
       setDraftPlacement(null);
       setPlacingTool(null);
       return;
@@ -356,8 +468,43 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (lassoDraft && lassoDraft.pointerId === event.pointerId) {
       const polygon = lassoDraft.points;
       if (polygon.length >= 3) {
-        const strokeIds = strokesInLasso(strokes, pageId, polygon);
-        const objectIds = objectsInLasso(pageObjects, pageId, polygon);
+        let strokeIds;
+        let objectIds;
+        if (lassoDraft.rectStart) {
+          // Marquee: a straight-edged box reads as "fully contains", not
+          // "touches a point of" — that any-point rule is right for a
+          // hand-drawn lasso traced around something, but here it let one
+          // grazed long stroke's whole length balloon the selection box far
+          // past the rectangle actually dragged.
+          const xs = polygon.map((p) => p.x);
+          const ys = polygon.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          strokeIds = strokes
+            .filter(
+              (s) =>
+                s.pageId === pageId &&
+                s.points.every((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY),
+            )
+            .map((s) => s.id);
+          objectIds = pageObjects
+            .filter((o) => {
+              if (o.pageId !== pageId) return false;
+              const bounds = objectBounds(o);
+              return (
+                bounds.x >= minX &&
+                bounds.x + bounds.width <= maxX &&
+                bounds.y >= minY &&
+                bounds.y + bounds.height <= maxY
+              );
+            })
+            .map((o) => o.id);
+        } else {
+          strokeIds = strokesInLasso(strokes, pageId, polygon);
+          objectIds = objectsInLasso(pageObjects, pageId, polygon);
+        }
         if (strokeIds.length > 0 || objectIds.length > 0) {
           setLassoSelection({ strokeIds, objectIds });
         }
@@ -369,6 +516,10 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   };
 
   const handlePointerCancel = (event) => {
+    if (panPointerRef.current?.pointerId === event.pointerId) {
+      panPointerRef.current = null;
+      return;
+    }
     if (event.pointerType === "touch") {
       if (pinchRef.current?.pointerIds.includes(event.pointerId)) {
         if (pinchRef.current.frameId !== null) {
@@ -381,6 +532,30 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     }
     inkPointer.onPointerCancel(event);
   };
+
+  // Holding space pans with the mouse no matter what tool is active — same
+  // convention as Figma/Photoshop. keyup (not the big shortcut effect below,
+  // which only handles keydown) releases it, including if focus moved away
+  // mid-hold.
+  React.useEffect(() => {
+    const isEditingTarget = (target) =>
+      target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+    const handleKeyDown = (event) => {
+      if (event.code !== "Space" || isEditingTarget(event.target)) return;
+      event.preventDefault();
+      setIsSpaceDown(true);
+    };
+    const handleKeyUp = (event) => {
+      if (event.code !== "Space") return;
+      setIsSpaceDown(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
 
   React.useEffect(() => {
     const node = containerRef.current;
@@ -437,23 +612,129 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   }, [panBy, zoomBy]);
 
   React.useEffect(() => {
+    const NUDGE_STEP = 1;
+    const NUDGE_STEP_FAST = 10;
+    const CLONE_OFFSET = 24;
+    const ARROW_DELTAS = {
+      ArrowUp: { dx: 0, dy: -1 },
+      ArrowDown: { dx: 0, dy: 1 },
+      ArrowLeft: { dx: -1, dy: 0 },
+      ArrowRight: { dx: 1, dy: 0 },
+    };
+    // Objects only — ink strokes have no id-preserving clone path, and
+    // copy/duplicate/paste of hand-drawn ink was not asked for.
+    const selectedObjectIds = () =>
+      lassoSelection?.objectIds?.length ? lassoSelection.objectIds : selectedObjectId ? [selectedObjectId] : [];
+    const selectIds = (ids) => {
+      if (ids.length === 1) {
+        setSelectedObjectId(ids[0]);
+        setLassoSelection(null);
+      } else {
+        setSelectedObjectId(null);
+        setLassoSelection({ strokeIds: [], objectIds: ids });
+      }
+    };
     const handleKeyDown = (event) => {
       const target = event.target;
-      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      // isContentEditable catches a text/table object mid-edit — those are
+      // plain divs, not INPUT/TEXTAREA, so the tag check alone misses them.
+      // Leaving here also leaves native copy/paste/select-all working inside
+      // the field itself, instead of hijacking them for the canvas below.
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && !event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        inkController.undo?.();
+        return;
+      }
+      if ((mod && event.shiftKey && event.key.toLowerCase() === "z") || (mod && event.key.toLowerCase() === "y")) {
+        event.preventDefault();
+        inkController.redo?.();
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        const strokeIds = strokes.filter((s) => s.pageId === pageId).map((s) => s.id);
+        const objectIds = pageObjects.map((o) => o.id);
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setSelectedObjectId(null);
+          setLassoSelection({ strokeIds, objectIds });
+        }
+        return;
+      }
+      if (mod && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "x")) {
+        const ids = selectedObjectIds();
+        if (ids.length === 0) return;
+        event.preventDefault();
+        clipboardRef.current = pageObjects.filter((o) => ids.includes(o.id)).map((o) => ({ ...o }));
+        if (event.key.toLowerCase() === "x") {
+          inkController.removeObjects?.(ids);
+          setSelectedObjectId(null);
+          setLassoSelection(null);
+        }
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "v") {
+        if (!clipboardRef.current?.length) return;
+        event.preventDefault();
+        const pasted = clipboardRef.current.map((o) =>
+          createPageObject({ ...o, id: undefined, x: o.x + CLONE_OFFSET, y: o.y + CLONE_OFFSET }),
+        );
+        pasted.forEach((o) => inkController.addObject?.(o));
+        selectIds(pasted.map((o) => o.id));
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "d") {
+        const ids = selectedObjectIds();
+        if (ids.length === 0) return;
+        event.preventDefault();
+        const duplicates = pageObjects
+          .filter((o) => ids.includes(o.id))
+          .map((o) => createPageObject({ ...o, id: undefined, x: o.x + CLONE_OFFSET, y: o.y + CLONE_OFFSET }));
+        duplicates.forEach((o) => inkController.addObject?.(o));
+        selectIds(duplicates.map((o) => o.id));
+        return;
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && lassoSelection) {
         event.preventDefault();
         if (lassoSelection.strokeIds.length > 0) inkController.removeStrokes?.(lassoSelection.strokeIds);
         if (lassoSelection.objectIds.length > 0) inkController.removeObjects?.(lassoSelection.objectIds);
         setLassoSelection(null);
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectId) {
+        event.preventDefault();
+        inkController.removeObjects?.([selectedObjectId]);
+        setSelectedObjectId(null);
+        return;
+      }
+      if (ARROW_DELTAS[event.key] && selectedObjectId) {
+        event.preventDefault();
+        const step = event.shiftKey ? NUDGE_STEP_FAST : NUDGE_STEP;
+        const { dx, dy } = ARROW_DELTAS[event.key];
+        const object = pageObjects.find((o) => o.id === selectedObjectId);
+        if (object) {
+          inkController.updateObject?.(selectedObjectId, { x: object.x + dx * step, y: object.y + dy * step });
+        }
+        return;
       }
       if (event.key === "Escape") {
         if (lassoSelection) setLassoSelection(null);
         else if (isLassoMode) setIsLassoMode(false);
+        else if (placingTool) setPlacingTool(null);
+        else if (selectedObjectId) setSelectedObjectId(null);
+        return;
+      }
+      if ((event.key === "t" || event.key === "T") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+        setIsLassoMode(false);
+        setIsBucketMode(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lassoSelection, isLassoMode, inkController]);
+  }, [lassoSelection, isLassoMode, placingTool, selectedObjectId, pageObjects, strokes, pageId, inkController]);
 
   const handleBucketFill = (worldPoint) => {
     if (!worldPoint) return;
@@ -523,6 +804,27 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     inkController.addObject?.(object);
   };
 
+  // Plain click replaces the selection. Ctrl/Cmd-click toggles the clicked
+  // object into (or out of) a group, reusing the lasso's own multi-select —
+  // group move/duplicate/delete/nudge already work for lassoSelection.
+  const handleSelectObject = (objectId, modifiers = {}) => {
+    if (!modifiers.ctrlKey && !modifiers.metaKey) {
+      setSelectedObjectId(objectId);
+      setLassoSelection(null);
+      return;
+    }
+    const current = lassoSelection?.objectIds?.length
+      ? lassoSelection.objectIds
+      : selectedObjectId
+        ? [selectedObjectId]
+        : [];
+    const next = current.includes(objectId)
+      ? current.filter((id) => id !== objectId)
+      : [...current, objectId];
+    setSelectedObjectId(next.length === 1 ? next[0] : null);
+    setLassoSelection(next.length > 1 ? { strokeIds: [], objectIds: next } : null);
+  };
+
   const handleInsertTool = (item) => {
     if (item.id === "image") {
       imageInputRef.current?.click();
@@ -582,6 +884,34 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     });
   };
 
+  const SHAPE_OBJECT_TYPES = ["rect", "ellipse", "line", "arrow"];
+  const selectedTextObject =
+    pageObjects.find((o) => o.id === selectedObjectId && o.type === "text") || null;
+  const selectedShapeObject =
+    pageObjects.find((o) => o.id === selectedObjectId && SHAPE_OBJECT_TYPES.includes(o.type)) ||
+    null;
+
+  const handleTextStyleChange = (patch) => {
+    setTextStyle((prev) => ({ ...prev, ...patch }));
+    if (selectedTextObject) inkController?.updateObject?.(selectedTextObject.id, patch);
+  };
+  const handleShapeStyleChange = (patch) => {
+    if (selectedShapeObject) inkController?.updateObject?.(selectedShapeObject.id, patch);
+  };
+  // Selecting a text or shape object opens its settings automatically, so
+  // there is no separate "edit" click beyond picking the object.
+  React.useEffect(() => {
+    if (selectedShapeObject) {
+      setIsShapeSettingsOpen(true);
+      setIsTextSettingsOpen(false);
+    } else if (selectedTextObject) {
+      setIsTextSettingsOpen(true);
+      setIsShapeSettingsOpen(false);
+    } else {
+      setIsShapeSettingsOpen(false);
+    }
+  }, [selectedObjectId]);
+
   const railContent = (
     <>
       <button
@@ -636,13 +966,20 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         <Lasso size={19} />
       </button>
       <button
-        className={`rail-btn ${placingTool?.id === "text" ? "active" : ""}`}
+        className={`rail-btn text-rail-btn ${
+          isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
+        }`}
         onClick={() => {
-          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+          if (placingTool?.id === "text") {
+            setPlacingTool(null);
+            return;
+          }
+          setIsTextSettingsOpen((prev) => !prev);
+          setIsShapeSettingsOpen(false);
           setIsLassoMode(false);
           setIsBucketMode(false);
         }}
-        title="Text"
+        title="Text: Schrift, Größe & Farbe"
       >
         <span style={{ fontSize: 15, fontWeight: 700 }}>T</span>
       </button>
@@ -693,11 +1030,27 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       <div
         ref={measureRef}
         data-testid="whiteboard-surface"
-        style={{ position: "absolute", inset: 0, touchAction: "none" }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          touchAction: "none",
+          cursor: isSpaceDown
+            ? panPointerRef.current
+              ? "grabbing"
+              : "grab"
+            : placingTool
+              ? "crosshair"
+              : isBucketMode
+                ? "cell"
+                : undefined,
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        // Right-click now drives the marquee instead of the browser's own
+        // context menu, which has nothing to show here anyway.
+        onContextMenu={(event) => event.preventDefault()}
       >
         <WhiteboardCanvas
           ref={canvasControllerRef}
@@ -709,6 +1062,53 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           height={size.height}
           dpr={globalThis.devicePixelRatio || 1}
         />
+        {draftPlacement && (() => {
+          const x = Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width);
+          const y = Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height);
+          const width = Math.abs(draftPlacement.width);
+          const height = Math.abs(draftPlacement.height);
+          const screen = worldToScreen(camera, { x, y });
+          const dragged = width > 8 || height > 8;
+          return (
+            <>
+              <div
+                data-testid="draft-placement-box"
+                style={{
+                  position: "absolute",
+                  left: screen.x,
+                  top: screen.y,
+                  width: width * camera.scale,
+                  height: height * camera.scale,
+                  border: "1.5px dashed #3E7BD8",
+                  background: "rgba(62,123,216,0.08)",
+                  pointerEvents: "none",
+                }}
+              />
+              {draftPlacement.type === "text" && dragged && (
+                <div
+                  data-testid="draft-placement-font-size"
+                  style={{
+                    position: "absolute",
+                    left: screen.x + (width * camera.scale) / 2,
+                    top: screen.y - 30,
+                    transform: "translateX(-50%)",
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    background: "rgba(20,20,24,0.92)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#EFECE4",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {scaledTextFontSize(draftPlacement.height)}px
+                </div>
+              )}
+            </>
+          );
+        })()}
         {lassoDraft && lassoDraft.points.length > 1 && (
           <svg
             data-testid="lasso-draft-path"
@@ -761,7 +1161,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           editingId={editingObjectId}
           onEditingChange={setEditingObjectId}
           processingObjectId={processingImageId}
-          onSelect={setSelectedObjectId}
+          onSelect={handleSelectObject}
           onChange={(id, changes) => inkController.updateObject?.(id, changes)}
           onDelete={(id) => inkController.removeObjects?.([id])}
           onRemoveBackground={handleRemoveBackground}
@@ -781,6 +1181,26 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
             isEraser ? inkController.setEraserWidth?.(w) : inkController.setPenWidth?.(w)
           }
           onClose={() => setIsColorPopoverOpen(false)}
+        />
+      )}
+      {isTextSettingsOpen && (
+        <TextSettingsPopover
+          style={selectedTextObject || textStyle}
+          onStyleChange={handleTextStyleChange}
+          paperStyle="blank"
+          hasSelection={Boolean(selectedTextObject)}
+          onInsert={() => {
+            setPlacingTool(TEXT_TOOL);
+            setIsTextSettingsOpen(false);
+          }}
+          onClose={() => setIsTextSettingsOpen(false)}
+        />
+      )}
+      {isShapeSettingsOpen && selectedShapeObject && (
+        <ShapeSettingsPopover
+          object={selectedShapeObject}
+          onChange={handleShapeStyleChange}
+          onClose={() => setIsShapeSettingsOpen(false)}
         />
       )}
     </div>

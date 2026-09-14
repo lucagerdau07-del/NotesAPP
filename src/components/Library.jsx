@@ -30,6 +30,8 @@ import {
   Trash2,
   CalendarDays,
   Pencil,
+  Image as ImageIcon,
+  FileText,
 } from "lucide-react";
 import matheCard from "../assets/subjects/mathe-card.jpg";
 import chemieCard from "../assets/subjects/chemie-card.jpg";
@@ -43,6 +45,8 @@ import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserFolderRepository } from "../storage/folderRepository.js";
+import { browserInkRepository } from "../ink/inkRepository.js";
+import { exportDocumentAsPdf, exportPageAsPng } from "../documents/exportDocument.js";
 import { FOLDER_ICONS } from "./folderIcons.js";
 import {
   notePageStyleOf,
@@ -1817,6 +1821,18 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
   const [title, setTitle] = useState(note?.title || "");
   const [subject, setSubject] = useState(note?.subject || "");
   const [pageIndex, setPageIndex] = useState(0);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!isExportMenuOpen) return undefined;
+    const handleDown = (event) => {
+      if (!exportMenuRef.current?.contains(event.target)) setIsExportMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [isExportMenuOpen]);
 
   const [previewVersion, setPreviewVersion] = useState(0);
   useEffect(
@@ -1848,6 +1864,25 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
     if (!globalThis.confirm(`"${note.title}" wirklich löschen?`)) return;
     browserNoteRepository.removeNote(note.id);
     onClose();
+  };
+
+  const handleExport = async (kind) => {
+    setIsExportMenuOpen(false);
+    const inkDoc = browserInkRepository.loadHistory(note.id)?.present;
+    if (!inkDoc) return;
+    setIsExporting(true);
+    try {
+      if (kind === "pdf") {
+        await exportDocumentAsPdf(inkDoc, note.title);
+      } else {
+        const pageId = pages[pageIndex]?.id || inkDoc.pages[0]?.id;
+        await exportPageAsPng(inkDoc, pageId, note.title);
+      }
+    } catch (error) {
+      globalThis.alert?.(`Export fehlgeschlagen: ${error.message || error}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -1996,6 +2031,34 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
           >
             Öffnen
           </button>
+          <div style={{ position: "relative" }} ref={exportMenuRef}>
+            <button
+              onClick={() => setIsExportMenuOpen((prev) => !prev)}
+              title="Exportieren"
+              disabled={isExporting}
+              data-testid="note-detail-export-btn"
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,.15)",
+                background: isExportMenuOpen ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.06)",
+                color: "#FFFFFF",
+                cursor: "pointer",
+              }}
+            >
+              <Download size={16} />
+            </button>
+            {isExportMenuOpen && (
+              <div className="export-menu" style={{ bottom: "calc(100% + 8px)", top: "auto" }}>
+                <button onClick={() => handleExport("png")}>
+                  <ImageIcon size={15} /> Seite als PNG
+                </button>
+                <button onClick={() => handleExport("pdf")}>
+                  <FileText size={15} /> Dokument als PDF
+                </button>
+              </div>
+            )}
+          </div>
           {editable && (
             <button
               onClick={handleDelete}
@@ -2947,7 +3010,7 @@ export default function Library({
   const [agentOpen, setAgentOpen] = useState(false);
   const [agentTasks, setAgentTasks] = useState([]);
   const [detailNote, setDetailNote] = useState(null);
-  const [folderDialog, setFolderDialog] = useState(null); // null | "create" | { mode: "rename", folder }
+  const [folderDialog, setFolderDialog] = useState(null); // null | { mode: "create", parentId } | { mode: "rename", folder }
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
 
@@ -2965,11 +3028,21 @@ export default function Library({
   const [untisError, setUntisError] = useState("");
 
   useEffect(() => {
-    const creds = loadUntisCredentials();
-    if (!creds?.school || !creds?.server || !creds?.username || !creds?.password) {
-      setUntisStatus("missing");
-      return;
-    }
+    let cancelled = false;
+    loadUntisCredentials().then((creds) => {
+      if (cancelled) return;
+      if (!creds?.school || !creds?.server || !creds?.username || !creds?.password) {
+        setUntisStatus("missing");
+        return;
+      }
+      runUntisFetch(creds);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function runUntisFetch(creds) {
     setUntisStatus("loading");
     fetch(UNTIS_API_URL, {
       method: "POST",
@@ -2988,7 +3061,7 @@ export default function Library({
         setUntisError(err.message || "Stundenplan konnte nicht geladen werden.");
         setUntisStatus("error");
       });
-  }, []);
+  }
 
   useLiquidGlass(liquidGlassRootRef, selectedSubject?.id || "all");
 
@@ -3019,8 +3092,8 @@ export default function Library({
 
   const handleOpenFolder = (folder) => setSelectedSubject(folder);
 
-  const handleCreateFolder = ({ name, color, icon }) => {
-    browserFolderRepository.createFolder({ name, color, icon });
+  const handleCreateFolder = ({ name, color, icon }, parentId) => {
+    browserFolderRepository.createFolder({ name, color, icon, parentId });
     setFolderDialog(null);
   };
 
@@ -3074,6 +3147,10 @@ export default function Library({
   }));
   const knowledgeNotes = browserNoteRepository.listNotes();
   const folders = browserFolderRepository.listFolders();
+  const rootFolders = folders.filter((f) => !f.parentId);
+  const subFolders = selectedSubject
+    ? folders.filter((f) => f.parentId === selectedSubject.id)
+    : [];
   const createdCards = knowledgeNotes.map((note) => ({
     ...note,
     type: "canvas-preview",
@@ -3728,8 +3805,8 @@ export default function Library({
                   paddingBottom: 8,
                 }}
               >
-                {folders.length} ORDNER ·{" "}
-                {folders.reduce((a, f) => a + countInFolder(f, allNotes), 0)} NOTIZEN
+                {rootFolders.length} ORDNER ·{" "}
+                {rootFolders.reduce((a, f) => a + countInFolder(f, allNotes), 0)} NOTIZEN
               </span>
             </div>
 
@@ -3743,7 +3820,7 @@ export default function Library({
                 padding: "6px 4px 6px 0",
               }}
             >
-              {folders.map((folder) =>
+              {rootFolders.map((folder) =>
                 SUBJECT_THEMES[folder.id] ? (
                   <SubjectTile
                     key={folder.id}
@@ -3766,7 +3843,7 @@ export default function Library({
                   />
                 ),
               )}
-              <AddFolderTile onOpen={() => setFolderDialog("create")} />
+              <AddFolderTile onOpen={() => setFolderDialog({ mode: "create", parentId: null })} />
             </div>
           </>
         )}
@@ -3844,6 +3921,30 @@ export default function Library({
             >
               <Trash2 size={16} />
             </button>
+          </div>
+        )}
+
+        {selectedSubject && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              margin: "0 0 28px",
+              padding: "6px 4px 6px 0",
+            }}
+          >
+            {subFolders.map((folder) => (
+              <GenericFolderTile
+                key={folder.id}
+                folder={folder}
+                count={countInFolder(folder, allNotes)}
+                onOpen={() => handleOpenFolder(folder)}
+              />
+            ))}
+            <AddFolderTile
+              onOpen={() => setFolderDialog({ mode: "create", parentId: selectedSubject.id })}
+            />
           </div>
         )}
 
@@ -4177,11 +4278,11 @@ export default function Library({
 
       {folderDialog && (
         <FolderDialog
-          mode={folderDialog === "create" ? "create" : "rename"}
-          initial={folderDialog === "create" ? null : folderDialog.folder}
+          mode={folderDialog.mode}
+          initial={folderDialog.mode === "create" ? null : folderDialog.folder}
           onSubmit={(values) =>
-            folderDialog === "create"
-              ? handleCreateFolder(values)
+            folderDialog.mode === "create"
+              ? handleCreateFolder(values, folderDialog.parentId)
               : handleRenameFolder(folderDialog.folder, values)
           }
           onClose={() => setFolderDialog(null)}

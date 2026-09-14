@@ -142,14 +142,26 @@ export default function Settings({ onBack }) {
     saveAgentConfig({ baseUrl: agentUrl, accessKey: agentKey });
   }, [agentUrl, agentKey]);
 
-  // WebUntis credentials — stored locally, sent to the proxy backend per request.
-  const storedUntis = useRef(loadUntisCredentials()).current;
-  const [untisSchool, setUntisSchool] = useState(storedUntis?.school || "");
-  const [untisServer, setUntisServer] = useState(storedUntis?.server || "");
-  const [untisUsername, setUntisUsername] = useState(storedUntis?.username || "");
-  const [untisPassword, setUntisPassword] = useState(storedUntis?.password || "");
+  // WebUntis credentials — stored locally (encrypted on native builds),
+  // sent to the proxy backend per request.
+  const [untisSchool, setUntisSchool] = useState("");
+  const [untisServer, setUntisServer] = useState("");
+  const [untisUsername, setUntisUsername] = useState("");
+  const [untisPassword, setUntisPassword] = useState("");
+  const untisLoadedRef = useRef(false);
 
   useEffect(() => {
+    loadUntisCredentials().then((stored) => {
+      setUntisSchool(stored?.school || "");
+      setUntisServer(stored?.server || "");
+      setUntisUsername(stored?.username || "");
+      setUntisPassword(stored?.password || "");
+      untisLoadedRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!untisLoadedRef.current) return;
     saveUntisCredentials({
       school: untisSchool,
       server: untisServer,
