@@ -3289,6 +3289,7 @@ body::after {
 }
 
 .pages-panel-list {
+  position: relative; /* so card.offsetTop below is relative to this list, not some further ancestor */
   flex: 1;
   min-height: 0;
   overflow-y: auto;

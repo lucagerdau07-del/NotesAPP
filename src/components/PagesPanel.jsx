@@ -100,25 +100,35 @@ export default function PagesPanel({
   useEffect(() => () => clearTimeout(confirmTimerRef.current), []);
 
   // A mouse drag starts the moment the pointer moves - people press and drag in
-  // one motion, so a hold-still-first gesture never arms for them. Touch keeps
-  // the card free for scrolling and drags via the grip handle instead.
-  const beginDrag = (event, id, immediate) => {
+  // one motion, so a hold-still-first gesture never arms for them. Touch has no
+  // hover, so it only drags via the footer's touchImmediate grab - and even
+  // there, immediate means "no movement threshold", never "skip the DOM".
+  const beginDrag = (event, id, touchImmediate) => {
     if (event.button !== undefined && event.button !== 0) return;
-    if (!immediate && event.pointerType !== "mouse") return;
+    const isTouch = event.pointerType !== "mouse";
+    if (isTouch && !touchImmediate) return;
     const startX = event.clientX;
     const startY = event.clientY;
     let armed = false;
     let lastY = event.clientY;
     let tilt = 0;
+    let grabOffset = 0;
+    let appliedDY = 0;
 
     const arm = () => {
       armed = true;
       draggingRef.current = { id };
       setDragId(id);
       const el = cardRefs.current.get(id);
-      if (el) el.style.transition = "none";
+      if (el) {
+        el.style.transition = "none";
+        // Cursor's offset from the card's own top, not just from the drag
+        // start point - so grabbing low on a tall card doesn't snap its top
+        // up to the cursor.
+        grabOffset = startY - el.getBoundingClientRect().top;
+      }
     };
-    if (immediate) {
+    if (isTouch && touchImmediate) {
       event.preventDefault();
       arm();
     }
@@ -126,26 +136,43 @@ export default function PagesPanel({
     // Card follows the pointer 1:1 (no CSS transition - that's reserved for
     // the FLIP settle of the *other* cards) with a small velocity-based tilt,
     // like actually picking the card up rather than teleporting between slots.
+    // Re-measures the card's *current* natural position every call (by
+    // subtracting off the transform we applied last time) instead of trusting
+    // a one-time offset from drag start - auto-scroll and live reordering
+    // both keep moving the card's natural slot underneath the transform, and
+    // a fixed offset drifts away from the pointer the moment either happens.
     const followPointer = (clientY) => {
       const el = cardRefs.current.get(id);
       if (!el) return;
+      const naturalTop = el.getBoundingClientRect().top - appliedDY;
       const velocity = clientY - lastY;
       lastY = clientY;
       tilt = Math.max(-8, Math.min(8, tilt * 0.6 + velocity * 0.5));
-      el.style.transform = `translateY(${clientY - startY}px) scale(1.03) rotate(${tilt}deg)`;
+      appliedDY = clientY - grabOffset - naturalTop;
+      el.style.transform = `translateY(${appliedDY}px) scale(1.03) rotate(${tilt}deg)`;
     };
 
     // Insert where the pointer actually is, measured against the other cards'
-    // midpoints - card heights vary with page aspect ratio and the list
-    // scrolls, so a fixed per-card step would drift.
+    // midpoints - card heights vary with page aspect ratio, so a fixed
+    // per-card step would drift. Compared using offsetTop/offsetHeight (flow
+    // position), never getBoundingClientRect: a sibling that just got
+    // reordered is mid-FLIP-settle-animation with its own transform applied,
+    // so its rect lies about where it visually is - and while auto-scroll
+    // runs, every card's rect keeps sliding too. Either one, compared against
+    // a stationary cursor, flips the insert decision back and forth forever
+    // (these cards are nearly as tall as the panel, so one flip swings
+    // hundreds of pixels) instead of settling. offsetTop/offsetHeight reflect
+    // true layout position, ignoring transforms and scroll entirely.
     const updateOrder = (clientY) => {
-      const others = Array.from(listRef.current?.children ?? []).filter(
+      const list = listRef.current;
+      if (!list) return;
+      const virtualY = clientY - list.getBoundingClientRect().top + list.scrollTop;
+      const others = Array.from(list.children).filter(
         (card) => card.dataset.pageId !== id,
       );
-      let insertAt = others.findIndex((card) => {
-        const rect = card.getBoundingClientRect();
-        return clientY < rect.top + rect.height / 2;
-      });
+      let insertAt = others.findIndex(
+        (card) => virtualY < card.offsetTop + card.offsetHeight / 2,
+      );
       if (insertAt === -1) insertAt = others.length;
       setOrder((current) => {
         const next = current.filter((pageId) => pageId !== id);
@@ -170,7 +197,10 @@ export default function PagesPanel({
       if (!delta) return;
       const before = list.scrollTop;
       list.scrollTop += delta;
-      if (list.scrollTop !== before) updateOrder(pointerY);
+      if (list.scrollTop !== before) {
+        updateOrder(pointerY);
+        followPointer(pointerY);
+      }
     }, 16);
 
     const handleMove = (moveEvent) => {
