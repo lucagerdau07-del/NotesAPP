@@ -49,7 +49,7 @@ import PageObjectLayer from "./document/PageObjectLayer";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
-import { pageObjectsOf, isPointInsideObject } from "../ink/pageObjects";
+import { pageObjectsOf, isPointInsideObject, createPageObject } from "../ink/pageObjects";
 import { resolveInkLayerIndex } from "../ink/inkDocument";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { removeImageBackground } from "../ink/imageBackground";
@@ -1200,6 +1200,13 @@ export default function DocumentView({
     color: "#EFECE4",
   });
   const [selectedObjectId, setSelectedObjectId] = useState(null);
+  // Copy/cut/paste clipboard for page objects, same convention as the
+  // whiteboard — kept in-memory rather than the OS clipboard.
+  const clipboardRef = useRef(null);
+  // Held space pans with the mouse regardless of the active tool, same
+  // convention as the whiteboard (and Figma/Photoshop).
+  const [isSpaceDown, setIsSpaceDown] = useState(false);
+  const spacePanRef = useRef(null);
   const [processingImageId, setProcessingImageId] = useState(null);
   // A text object placed by a plain click (not dragged into size) enters edit
   // mode immediately, so the keyboard opens with the caret already blinking
@@ -1565,16 +1572,27 @@ export default function DocumentView({
   // edited so Delete/Backspace/Escape keep editing the text instead of
   // deleting the selection or leaving the tool.
   useEffect(() => {
+    const CLONE_OFFSET = 24;
+    const selectedObjectIds = () =>
+      lassoSelection?.objectIds?.length ? lassoSelection.objectIds : selectedObjectId ? [selectedObjectId] : [];
+    const selectIds = (pageId, ids) => {
+      if (ids.length === 1) {
+        setSelectedObjectId(ids[0]);
+        setLassoSelection(null);
+      } else {
+        setSelectedObjectId(null);
+        setLassoSelection({ pageId, strokeIds: [], objectIds: ids });
+      }
+    };
     const handleKeyDown = (event) => {
       if (editingObjectId) return;
       const target = event.target;
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable)
         return;
 
-      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
-      const isRedo =
-        ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "z") ||
-        ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y");
+      const mod = event.ctrlKey || event.metaKey;
+      const isUndo = mod && !event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedo = (mod && event.shiftKey && event.key.toLowerCase() === "z") || (mod && event.key.toLowerCase() === "y");
       if (isUndo) {
         event.preventDefault();
         handleUndo();
@@ -1585,9 +1603,49 @@ export default function DocumentView({
         handleRedo();
         return;
       }
+      if (mod && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        const point = viewportCenterOnPage();
+        if (!point) return;
+        const strokeIds = inkDocument.strokes.filter((s) => s.pageId === point.pageId).map((s) => s.id);
+        const objectIds = pageObjects.filter((o) => o.pageId === point.pageId).map((o) => o.id);
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setSelectedObjectId(null);
+          setLassoSelection({ pageId: point.pageId, strokeIds, objectIds });
+        }
+        return;
+      }
+      if (mod && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "x")) {
+        const ids = selectedObjectIds();
+        if (ids.length === 0) return;
+        event.preventDefault();
+        clipboardRef.current = pageObjects.filter((o) => ids.includes(o.id)).map((o) => ({ ...o }));
+        if (event.key.toLowerCase() === "x") {
+          inkController?.removeObjects?.(ids);
+          setSelectedObjectId(null);
+          setLassoSelection(null);
+        }
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "v") {
+        if (!clipboardRef.current?.length) return;
+        event.preventDefault();
+        const pasted = clipboardRef.current.map((o) =>
+          createPageObject({ ...o, id: undefined, x: o.x + CLONE_OFFSET, y: o.y + CLONE_OFFSET }),
+        );
+        pasted.forEach((o) => inkController?.addObject?.(o));
+        selectIds(pasted[0]?.pageId, pasted.map((o) => o.id));
+        return;
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && lassoSelection) {
         event.preventDefault();
         handleLassoDelete();
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectId) {
+        event.preventDefault();
+        inkController?.removeObjects?.([selectedObjectId]);
+        setSelectedObjectId(null);
         return;
       }
       if (event.key === "Escape") {
@@ -1599,7 +1657,70 @@ export default function DocumentView({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editingObjectId, lassoSelection, isLassoMode, placingTool, selectedObjectId]);
+  }, [editingObjectId, lassoSelection, isLassoMode, placingTool, selectedObjectId, pageObjects, inkDocument.strokes, inkController]);
+
+  // Holding space pans with the mouse no matter what tool is active — same
+  // convention as the whiteboard. keyup releases it even if focus moved away
+  // mid-hold.
+  useEffect(() => {
+    const isEditingTarget = (target) =>
+      target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+    const handleKeyDown = (event) => {
+      if (event.code !== "Space" || isEditingTarget(event.target)) return;
+      event.preventDefault();
+      setIsSpaceDown(true);
+    };
+    const handleKeyUp = (event) => {
+      if (event.code !== "Space") return;
+      setIsSpaceDown(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Space+drag pans the scroll container directly — mirrors the whiteboard's
+  // camera pan, but this editor's "camera" is just native scrollLeft/scrollTop.
+  useEffect(() => {
+    if (!isSpaceDown) return undefined;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return undefined;
+    const handlePointerDownForPan = (event) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      spacePanRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startScrollLeft: scrollEl.scrollLeft,
+        startScrollTop: scrollEl.scrollTop,
+      };
+    };
+    const handlePointerMoveForPan = (event) => {
+      const pan = spacePanRef.current;
+      if (!pan || event.pointerId !== pan.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrollEl.scrollLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+      scrollEl.scrollTop = pan.startScrollTop - (event.clientY - pan.startY);
+    };
+    const handlePointerUpForPan = (event) => {
+      if (spacePanRef.current?.pointerId === event.pointerId) spacePanRef.current = null;
+    };
+    scrollEl.addEventListener("pointerdown", handlePointerDownForPan, { capture: true });
+    window.addEventListener("pointermove", handlePointerMoveForPan, { capture: true });
+    window.addEventListener("pointerup", handlePointerUpForPan, { capture: true });
+    window.addEventListener("pointercancel", handlePointerUpForPan, { capture: true });
+    return () => {
+      scrollEl.removeEventListener("pointerdown", handlePointerDownForPan, { capture: true });
+      window.removeEventListener("pointermove", handlePointerMoveForPan, { capture: true });
+      window.removeEventListener("pointerup", handlePointerUpForPan, { capture: true });
+      window.removeEventListener("pointercancel", handlePointerUpForPan, { capture: true });
+      spacePanRef.current = null;
+    };
+  }, [isSpaceDown]);
 
   // New objects land in the middle of what the user is currently looking at,
   // not at the top of the document they may have scrolled far past.
@@ -3339,6 +3460,7 @@ export default function DocumentView({
           position: "relative",
           textAlign: "center",
           touchAction: "none",
+          cursor: isSpaceDown ? "grab" : undefined,
           // Vollmodus: der Scroll-Container IST das Papier.
           // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
           margin: isFullBleed
