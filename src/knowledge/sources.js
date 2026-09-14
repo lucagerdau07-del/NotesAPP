@@ -14,8 +14,17 @@ import { browserDocumentRepository } from "../storage/documentRepository.js";
 // Weniger sichtbare Zeichen hat eine PDF-Seite ohne brauchbare Textebene, also
 // ein eingescanntes Blatt im PDF. Die geht an das Vision-Modell.
 const MIN_TEXT_LAYER_CHARS = 40;
+// Arbeitsblätter sind kurz und leben von Tabellen, Lücken und Abbildungen, die
+// eine PDF-Textebene verliert. Kurze PDFs gehen deshalb immer ans
+// Vision-Modell, lange Bücher bleiben bei der kostenlosen Textebene.
+// ponytail: Seitenzahl als Merkmal. Ein bebildertes Skript mit mehr Seiten
+// verliert so seine Abbildungen; dann je Seite auf Bild-Operatoren prüfen.
+const WORKSHEET_MAX_PAGES = 4;
 // Kleine Schulbuchschrift braucht mehr Pixel als die Handschrift im Notizscan.
 const OCR_EDGE = 1600;
+// Seitenbild für den Agenten selbst: reicht für Grafiken und Tabellen und
+// kostet weniger Tokens als die OCR-Auflösung.
+const SEE_EDGE = 1200;
 const MAX_HITS = 8;
 const EXCERPT_CHARS = 320;
 const MAX_READ_PAGES = 3;
@@ -30,12 +39,16 @@ const STOPWORDS = new Set(
 const SUFFIXES = ["ern", "en", "er", "es", "e"];
 const WORD = /[\p{L}\p{N}]+/gu;
 
+// Markdown statt Fließtext: Tabellen, Lücken und Abbildungen tragen auf einem
+// Arbeitsblatt oft mehr Inhalt als die Sätze dazwischen, und die Beschreibung
+// einer Abbildung macht sie über search_sources auffindbar.
 export const OCR_PROMPT = [
-  "Du transkribierst eine gescannte oder fotografierte Seite aus einem Buch, Schulbuch oder Arbeitsblatt.",
+  "Du überträgst eine Seite aus einem Buch, Schulbuch oder Arbeitsblatt in Markdown, so dass man ohne das Bild alles Wichtige versteht.",
   "Erste Zeile deiner Antwort: SEITE: und die auf der Seite gedruckte Seitenzahl, oder SEITE: - wenn keine zu sehen ist.",
-  "Danach der Text der Seite, wortgetreu und vollständig, in Lesereihenfolge: Spalten nacheinander, Kästen und Bildunterschriften als eigene Absätze.",
-  "Nichts zusammenfassen, nichts ergänzen, nichts korrigieren. Unleserliche Stellen als [unleserlich], Abbildungen nur als kurzes [Bild: ...].",
-  "Zeilennummern am Rand übernimmst du als [Z. 5] am Anfang der jeweiligen Zeile.",
+  "Text wortgetreu und vollständig in Lesereihenfolge, Spalten nacheinander. Nichts zusammenfassen, nichts ergänzen, nichts korrigieren. Unleserliches als [unleserlich].",
+  "Struktur beibehalten: Überschriften mit #, Aufgaben mit ihrer Nummer, Tabellen als Markdown-Tabelle, Kästen als > Block, Lücken als ____, Ankreuzfelder als [ ].",
+  "Abbildungen, Diagramme, Karten, Zeitstrahlen und Skizzen als [Abbildung: ...] mit dem, was sie zeigen, allen Beschriftungen und Werten und wohin Pfeile zeigen.",
+  "Zeilennummern am Rand als [Z. 5] am Anfang der jeweiligen Zeile.",
 ].join("\n");
 
 const pageCache = new Map();
@@ -200,25 +213,44 @@ function whiteCanvas(width, height) {
   return { canvas, context };
 }
 
-async function pdfPageImage(pdfPage) {
+async function pdfPageImage(pdfPage, edge = OCR_EDGE) {
   const natural = pdfPage.getViewport({ scale: 1 });
   const viewport = pdfPage.getViewport({
-    scale: OCR_EDGE / Math.max(natural.width, natural.height),
+    scale: edge / Math.max(natural.width, natural.height),
   });
   const { canvas, context } = whiteCanvas(viewport.width, viewport.height);
   await pdfPage.render({ canvasContext: context, viewport }).promise;
   return canvas.toDataURL("image/jpeg", 0.8);
 }
 
-async function imageFileImage(blob) {
+async function imageFileImage(blob, edge = OCR_EDGE) {
   const opened = await openImage(blob);
   try {
-    const size = fitInside(opened.width, opened.height, OCR_EDGE);
+    const size = fitInside(opened.width, opened.height, edge);
     const { canvas, context } = whiteCanvas(size.width, size.height);
     context.drawImage(opened.image, 0, 0, size.width, size.height);
     return canvas.toDataURL("image/jpeg", 0.8);
   } finally {
     opened.dispose();
+  }
+}
+
+// Öffnet ein PDF einmal und reicht die verlangten Seiten nacheinander durch.
+// pdf.js wird erst hier geladen, wie im documentImporter.
+async function eachPdfPage(blob, indexes, visit) {
+  const { openPdf } = await import("../documents/pdfRuntime.js");
+  const pdf = await openPdf(blob);
+  try {
+    for (const index of indexes) {
+      const pdfPage = await pdf.document.getPage(index + 1);
+      try {
+        await visit(pdfPage, index);
+      } finally {
+        pdfPage.cleanup();
+      }
+    }
+  } finally {
+    await pdf.dispose();
   }
 }
 
@@ -229,7 +261,7 @@ async function transcribe(src, complete) {
       {
         role: "user",
         content: [
-          { type: "text", text: "Transkribiere diese Seite." },
+          { type: "text", text: "Übertrage diese Seite." },
           // Wie beim Notizscan: ein image_url-Teil lässt den Space selbst auf
           // das Vision-Modell umschalten.
           { type: "image_url", image_url: { url: src } },
@@ -257,28 +289,19 @@ async function indexNote(note, { repository, complete }) {
     return;
   }
 
-  // pdf.js nur laden, wenn wirklich ein PDF zu lesen ist (wie documentImporter).
-  const { openPdf } = await import("../documents/pdfRuntime.js");
-  const pdf = await openPdf(file.blob);
-  try {
-    for (let index = 0; index < total; index += 1) {
-      if (done.has(index)) continue;
-      const pdfPage = await pdf.document.getPage(index + 1);
-      try {
-        const text = textOfContent(await pdfPage.getTextContent());
-        await save(
-          index,
-          text.replace(/\s/g, "").length >= MIN_TEXT_LAYER_CHARS
-            ? { text, printedPage: null, method: "pdf" }
-            : await transcribe(await pdfPageImage(pdfPage), complete),
-        );
-      } finally {
-        pdfPage.cleanup();
-      }
-    }
-  } finally {
-    await pdf.dispose();
-  }
+  const pending = Array.from({ length: total }, (_, index) => index).filter(
+    (index) => !done.has(index),
+  );
+  await eachPdfPage(file.blob, pending, async (pdfPage, index) => {
+    const text =
+      total > WORKSHEET_MAX_PAGES ? textOfContent(await pdfPage.getTextContent()) : "";
+    await save(
+      index,
+      text.replace(/\s/g, "").length >= MIN_TEXT_LAYER_CHARS
+        ? { text, printedPage: null, method: "pdf" }
+        : await transcribe(await pdfPageImage(pdfPage), complete),
+    );
+  });
 }
 
 // Ein Durchlauf nach dem anderen, egal wie oft angestoßen: die Bibliothek fragt
@@ -305,6 +328,18 @@ export function queueSourceIndexing(
     })
     .catch(() => {});
   return queue;
+}
+
+// Das Original als Bild, wenn der Text einer Seite eine Abbildung oder das
+// Layout nicht trägt. Nur auf Anfrage des Agenten, nie beim Indizieren.
+async function pageImages(note, indexes, repository) {
+  const { file } = await repository.getDocumentBundle(note.id);
+  if (note.source?.type !== "pdf") return [await imageFileImage(file.blob, SEE_EDGE)];
+  const images = [];
+  await eachPdfPage(file.blob, indexes, async (pdfPage) => {
+    images.push(await pdfPageImage(pdfPage, SEE_EDGE));
+  });
+  return images;
 }
 
 async function pagesOfImported(note, repository) {
@@ -381,7 +416,7 @@ export async function searchSources(
 }
 
 export async function readSource(
-  { noteId, page, count },
+  { noteId, page, count, image },
   { notes = [], imported = [] },
   repository = browserDocumentRepository,
 ) {
@@ -397,6 +432,18 @@ export async function readSource(
     return pages.length
       ? `Fehler: Seite ${first} ist nicht lesbar. Lesbar sind ${pages.length} Seiten, von ${pages[0].page} bis ${pages[pages.length - 1].page}.`
       : "Fehler: Diese Quelle ist noch nicht gelesen, die Texterkennung läuft im Hintergrund.";
+  }
+  // ponytail: nur importierte Dokumente als Bild. Eigene Notizen zeigt
+  // see_document, sobald sie geöffnet sind.
+  if (image && importedNote) {
+    const images = await pageImages(
+      importedNote,
+      wanted.map((entry) => entry.page - 1),
+      repository,
+    );
+    return {
+      pages: wanted.map((entry, index) => ({ page: entry.page, cite: entry.cite, src: images[index] })),
+    };
   }
   return {
     pages: wanted.map((entry) => ({

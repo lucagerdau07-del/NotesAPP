@@ -708,6 +708,11 @@ export const AGENT_TOOLS = [
           noteId: { type: "string" },
           page: { type: "integer", description: "Erste Seite, der Wert page aus search_sources" },
           count: { type: "integer", description: "Anzahl Seiten, 1 bis 3, Standard 1" },
+          image: {
+            type: "boolean",
+            description:
+              "Seiten eines importierten Dokuments als Bild statt Text, wenn Abbildung, Tabelle oder Layout genau zählen. Teurer als Text.",
+          },
         },
         required: ["noteId", "page"],
       },
@@ -845,7 +850,7 @@ export function describeToolCall(name, args = {}) {
     case "search_sources":
       return `Quellen durchsuchen: ${String(args.query || "").slice(0, 40)}`;
     case "read_source":
-      return `Quelle lesen (Seite ${args.page ?? "?"})`;
+      return `Quelle ${args.image ? "ansehen" : "lesen"} (Seite ${args.page ?? "?"})`;
     case "see_document":
       return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":

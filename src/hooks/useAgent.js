@@ -386,7 +386,13 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               }
             }
             const failed = typeof result === "string" && result.startsWith("Fehler");
-            const sawPages = name === "see_document" && !failed && Array.isArray(result?.pages);
+            // see_document and read_source with image: true both hand back
+            // rendered pages; any result whose pages carry a src is an image.
+            const sawPages =
+              !failed &&
+              Array.isArray(result?.pages) &&
+              result.pages.length > 0 &&
+              result.pages.every((page) => page.src);
             currentSteps = currentSteps.map((entry) =>
               entry.id === call.id
                 ? {
@@ -411,7 +417,12 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                   {
                     role: "tool",
                     tool_call_id: call.id,
-                    content: `${result.pages.length} Seite(n) als Bild angehängt.`,
+                    content: [
+                      `${result.pages.length} Seite(n) als Bild angehängt.`,
+                      result.pages.map((page) => page.cite).filter(Boolean).join("; "),
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
                   },
                   {
                     role: "user",
