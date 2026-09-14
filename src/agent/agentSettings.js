@@ -5,20 +5,44 @@
 const STORAGE_KEY = "notes.agentConfig";
 const MODEL_STORAGE_KEY = "notes.chatModel";
 
+export const ULTIMATE_FALLBACK_MODEL = "deepseek/deepseek-v4-flash";
+
 export const CHAT_MODELS = [
   {
     id: "google/gemini-3.8-flash",
     name: "Gemini 3.8 Flash",
+    fallbacks: [
+      "google/gemini-3.7-flash",
+      "google/gemini-3.6-flash",
+      "deepseek/deepseek-v4-flash",
+    ],
   },
   {
     id: "google/gemini-3.5-flash-lite",
     name: "Gemini 3.5 Flash lite",
+    fallbacks: [
+      "google/gemini-3.1-flash-lite",
+      "deepseek/deepseek-v4-flash",
+    ],
   },
   {
     id: "deepseek/deepseek-v4-flash",
     name: "DeepSeek V4 Flash",
+    fallbacks: [],
   },
 ];
+
+export function getModelChain(modelId) {
+  const match = CHAT_MODELS.find((m) => m.id === modelId);
+  if (!match) {
+    return [modelId, ULTIMATE_FALLBACK_MODEL].filter(Boolean);
+  }
+  const list = [match.id, ...(match.fallbacks || [])];
+  if (!list.includes(ULTIMATE_FALLBACK_MODEL)) {
+    list.push(ULTIMATE_FALLBACK_MODEL);
+  }
+  return [...new Set(list)];
+}
 
 export const DEFAULT_CHAT_MODEL = CHAT_MODELS[0].id;
 
