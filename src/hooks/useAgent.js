@@ -70,9 +70,10 @@ pruneOldChats();
 
 // Best-effort, fire-and-forget: a short thematic title for a fresh chat, from
 // its opening exchange. No tools, plain text reply.
-async function generateTitle(task, replyText, signal) {
+async function generateTitle(task, replyText, signal, model) {
   try {
     const { message } = await requestCompletion({
+      model,
       messages: [
         {
           role: "system",
@@ -125,7 +126,7 @@ function wireMessages(messages) {
  * document, and the document lives here. Every tool call is applied
  * immediately, as one undo step, so the user watches the work happen.
  */
-export default function useAgent({ documentId, noteTitle, subject, inkControllerRef }) {
+export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model }) {
   const [sessions, setSessions] = useState(() => loadSessions(documentId));
   const [activeId, setActiveId] = useState(() => sessions[0]?.id ?? newSessionId());
   const [messages, setMessages] = useState(() => sessions[0]?.messages ?? []);
@@ -324,6 +325,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       try {
         for (let step = 0; step < MAX_STEPS; step += 1) {
           const { message: reply, usage } = await requestCompletion({
+            model,
             messages: wireMessages(conversation),
             tools: canEdit
               ? [...AGENT_CORE_TOOLS, ...[...enabledExtra].map((name) => AGENT_EXTENDED_BY_NAME.get(name))]
@@ -462,7 +464,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         }
         setStatus("idle");
         if (needsTitle && lastReplyText) {
-          generateTitle(task, lastReplyText, controller.signal).then((title) => {
+          generateTitle(task, lastReplyText, controller.signal, model).then((title) => {
             if (!title) return;
             setSessions((current) => {
               const updated = current.map((s) =>
@@ -484,7 +486,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         abortRef.current = null;
       }
     },
-    [activeId, documentId, inkControllerRef, messages, noteTitle, status, subject],
+    [activeId, documentId, inkControllerRef, messages, model, noteTitle, status, subject],
   );
 
   return {

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
+import { CHAT_MODELS, loadChatModel, saveChatModel } from "../agent/agentSettings";
 
 const SUGGESTIONS = [
   "Fasse diese Notiz zusammen",
@@ -297,6 +298,68 @@ export function CopyButton({ text }) {
   );
 }
 
+export function ModelSelector({ selectedModel, onSelectModel }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  const activeModel = CHAT_MODELS.find((m) => m.id === selectedModel) || CHAT_MODELS[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (event) => {
+      if (!menuRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="rail-chat-model-selector" ref={menuRef}>
+      <button
+        type="button"
+        className="rail-chat-model-btn"
+        onClick={() => setOpen((v) => !v)}
+        title="KI-Modell auswählen"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="rail-chat-model-name">{activeModel.name}</span>
+        <ChevronDown size={12} className={`rail-chat-model-chevron ${open ? "open" : ""}`} />
+      </button>
+      {open && (
+        <div className="rail-chat-model-menu" role="listbox">
+          {CHAT_MODELS.map((m) => {
+            const isSelected = m.id === activeModel.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className={`rail-chat-model-option ${isSelected ? "active" : ""}`}
+                onClick={() => {
+                  onSelectModel(m.id);
+                  setOpen(false);
+                }}
+              >
+                <span className="rail-chat-model-option-name">{m.name}</span>
+                {isSelected && <Check size={13} className="rail-chat-model-check" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AiChatPanel({
   active = true,
   onClose,
@@ -307,8 +370,21 @@ export default function AiChatPanel({
   pendingImage,
   onPendingImageHandled,
   onRequestCircleSearch,
+  model,
+  onModelChange,
 }) {
   const [draft, setDraft] = useState("");
+  const [internalModel, setInternalModel] = useState(() => loadChatModel());
+  const currentModelId = model ?? internalModel;
+
+  const handleSelectModel = (modelId) => {
+    if (!model) {
+      setInternalModel(modelId);
+    }
+    saveChatModel(modelId);
+    onModelChange?.(modelId);
+  };
+
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -333,8 +409,17 @@ export default function AiChatPanel({
     noteTitle,
     subject,
     inkControllerRef,
+    model: currentModelId,
   });
   const displayedTokens = useCountUp(tokens);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }
+  }, [draft]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -469,14 +554,6 @@ export default function AiChatPanel({
         </div>
       )}
       <form className="rail-chat-input" onSubmit={submit}>
-        <button
-          type="button"
-          className="rail-chat-circle-search"
-          title="Bereich einkreisen und an den Assistenten geben"
-          onClick={() => onRequestCircleSearch?.()}
-        >
-          <ScanSearch size={16} />
-        </button>
         <textarea
           ref={inputRef}
           rows={1}
@@ -486,15 +563,31 @@ export default function AiChatPanel({
           placeholder={pendingImage ? "Was ist im markierten Bereich?" : "Frag etwas oder gib einen Auftrag…"}
           aria-label="Nachricht an den KI-Assistenten"
         />
-        {isRunning ? (
-          <button type="button" title="Stoppen" onClick={stop}>
-            <Square size={14} />
-          </button>
-        ) : (
-          <button type="submit" title="Senden" disabled={!draft.trim()}>
-            <ArrowUp size={16} />
-          </button>
-        )}
+        <div className="rail-chat-input-controls">
+          <div className="rail-chat-input-tools">
+            <button
+              type="button"
+              className="rail-chat-circle-search"
+              title="Bereich einkreisen und an den Assistenten geben"
+              onClick={() => onRequestCircleSearch?.()}
+            >
+              <ScanSearch size={15} />
+            </button>
+            <ModelSelector
+              selectedModel={currentModelId}
+              onSelectModel={handleSelectModel}
+            />
+          </div>
+          {isRunning ? (
+            <button type="button" className="rail-chat-send-btn" title="Stoppen" onClick={stop}>
+              <Square size={13} />
+            </button>
+          ) : (
+            <button type="submit" className="rail-chat-send-btn" title="Senden" disabled={!draft.trim()}>
+              <ArrowUp size={15} />
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

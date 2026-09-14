@@ -1199,12 +1199,35 @@ body::after {
 
 .rail-chat-input {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  position: relative;
+  box-sizing: border-box;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.rail-chat-input:focus-within {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.rail-chat-input-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rail-chat-input-tools {
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 4px 4px 12px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  position: relative;
 }
 
 .rail-chat-input input {
@@ -1218,32 +1241,164 @@ body::after {
 }
 
 .rail-chat-input button {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
   border: none;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #15151a;
   cursor: pointer;
-  background: linear-gradient(140deg, #FFFFFF, #6B6B72);
 }
 
-.rail-chat-input button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.rail-chat-send-btn,
+.rail-chat-input button.rail-chat-send-btn {
+  width: 30px !important;
+  height: 30px !important;
+  flex: 0 0 30px !important;
+  border: none !important;
+  border-radius: 15px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #15151a !important;
+  cursor: pointer !important;
+  background: linear-gradient(140deg, #FFFFFF, #6B6B72) !important;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.rail-chat-send-btn:disabled,
+.rail-chat-input button.rail-chat-send-btn:disabled {
+  opacity: 0.35 !important;
+  cursor: default !important;
+}
+
+.rail-chat-send-btn:not(:disabled):active {
+  transform: scale(0.92);
 }
 
 .rail-chat-circle-search {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: rgba(241, 238, 231, 0.7) !important;
+  width: 26px !important;
+  height: 26px !important;
+  flex: 0 0 26px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(241, 238, 231, 0.6) !important;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .rail-chat-circle-search:hover {
   background: rgba(255, 122, 51, 0.18) !important;
   color: #FFB27A !important;
+}
+
+/* Model selector dropdown (Antigravity-style) */
+.rail-chat-model-selector {
+  position: relative;
+}
+
+.rail-chat-model-btn,
+.rail-chat-input button.rail-chat-model-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(241, 238, 231, 0.78) !important;
+  font: 500 12px / 1 'Inter', Manrope, sans-serif !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.rail-chat-model-btn:hover,
+.rail-chat-input button.rail-chat-model-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-model-name {
+  pointer-events: none;
+}
+
+.rail-chat-model-chevron {
+  transition: transform 0.18s ease;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.rail-chat-model-chevron.open {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.rail-chat-model-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  background: #19191E;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 250;
+  backdrop-filter: blur(18px);
+  animation: rail-chat-model-menu-in 0.15s ease-out;
+}
+
+@keyframes rail-chat-model-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rail-chat-model-option,
+.rail-chat-input button.rail-chat-model-option {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.8) !important;
+  font: 400 12px / 1 'Inter', Manrope, sans-serif !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  flex: 0 0 auto !important;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.rail-chat-model-option:hover,
+.rail-chat-input button.rail-chat-model-option:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-model-option.active,
+.rail-chat-input button.rail-chat-model-option.active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+}
+
+.rail-chat-model-check {
+  color: #FF7A33;
+  flex-shrink: 0;
 }
 
 .rail-chat-head-actions {
@@ -1586,17 +1741,21 @@ body::after {
 }
 
 .rail-chat-input textarea {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  min-height: 24px;
   max-height: 120px;
   border: none;
   background: none;
   color: inherit;
-  font: 400 13px Manrope, sans-serif;
+  font: 400 13px / 1.4 'Inter', Manrope, sans-serif;
   outline: none;
   resize: none;
-  padding: 7px 0;
-  line-height: 1.4;
+  padding: 2px 2px 2px 2px;
+  box-sizing: border-box;
+}
+
+.rail-chat-input textarea::placeholder {
+  color: rgba(241, 238, 231, 0.42);
 }
 
 /* Markdown in chat answers */

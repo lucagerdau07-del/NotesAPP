@@ -112,4 +112,42 @@ describe("AiChatPanel", () => {
 
     expect(await screen.findByText(/nicht erreichbar/i)).toBeInTheDocument();
   });
+
+  it("displays model dropdown with Gemini 3.8 Flash, Gemini 3.5 Flash lite, and DeepSeek V4 Flash", async () => {
+    render(<AiChatPanel documentId="note-1" inkControllerRef={inkRef()} />);
+
+    const modelBtn = screen.getByTitle("KI-Modell auswählen");
+    expect(modelBtn).toBeInTheDocument();
+    expect(modelBtn).toHaveTextContent("Gemini 3.8 Flash");
+
+    fireEvent.click(modelBtn);
+
+    expect(screen.getByRole("option", { name: /Gemini 3.8 Flash/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Gemini 3.5 Flash lite/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /DeepSeek V4 Flash/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: /DeepSeek V4 Flash/i }));
+    expect(modelBtn).toHaveTextContent("DeepSeek V4 Flash");
+  });
+
+  it("passes the selected model in completion requests", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      completion({ role: "assistant", content: "Antwort von DeepSeek" }),
+    );
+
+    render(<AiChatPanel documentId="note-1" inkControllerRef={inkRef()} />);
+
+    // Switch model to DeepSeek
+    fireEvent.click(screen.getByTitle("KI-Modell auswählen"));
+    fireEvent.click(screen.getByRole("option", { name: /DeepSeek V4 Flash/i }));
+
+    fireEvent.change(screen.getByLabelText("Nachricht an den KI-Assistenten"), {
+      target: { value: "Erkläre mir das" },
+    });
+    fireEvent.click(screen.getByTitle("Senden"));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const requestBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(requestBody.model).toBe("deepseek/deepseek-v4-flash");
+  });
 });
