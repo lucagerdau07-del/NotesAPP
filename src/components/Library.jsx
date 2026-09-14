@@ -3005,12 +3005,15 @@ export default function Library({
   const dragDepthRef = useRef(0);
   const [isFileDragActive, setIsFileDragActive] = useState(false);
 
+  // One document per file, so a stack of scanned book pages lands as separate
+  // sources in the open folder. Only a single file is opened right away.
   const runImport = async (files) => {
-    const note = await documentLibrary.importFiles(
-      files,
-      selectedSubject?.name || "",
-    );
-    if (note) onOpenNote?.(note);
+    const list = Array.from(files || []);
+    let note = null;
+    for (const file of list) {
+      note = await documentLibrary.importFiles([file], selectedSubject?.name || "");
+    }
+    if (list.length === 1 && note) onOpenNote?.(note);
   };
 
   const [selectedSubject, setSelectedSubject] = useState(null); // null = all subjects
@@ -3736,6 +3739,7 @@ export default function Library({
         type="file"
         aria-label="Datei öffnen"
         data-testid="file-import-input"
+        multiple
         accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
         onChange={async (event) => {
           await runImport(event.target.files);

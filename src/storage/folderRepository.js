@@ -71,23 +71,28 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
     },
 
     removeFolder(id) {
-      const key = String(id);
       const folders = read();
-      const toRemove = new Set([key]);
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const f of folders) {
-          if (f.parentId && toRemove.has(f.parentId) && !toRemove.has(f.id)) {
-            toRemove.add(f.id);
-            grew = true;
-          }
-        }
-      }
+      const toRemove = folderWithDescendants(folders, id);
       write(folders.filter((f) => !toRemove.has(f.id)));
       return [...toRemove];
     },
   };
+}
+
+// A folder's id plus the ids of every folder nested below it, at any depth.
+export function folderWithDescendants(folders, id) {
+  const ids = new Set([String(id)]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of folders) {
+      if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+        ids.add(f.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
 }
 
 export const browserFolderRepository = createFolderRepository(globalThis.localStorage);

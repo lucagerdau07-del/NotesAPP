@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { browserDocumentImporter } from "../documents/documentImporter.js";
+import { queueSourceIndexing } from "../knowledge/sources.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 
 export default function useDocumentLibrary({
   repository = browserDocumentRepository,
   importer = browserDocumentImporter,
+  indexSources = queueSourceIndexing,
 } = {}) {
   const [importedNotes, setImportedNotes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +19,9 @@ export default function useDocumentLibrary({
       .listImportedNotes()
       .then((notes) => {
         if (!disposed) setImportedNotes(notes);
+        // Turns imports into searchable text for the agent, picking up
+        // wherever the last pass stopped (see knowledge/sources.js).
+        indexSources(notes, { repository });
       })
       .catch((cause) => {
         if (!disposed) setError(cause);
@@ -27,7 +32,7 @@ export default function useDocumentLibrary({
     return () => {
       disposed = true;
     };
-  }, [repository]);
+  }, [repository, indexSources]);
 
   const importFiles = useCallback(
     async (files, subject) => {
@@ -40,6 +45,7 @@ export default function useDocumentLibrary({
           note,
           ...current.filter((item) => item.id !== note.id),
         ]);
+        indexSources([note], { repository });
         return note;
       } catch (cause) {
         setError(cause);
@@ -48,7 +54,7 @@ export default function useDocumentLibrary({
         setIsImporting(false);
       }
     },
-    [importer, isImporting],
+    [importer, isImporting, indexSources, repository],
   );
 
   return {

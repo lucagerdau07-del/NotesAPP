@@ -1,9 +1,10 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { renderPagesFromDocument, previewTextOf } from "../documents/notePreview.js";
-import { browserFolderRepository } from "../storage/folderRepository.js";
+import { browserFolderRepository, folderWithDescendants } from "../storage/folderRepository.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
+import { readSource, searchSources } from "../knowledge/sources.js";
 import { requestSearch } from "./agentClient.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
@@ -675,6 +676,46 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "search_sources",
+      description:
+        "Volltextsuche in den Quellen der Bibliothek: importierte Bücher und PDFs, gescannte Buchseiten, Arbeitsblätter und getippter Text eigener Notizen. Liefert die besten Stellen mit Auszug, noteId, page und Zitierangabe cite.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Stichwörter, Namen oder ein Zitatfragment. Wortformen werden mitgefunden. Ohne Treffer: Synonyme versuchen.",
+          },
+          folderId: {
+            type: "string",
+            description: "Nur dieser Ordner samt Unterordnern (id oder Name), optional",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_source",
+      description:
+        "Liest den vollen Text von 1 bis 3 Seiten einer Quelle, um einen Treffer aus search_sources im Zusammenhang zu lesen oder wörtlich zu zitieren.",
+      parameters: {
+        type: "object",
+        properties: {
+          noteId: { type: "string" },
+          page: { type: "integer", description: "Erste Seite, der Wert page aus search_sources" },
+          count: { type: "integer", description: "Anzahl Seiten, 1 bis 3, Standard 1" },
+        },
+        required: ["noteId", "page"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -691,6 +732,8 @@ const READ_ONLY_TOOL_NAMES = new Set([
   "see_document",
   "list_folders",
   "list_notes",
+  "search_sources",
+  "read_source",
   "search_web",
   "done",
 ]);
@@ -702,10 +745,18 @@ export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
   READ_ONLY_TOOL_NAMES.has(tool.function.name),
 );
 
-const NO_DOCUMENT_TOOL_NAMES = new Set(["list_folders", "list_notes", "search_web", "done"]);
+const NO_DOCUMENT_TOOL_NAMES = new Set([
+  "list_folders",
+  "list_notes",
+  "search_sources",
+  "read_source",
+  "search_web",
+  "done",
+]);
 
 // Start screen chat (Library.jsx): no open note at all, so read_document/
-// see_document have nothing to read — only search_web/done/list_folders/list_notes apply there.
+// see_document have nothing to read — only search_web/done and the library
+// tools (folders, notes, sources) apply there.
 export const AGENT_NO_DOCUMENT_TOOLS = AGENT_TOOLS.filter((tool) =>
   NO_DOCUMENT_TOOL_NAMES.has(tool.function.name),
 );
@@ -791,6 +842,10 @@ export function describeToolCall(name, args = {}) {
       return "Ordner auflisten";
     case "list_notes":
       return args.folderId ? `Notizen in ${args.folderId} auflisten` : "Notizen auflisten";
+    case "search_sources":
+      return `Quellen durchsuchen: ${String(args.query || "").slice(0, 40)}`;
+    case "read_source":
+      return `Quelle lesen (Seite ${args.page ?? "?"})`;
     case "see_document":
       return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":
@@ -922,7 +977,7 @@ export async function executeTool(name, rawArgs, api) {
     });
   }
 
-  if (name === "list_notes") {
+  if (name === "list_notes" || name === "search_sources" || name === "read_source") {
     const notes = browserNoteRepository.listNotes();
     const folders = browserFolderRepository.listFolders();
     const folder = args.folderId
@@ -932,6 +987,17 @@ export async function executeTool(name, rawArgs, api) {
       : null;
     if (args.folderId && !folder)
       return `Fehler: Ordner "${args.folderId}" gibt es nicht. Vorhanden: ${folders.map((f) => f.name).join(", ")}`;
+    if (name !== "list_notes") {
+      // Sources nest (Deutsch > Der Vorleser), so searching a folder covers its
+      // subfolders too. read_source takes no folderId and sees every note.
+      const scopeIds = folder ? folderWithDescendants(folders, folder.id) : null;
+      const inScope = (n) => !folder || folders.some((f) => scopeIds.has(f.id) && matchesFolder(n, f));
+      const scope = {
+        notes: notes.filter(inScope),
+        imported: (await browserDocumentRepository.listImportedNotes()).filter(inScope),
+      };
+      return name === "search_sources" ? searchSources(args.query, scope) : readSource(args, scope);
+    }
     const query = String(args.query || "").trim().toLowerCase();
     return browserDocumentRepository.listImportedNotes().then((imported) => {
       const entries = [

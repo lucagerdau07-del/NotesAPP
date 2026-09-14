@@ -391,6 +391,8 @@ describe("AGENT_NO_DOCUMENT_TOOLS", () => {
       "done",
       "list_folders",
       "list_notes",
+      "read_source",
+      "search_sources",
       "search_web",
     ]);
   });

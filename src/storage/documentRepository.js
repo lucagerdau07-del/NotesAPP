@@ -92,9 +92,17 @@ export function createDocumentRepository({ dbName = DOCUMENT_DB_NAME } = {}) {
     async getOcrPage(noteId, pageIndex) {
       return (await database()).get("ocrPages", `${noteId}:${pageIndex}`);
     },
-    async saveOcrPage(noteId, pageIndex, words) {
+    // Keys are "noteId:pageIndex", so a key range over that prefix stands in
+    // for an index on noteId without a schema upgrade.
+    async listOcrPages(noteId) {
+      return (await database()).getAll(
+        "ocrPages",
+        IDBKeyRange.bound(`${noteId}:`, `${noteId}:￿`),
+      );
+    },
+    async saveOcrPage(noteId, pageIndex, page) {
       const db = await database();
-      await db.put("ocrPages", { id: `${noteId}:${pageIndex}`, noteId, pageIndex, words, recognizedAt: Date.now() });
+      await db.put("ocrPages", { ...page, id: `${noteId}:${pageIndex}`, noteId, pageIndex, recognizedAt: Date.now() });
     },
     async close() {
       if (dbPromise) (await dbPromise).close();
