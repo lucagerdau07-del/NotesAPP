@@ -194,9 +194,16 @@ function withUpdatedAt(document, changes) {
 
 function createNextPage(document, page) {
   const existingIds = new Set(document.pages.map((item) => item.id));
+  // A blank {id} page carries none of the document's paper style (ruling,
+  // background, size), so it silently rendered as an un-ruled blank page
+  // anywhere that reads per-page style - inherit the first page's style so a
+  // freshly added page actually matches the rest of the document.
+  const { id: _templateId, ...styleDefaults } = document.pages[0] || {};
   const requestedId = page && typeof page.id === "string" ? page.id : "";
   if (requestedId) {
-    return existingIds.has(requestedId) ? null : { id: requestedId };
+    return existingIds.has(requestedId)
+      ? null
+      : { ...styleDefaults, ...page, id: requestedId };
   }
   let index = document.pages.length + 1;
   let id = `${document.documentId}-page-${index}`;
@@ -204,7 +211,7 @@ function createNextPage(document, page) {
     index += 1;
     id = `${document.documentId}-page-${index}`;
   }
-  return { id };
+  return { ...styleDefaults, ...(page || {}), id };
 }
 
 function applyInkCommand(document, command) {
@@ -314,6 +321,31 @@ function applyInkCommand(document, command) {
       return page === null
         ? document
         : withUpdatedAt(document, { pages: [...document.pages, page] });
+    }
+    case "remove-page": {
+      if (document.pages.length <= 1) return document;
+      const pageId = String(command.pageId ?? "");
+      const pages = document.pages.filter((page) => page.id !== pageId);
+      if (pages.length === document.pages.length) return document;
+      return withUpdatedAt(document, {
+        pages,
+        strokes: document.strokes.filter((stroke) => stroke.pageId !== pageId),
+        objects: pageObjectsOf(document).filter((object) => object.pageId !== pageId),
+      });
+    }
+    case "reorder-pages": {
+      const order = Array.isArray(command.pageIds) ? command.pageIds : [];
+      const idMap = new Map(document.pages.map((page) => [page.id, page]));
+      if (
+        order.length !== document.pages.length ||
+        !order.every((id) => idMap.has(id)) ||
+        new Set(order).size !== order.length
+      ) {
+        return document;
+      }
+      return withUpdatedAt(document, {
+        pages: order.map((id) => idMap.get(id)),
+      });
     }
     case "reorder-layers": {
       const objects = pageObjectsOf(document);

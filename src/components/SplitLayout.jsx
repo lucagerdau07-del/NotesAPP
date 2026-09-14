@@ -15,6 +15,9 @@ export default function SplitLayout({
   railSlot,
   onPageCountChange,
   onCurrentPageChange,
+  onPagesChange,
+  navigatePageRequest,
+  onNavigatePageHandled,
   isImmersive,
   inkControllerRef,
   imageDropRequest,
@@ -95,6 +98,9 @@ export default function SplitLayout({
   useEffect(() => {
     onPageCountChange?.(pagesCount);
   }, [pagesCount, onPageCountChange]);
+  useEffect(() => {
+    onPagesChange?.(inkController.document.pages.map((page) => page.id));
+  }, [inkController.document.pages, onPagesChange]);
 
   if (activeTab === "smartCanvas") {
     return (
@@ -120,6 +126,8 @@ export default function SplitLayout({
           onCircleToSearch={onCircleToSearch}
           armCircleSearchRequest={armCircleSearchRequest}
           onArmCircleSearchHandled={onArmCircleSearchHandled}
+          navigatePageRequest={navigatePageRequest}
+          onNavigatePageHandled={onNavigatePageHandled}
         />
         {layoutMode === "split" && (
           <WritingZone

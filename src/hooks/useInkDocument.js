@@ -172,6 +172,18 @@ export default function useInkDocument({
     },
     [applyCommand],
   );
+  const removePage = useCallback(
+    (pageId) => {
+      applyCommand({ type: "remove-page", pageId });
+    },
+    [applyCommand],
+  );
+  const reorderPages = useCallback(
+    (pageIds) => {
+      applyCommand({ type: "reorder-pages", pageIds });
+    },
+    [applyCommand],
+  );
   // One command for the whole lasso selection (strokes + objects together),
   // so a single drag is a single undo step no matter how many items moved.
   const transformSelection = useCallback(
@@ -349,6 +361,8 @@ export default function useInkDocument({
     inkLayerHidden: history.present.inkLayerHidden === true,
     inkLayerLocked: history.present.inkLayerLocked === true,
     addPage,
+    removePage,
+    reorderPages,
     transformSelection,
     undo,
     redo,

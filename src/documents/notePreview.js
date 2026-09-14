@@ -520,12 +520,17 @@ function renderFullPage(
 // groß.
 export function renderPagesFromDocument(inkDoc, options = {}) {
   if (typeof document === "undefined" || !inkDoc) return [];
+  // Older/agent-created pages can be missing ruling/background/size (only
+  // {id}) - fall back to the first page's style so they don't render as a
+  // blank, un-ruled page next to siblings that do have it.
+  const template = inkDoc.pages[0] || {};
   return inkDoc.pages.map((page) => {
-    const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, page);
+    const styledPage = { ...template, ...page };
+    const { minX, minY, maxX, maxY } = fullPageBounds(inkDoc, styledPage);
     return {
       id: page.id,
-      src: renderFullPage(inkDoc, page, options),
-      background: page.background || "#0e0e12",
+      src: renderFullPage(inkDoc, styledPage, options),
+      background: styledPage.background || "#0e0e12",
       aspectRatio: (maxX - minX) / Math.max(1, maxY - minY),
     };
   });

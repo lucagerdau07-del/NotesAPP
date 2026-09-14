@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Sparkles, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -17,6 +17,7 @@ const Settings = lazy(() => import("./components/Settings"));
 const PlanScreen = lazy(() => import("./components/PlanScreen"));
 const AiChatPanel = lazy(() => import("./components/AiChatPanel"));
 const BrowserPanel = lazy(() => import("./components/BrowserPanel"));
+const PagesPanel = lazy(() => import("./components/PagesPanel"));
 
 const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
 const RAIL_LEFT_INSET = 8;
@@ -45,6 +46,8 @@ function Editor({ activeNote, onBack }) {
   const [browserNavigation, setBrowserNavigation] = useState(null);
   const [pageCount, setPageCount] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pages, setPages] = useState([]);
+  const [navigatePageRequest, setNavigatePageRequest] = useState(null);
   const [isImmersive, setIsImmersive] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -87,9 +90,11 @@ function Editor({ activeNote, onBack }) {
   // and their chunks fetched - before the user opens them the first time.
   const [hasOpenedAgent, setHasOpenedAgent] = useState(false);
   const [hasOpenedBrowser, setHasOpenedBrowser] = useState(false);
+  const [hasOpenedPages, setHasOpenedPages] = useState(false);
   useEffect(() => {
     if (panelMode === "agent") setHasOpenedAgent(true);
     if (panelMode === "browser") setHasOpenedBrowser(true);
+    if (panelMode === "pages") setHasOpenedPages(true);
   }, [panelMode]);
   const navigationSequenceRef = useRef(0);
   const railWidthRef = useRef(railWidth);
@@ -272,7 +277,24 @@ function Editor({ activeNote, onBack }) {
             }}
             title="KI-Assistent"
           >
-            <Sparkles size={19} />
+            <svg width="31" height="31" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <g id="ai-bubble-group" transform="translate(12 12) scale(0.65) translate(-12 -11.25)">
+                <path d="M6 4h11a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-6l-4 3.5V15a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z" />
+                <path d="M8 8h8M8 11.3h5" />
+              </g>
+              <g id="ai-star-group" transform="translate(20.64 12) scale(0.62) translate(-18.6 -10.1)">
+                <path
+                  d="M20 1.5q0 4.6 3.5 5.5-3.5.9-3.5 5.5-0-4.6-3.5-5.5 3.5-.9 3.5-5.5Z"
+                  fill="currentColor"
+                  stroke="none"
+                />
+                <path
+                  d="M15.8 12.3q0 2.7 2.1 3.2-2.1.5-2.1 3.2-0-2.7-2.1-3.2 2.1-.5 2.1-3.2Z"
+                  fill="currentColor"
+                  stroke="none"
+                />
+              </g>
+            </svg>
           </button>
           <button
             className={`rail-btn rail-browser-btn ${panelMode === "browser" ? "active" : ""}`}
@@ -280,6 +302,13 @@ function Editor({ activeNote, onBack }) {
             title="Browser"
           >
             <Globe2 size={19} />
+          </button>
+          <button
+            className={`rail-btn rail-pages-btn ${panelMode === "pages" ? "active" : ""}`}
+            onClick={() => setPanelMode((mode) => (mode === "pages" ? null : "pages"))}
+            title="Seiten"
+          >
+            <Files size={18} />
           </button>
           <div className="rail-divider" />
         </div>
@@ -316,6 +345,23 @@ function Editor({ activeNote, onBack }) {
             />
           </Suspense>
         )}
+        {hasOpenedPages && (
+          <Suspense fallback={null}>
+            <PagesPanel
+              active={panelMode === "pages"}
+              pages={pages}
+              currentPage={currentPage}
+              inkControllerRef={inkControllerRef}
+              onNavigate={(pageId) =>
+                setNavigatePageRequest({ id: `${Date.now()}-${Math.random()}`, pageId })
+              }
+              onAddPage={() => inkControllerRef.current?.addPage?.()}
+              onRemovePage={(pageId) => inkControllerRef.current?.removePage?.(pageId)}
+              onReorderPages={(newIds) => inkControllerRef.current?.reorderPages?.(newIds)}
+              onClose={() => setPanelMode(null)}
+            />
+          </Suspense>
+        )}
         {isPanelOpen && !isBrowserFullscreen && (
           <div
             className="rail-resize-handle"
@@ -340,6 +386,11 @@ function Editor({ activeNote, onBack }) {
           railSlot={railSlot}
           onPageCountChange={setPageCount}
           onCurrentPageChange={setCurrentPage}
+          onPagesChange={setPages}
+          navigatePageRequest={navigatePageRequest}
+          onNavigatePageHandled={(id) =>
+            setNavigatePageRequest((current) => (current?.id === id ? null : current))
+          }
           isImmersive={isImmersive}
           inkControllerRef={inkControllerRef}
           imageDropRequest={imageDropRequest}

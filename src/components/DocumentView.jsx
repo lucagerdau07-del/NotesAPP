@@ -18,7 +18,6 @@ import {
   Pencil,
   Plus,
   Move,
-  Pointer,
   ArrowUpRight,
   Minus,
   Square,
@@ -59,16 +58,6 @@ import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "..
 import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
-const INPUT_MODE_LABELS = {
-  stylus: "Stift",
-  finger: "Finger",
-  move: "Bewegen",
-};
-const INPUT_MODE_ICONS = {
-  stylus: PenTool,
-  finger: Pointer,
-  move: Move,
-};
 
 // Default footprint per type, in page units. Inserts land centered on the
 // visible area, so these only decide how big the thing starts out.
@@ -120,7 +109,7 @@ const PEN_TOOL_ICONS = {
   pencil: Pencil,
 };
 
-export function DesignToolsPopover({ onInsert, onClose }) {
+export function DesignToolsPopover({ onInsert, onClose, top = 120 }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -141,7 +130,7 @@ export function DesignToolsPopover({ onInsert, onClose }) {
     <div
       ref={popoverRef}
       className="editor-popover design-tools-popover"
-      style={{ top: 120, width: 250 }}
+      style={{ top, width: 250 }}
       data-testid="design-tools-popover"
     >
       <div className="editor-popover-header">
@@ -173,7 +162,7 @@ const TEXT_COLORS = ["#EFECE4", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#14
 
 // Edits the selected text object when there is one, otherwise the defaults the
 // next insert will use — same controls either way.
-export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose }) {
+export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose, top = 120 }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -202,7 +191,7 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
     <div
       ref={popoverRef}
       className="editor-popover text-settings-popover"
-      style={{ top: 120, width: 250 }}
+      style={{ top, width: 250 }}
       data-testid="text-settings-popover"
     >
       <div className="editor-popover-header">
@@ -352,7 +341,7 @@ const ARROW_TYPES = [
 // Edits the selected rect/ellipse/line/arrow object — same "no selection, no
 // popover" shape as text minus the insert button, since these objects are
 // already inserted via the shapes popover with the current pen color/width.
-export function ShapeSettingsPopover({ object, onChange, onClose }) {
+export function ShapeSettingsPopover({ object, onChange, onClose, top = 120 }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -376,7 +365,7 @@ export function ShapeSettingsPopover({ object, onChange, onClose }) {
     <div
       ref={popoverRef}
       className="editor-popover shape-settings-popover"
-      style={{ top: 120, width: 250 }}
+      style={{ top, width: 250 }}
       data-testid="shape-settings-popover"
     >
       <div className="editor-popover-header">
@@ -521,6 +510,9 @@ function PenSettingsPopover({
   onClose,
   setIsEraser,
   setIsSelectMode,
+  inputMode,
+  setInputMode,
+  top = 120,
 }) {
   const popoverRef = useRef(null);
 
@@ -554,7 +546,7 @@ function PenSettingsPopover({
     <div
       ref={popoverRef}
       className="editor-popover pen-settings-popover"
-      style={{ top: 120, width: 250 }}
+      style={{ top, width: 250 }}
       data-testid="pen-settings-popover"
     >
       <div className="editor-popover-header">
@@ -580,6 +572,7 @@ function PenSettingsPopover({
               setTool?.(t.id);
               setIsEraser?.(false);
               setIsSelectMode?.(false);
+              if (inputMode === "move") setInputMode?.("stylus");
             }}
           >
             {t.icon}
@@ -669,6 +662,7 @@ function EraserSettingsPopover({
   eraserWidth,
   setEraserWidth,
   onClose,
+  top = 120,
 }) {
   const popoverRef = useRef(null);
 
@@ -690,7 +684,7 @@ function EraserSettingsPopover({
     <div
       ref={popoverRef}
       className="editor-popover pen-settings-popover"
-      style={{ top: 120, width: 220 }}
+      style={{ top, width: 220 }}
       data-testid="eraser-settings-popover"
     >
       <div className="editor-popover-header">
@@ -794,6 +788,7 @@ function ColorWheelPopover({
   setActivePickerIndex,
   onColorChange,
   onClose,
+  top = 220,
 }) {
   const popoverRef = useRef(null);
   const curColor = customColors[activePickerIndex] || "#EFECE4";
@@ -844,7 +839,7 @@ function ColorWheelPopover({
     <div
       ref={popoverRef}
       className="editor-popover color-wheel-popover"
-      style={{ top: 220, width: 232 }}
+      style={{ top, width: 232 }}
       data-testid="color-wheel-popover"
     >
       <div className="editor-popover-header">
@@ -948,11 +943,12 @@ function ColorSlot({
   const isLongPressRef = useRef(false);
   const timerRef = useRef(null);
 
-  const handlePointerDown = () => {
+  const handlePointerDown = (e) => {
     isLongPressRef.current = false;
+    const wrapperEl = e.currentTarget;
     timerRef.current = setTimeout(() => {
       isLongPressRef.current = true;
-      onOpenPicker?.();
+      onOpenPicker?.(wrapperEl);
     }, 450);
   };
 
@@ -963,12 +959,12 @@ function ColorSlot({
     }
   };
 
-  const handleClick = () => {
+  const handleClick = (e) => {
     if (isLongPressRef.current) {
       isLongPressRef.current = false;
       return;
     }
-    onSelect();
+    onSelect(e.currentTarget);
   };
 
   return (
@@ -990,8 +986,8 @@ function ColorSlot({
   );
 }
 
-const baseWidth = 800;
-const pageHeight = baseWidth * 1.414;
+export const baseWidth = 800;
+export const pageHeight = baseWidth * 1.414;
 const PAGE_GAP = 28;
 const EMPTY_STROKES = [];
 const maxPages = 20;
@@ -1112,6 +1108,8 @@ export default function DocumentView({
   onCircleToSearch,
   armCircleSearchRequest,
   onArmCircleSearchHandled,
+  navigatePageRequest,
+  onNavigatePageHandled,
 }) {
   const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
@@ -1153,17 +1151,30 @@ export default function DocumentView({
     "#EFECE4",
     "#3E7BD8",
     "#D8615B",
-    "#4FA66B",
-    "#D4A937",
   ]);
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
+  const penLongPressTimer = useRef(null);
+  const penLongPressFired = useRef(false);
+  const textLongPressTimer = useRef(null);
+  const textLongPressFired = useRef(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
   const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
   const [isLayersOpen, setIsLayersOpen] = useState(false);
+  const [popoverTop, setPopoverTop] = useState(120);
+  const documentViewRef = useRef(null);
+  const designButtonRef = useRef(null);
+  const anchorPopoverToButton = (buttonEl, popoverHeight = 460) => {
+    const containerRect = documentViewRef.current?.getBoundingClientRect();
+    const buttonRect = buttonEl?.getBoundingClientRect();
+    if (containerRect && buttonRect) {
+      const maxTop = Math.max(8, containerRect.height - popoverHeight - 8);
+      setPopoverTop(Math.min(Math.max(8, buttonRect.top - containerRect.top), maxTop));
+    }
+  };
   // Defaults for the next text insert. Editing a selected text writes to the
   // object instead, so the popover always shows what the next edit affects.
   const [textStyle, setTextStyle] = useState({
@@ -1324,6 +1335,18 @@ export default function DocumentView({
     zoom,
     showPageBreaks: Boolean(showPageBreaks),
   };
+  useEffect(() => {
+    if (!navigatePageRequest) return;
+    const index = pageIds.indexOf(navigatePageRequest.pageId);
+    if (index >= 0 && scrollRef.current) {
+      const unit = showPageBreaks
+        ? resolvedPageHeight * zoom + PAGE_GAP
+        : resolvedPageHeight * zoom;
+      scrollRef.current.scrollTo({ top: index * unit, behavior: "smooth" });
+    }
+    onNavigatePageHandled?.(navigatePageRequest.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigatePageRequest]);
   const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
   const normalizedDraftPlacement = draftPlacement
     ? {
@@ -1362,7 +1385,7 @@ export default function DocumentView({
     ? inkController.inputMode
     : "stylus";
   const isMoveMode = inputMode === "move";
-  const InputModeIcon = INPUT_MODE_ICONS[inputMode];
+  const isDesignPlacing = Boolean(placingTool) && placingTool.id !== "text";
   const inkTool = isEraser
     ? inkController?.eraserMode === "stroke"
       ? "stroke-eraser"
@@ -1443,6 +1466,7 @@ export default function DocumentView({
   // keeps its popover in sync with whatever text object is selected.
   useEffect(() => {
     if (selectedShapeObject) {
+      anchorPopoverToButton(designButtonRef.current);
       setIsShapeSettingsOpen(true);
       setIsTextSettingsOpen(false);
     } else if (!selectedTextObject) {
@@ -2886,27 +2910,53 @@ export default function DocumentView({
       </button>
       <div className="rail-divider" />
       {(() => {
-        const isPenActive = Boolean(PEN_TOOL_ICONS[tool]) && !isEraser && !isSelectMode;
-        const PenIcon = PEN_TOOL_ICONS[tool] || PenLine;
+        const isPenActive =
+          Boolean(PEN_TOOL_ICONS[tool]) &&
+          !isEraser &&
+          !isSelectMode &&
+          !isMoveMode &&
+          !isBucketMode &&
+          !isLassoMode &&
+          !placingTool &&
+          !isDesignToolsOpen;
+        const PenIcon = isMoveMode ? Move : PEN_TOOL_ICONS[tool] || PenLine;
         return (
           <button
-            className={`rail-btn pen-rail-btn ${isPenActive ? "active" : ""}`}
+            className={`rail-btn pen-rail-btn ${isPenActive || isMoveMode ? "active" : ""}`}
+            onPointerDown={(e) => {
+              penLongPressFired.current = false;
+              const buttonEl = e.currentTarget;
+              penLongPressTimer.current = setTimeout(() => {
+                penLongPressFired.current = true;
+                anchorPopoverToButton(buttonEl);
+                setIsPenSettingsOpen(true);
+                setIsBucketMode(false);
+                setIsLassoMode(false);
+                setLassoSelection(null);
+                setIsColorPickerOpen(false);
+                setIsEraserSettingsOpen(false);
+              }, 500);
+            }}
+            onPointerUp={() => clearTimeout(penLongPressTimer.current)}
+            onPointerLeave={() => clearTimeout(penLongPressTimer.current)}
             onClick={() => {
-              if (isPenActive) {
-                setIsPenSettingsOpen((prev) => !prev);
-              } else {
-                setTool?.(PEN_TOOL_ICONS[tool] ? tool : "pen");
+              if (penLongPressFired.current) return;
+              const otherToolActive =
+                isEraser || isBucketMode || isSelectMode || isLassoMode || placingTool;
+              if (otherToolActive) {
                 setIsEraser?.(false);
                 setIsSelectMode?.(false);
-                setIsPenSettingsOpen(true);
+                setIsBucketMode(false);
+                setIsLassoMode(false);
+                setLassoSelection(null);
+                setPlacingTool(null);
+                if (isMoveMode) inkController?.setInputMode?.("stylus");
+              } else {
+                inkController?.setInputMode?.(isMoveMode ? "stylus" : "move");
               }
-              setIsBucketMode(false);
-              setIsLassoMode(false);
-              setLassoSelection(null);
-              setIsColorPickerOpen(false);
-              setIsEraserSettingsOpen(false);
+              setIsPenSettingsOpen(false);
             }}
-            title="Stift & Einstellungen"
+            title="Stift: Klick = Bewegen, Halten = Einstellungen"
             data-testid="pen-tool-btn"
           >
             <PenIcon size={18} />
@@ -2915,14 +2965,16 @@ export default function DocumentView({
       })()}
       <button
         className={`rail-btn eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
-        onClick={() => {
+        onClick={(e) => {
           if (isEraser && !isSelectMode) {
+            anchorPopoverToButton(e.currentTarget);
             setIsEraserSettingsOpen((prev) => !prev);
           } else {
             setIsEraser?.(true);
             setIsSelectMode?.(false);
             setIsPenSettingsOpen(false);
             setIsColorPickerOpen(false);
+            if (isMoveMode) inkController?.setInputMode?.("stylus");
           }
           setIsBucketMode(false);
           setIsLassoMode(false);
@@ -2935,7 +2987,11 @@ export default function DocumentView({
       <button
         className={`rail-btn ${isBucketMode ? "active" : ""}`}
         onClick={() => {
-          setIsBucketMode((prev) => !prev);
+          setIsBucketMode((prev) => {
+            const next = !prev;
+            if (next && isMoveMode) inkController?.setInputMode?.("stylus");
+            return next;
+          });
           setPlacingTool(null);
           setIsEraser?.(false);
           setIsSelectMode?.(false);
@@ -2970,12 +3026,15 @@ export default function DocumentView({
         <LassoSelect size={18} />
       </button>
       <button
-        className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}
-        onClick={() => {
-          if (placingTool) {
+        ref={designButtonRef}
+        className={`rail-btn design-rail-btn ${isDesignToolsOpen || isDesignPlacing ? "active" : ""}`}
+        onClick={(e) => {
+          if (isDesignPlacing) {
             setPlacingTool(null);
             return;
           }
+          setPlacingTool(null);
+          anchorPopoverToButton(e.currentTarget);
           setIsDesignToolsOpen((prev) => !prev);
           setIsPenSettingsOpen(false);
           setIsEraserSettingsOpen(false);
@@ -2985,52 +3044,51 @@ export default function DocumentView({
           setLassoSelection(null);
         }}
         title={
-          placingTool
+          isDesignPlacing
             ? `${placingTool.name} ziehen zum Platzieren (Klick zum Abbrechen)`
             : "Pfeile, Formen, Bilder & Links einfügen"
         }
         data-testid="design-tools-btn"
       >
-        {placingTool ? placingTool.icon : <Shapes size={18} />}
+        {isDesignPlacing ? placingTool.icon : <Shapes size={18} />}
       </button>
       <button
         className={`rail-btn text-rail-btn ${
           isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
         }`}
+        onPointerDown={(e) => {
+          textLongPressFired.current = false;
+          const buttonEl = e.currentTarget;
+          textLongPressTimer.current = setTimeout(() => {
+            textLongPressFired.current = true;
+            anchorPopoverToButton(buttonEl);
+            setIsTextSettingsOpen(true);
+            setIsDesignToolsOpen(false);
+            setIsPenSettingsOpen(false);
+            setIsEraserSettingsOpen(false);
+            setIsColorPickerOpen(false);
+          }, 500);
+        }}
+        onPointerUp={() => clearTimeout(textLongPressTimer.current)}
+        onPointerLeave={() => clearTimeout(textLongPressTimer.current)}
         onClick={() => {
-          if (placingTool?.id === "text") {
-            setPlacingTool(null);
-            return;
-          }
-          setIsTextSettingsOpen((prev) => !prev);
-          setIsDesignToolsOpen(false);
-          setIsPenSettingsOpen(false);
-          setIsEraserSettingsOpen(false);
-          setIsColorPickerOpen(false);
+          if (textLongPressFired.current) return;
+          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
           setIsBucketMode(false);
           setIsLassoMode(false);
           setLassoSelection(null);
+          setIsEraser?.(false);
+          setIsSelectMode?.(false);
+          setIsTextSettingsOpen(false);
         }}
         title={
           placingTool?.id === "text"
             ? "Text ziehen zum Platzieren (Klick zum Abbrechen)"
-            : "Text: Schrift, Größe, Farbe & Linien-Modus"
+            : "Text: Klick = Platzieren, Halten = Einstellungen"
         }
         data-testid="text-tool-btn"
       >
         <Type size={18} />
-      </button>
-      <button
-        className={`rail-btn ${inputMode !== "stylus" ? "active" : ""}`}
-        onClick={() =>
-          inkController?.setInputMode?.(
-            INPUT_MODES[(INPUT_MODES.indexOf(inputMode) + 1) % INPUT_MODES.length],
-          )
-        }
-        aria-label={`Eingabe: ${INPUT_MODE_LABELS[inputMode]}`}
-        title={`Eingabe: ${INPUT_MODE_LABELS[inputMode]} (Klicken zum Wechseln)`}
-      >
-        <InputModeIcon size={18} />
       </button>
       {!isFullMode && (
         <button
@@ -3060,8 +3118,9 @@ export default function DocumentView({
           colorValue={c}
           isActive={penColor === c && !isEraser && !isSelectMode}
           isEraser={isEraser}
-          onSelect={() => {
+          onSelect={(buttonEl) => {
             if (penColor === c && !isEraser && !isSelectMode) {
+              anchorPopoverToButton(buttonEl);
               setIsColorPickerOpen((prev) => !prev);
               setActivePickerIndex(index);
             } else {
@@ -3072,7 +3131,8 @@ export default function DocumentView({
             }
             setIsPenSettingsOpen(false);
           }}
-          onOpenPicker={() => {
+          onOpenPicker={(buttonEl) => {
+            anchorPopoverToButton(buttonEl);
             setActivePickerIndex(index);
             setIsColorPickerOpen(true);
             setIsPenSettingsOpen(false);
@@ -3113,6 +3173,7 @@ export default function DocumentView({
 
   return (
     <div
+      ref={documentViewRef}
       className={`document-view paper-style-${paperStyle}`}
       data-full-bleed={isFullBleed ? "true" : undefined}
       data-testid="document-view"
@@ -3147,6 +3208,9 @@ export default function DocumentView({
           onClose={() => setIsPenSettingsOpen(false)}
           setIsEraser={setIsEraser}
           setIsSelectMode={setIsSelectMode}
+          inputMode={inputMode}
+          setInputMode={inkController?.setInputMode}
+          top={popoverTop}
         />
       )}
       {isEraserSettingsOpen && (
@@ -3156,12 +3220,14 @@ export default function DocumentView({
           eraserWidth={eraserWidth}
           setEraserWidth={setEraserWidth}
           onClose={() => setIsEraserSettingsOpen(false)}
+          top={popoverTop}
         />
       )}
       {isDesignToolsOpen && (
         <DesignToolsPopover
           onInsert={handleInsertTool}
           onClose={() => setIsDesignToolsOpen(false)}
+          top={popoverTop}
         />
       )}
       {isTextSettingsOpen && (
@@ -3175,6 +3241,7 @@ export default function DocumentView({
             setIsTextSettingsOpen(false);
           }}
           onClose={() => setIsTextSettingsOpen(false)}
+          top={popoverTop}
         />
       )}
       {isShapeSettingsOpen && selectedShapeObject && (
@@ -3182,6 +3249,7 @@ export default function DocumentView({
           object={selectedShapeObject}
           onChange={handleShapeStyleChange}
           onClose={() => setIsShapeSettingsOpen(false)}
+          top={popoverTop}
         />
       )}
       {/* Canva Layer Drawer */}
@@ -3216,6 +3284,7 @@ export default function DocumentView({
           setActivePickerIndex={setActivePickerIndex}
           onColorChange={handleColorChange}
           onClose={() => setIsColorPickerOpen(false)}
+          top={popoverTop}
         />
       )}
       {zoomToast !== null && (
