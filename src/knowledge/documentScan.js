@@ -1,5 +1,6 @@
 import { renderNotePagesOf } from "../documents/notePreview.js";
 import { dueNotes, isRunDue } from "./scanQueue.js";
+import { VISION_MODEL_CHAIN } from "../agent/agentSettings.js";
 
 // Der Deckel begrenzt die Kosten eines einzelnen Aufrufs. Längere Notizen
 // werden nur bis zur achten Seite gelesen.
@@ -127,12 +128,13 @@ export async function scanNote(note, { renderPages, complete, today, signal }) {
         role: "user",
         content: [
           { type: "text", text: scanContext(note, today) },
-          // Der Space erkennt diese Teile und routet selbst auf das
-          // Vision-Modell - deshalb ist am Backend nichts zu ändern.
+          // Der Space erkennt Bildinhalte selbst und würde ohne models-Angabe
+          // auf das bezahlte DeepSeek-Vision-Modell ausweichen.
           ...pages.map((page) => ({ type: "image_url", image_url: { url: page.src } })),
         ],
       },
     ],
+    models: VISION_MODEL_CHAIN,
     signal,
   });
 

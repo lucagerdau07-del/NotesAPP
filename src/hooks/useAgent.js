@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestCompletion } from "../agent/agentClient.js";
+import { VISION_MODEL_CHAIN } from "../agent/agentSettings.js";
 import {
   AGENT_CORE_TOOLS,
   AGENT_READ_TOOLS,
@@ -93,6 +94,17 @@ async function generateTitle(task, replyText, signal, model) {
   } catch {
     return null;
   }
+}
+
+// Der Proxy weicht ohne explizite models-Angabe bei Bildinhalt auf das
+// bezahlte DeepSeek-Vision-Modell aus. Läuft ein Bild mit, fordern wir
+// stattdessen die Gemini-Kette an (BYOK, über Googles Gratis-Kontingent).
+function conversationHasImage(conversation) {
+  return conversation.some(
+    (message) =>
+      Array.isArray(message.content) &&
+      message.content.some((part) => part?.type === "image_url"),
+  );
 }
 
 function parseArguments(raw) {
@@ -332,6 +344,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               : canRead
                 ? AGENT_READ_TOOLS
                 : AGENT_NO_DOCUMENT_TOOLS,
+            models: conversationHasImage(conversation) ? VISION_MODEL_CHAIN : undefined,
             signal: controller.signal,
           });
           totalTokens += usage?.total_tokens ?? 0;

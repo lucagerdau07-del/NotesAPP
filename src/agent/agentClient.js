@@ -6,6 +6,7 @@ export async function requestCompletion({
   messages,
   tools,
   model,
+  models,
   signal,
   config = loadAgentConfig(),
 }) {
@@ -14,7 +15,7 @@ export async function requestCompletion({
     throw new Error("Keine Backend-Adresse eingestellt. Einstellungen → KI & Netzwerk.");
   }
 
-  const modelChain = model ? getModelChain(model) : [undefined];
+  const modelChain = models?.length ? models : model ? getModelChain(model) : [undefined];
   let lastError = null;
 
   for (let i = 0; i < modelChain.length; i += 1) {
