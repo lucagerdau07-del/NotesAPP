@@ -9,6 +9,17 @@ export const AGENT_DEFAULTS = {
   accessKey: "",
 };
 
+// Modelle für Anfragen mit Bildinhalt (Seiten-Scan, see_document). Der Proxy
+// lässt nur diese IDs durch (server.js NOTES_ALLOWED_MODELS) und reicht sie als
+// OpenRouter-Fallback-Kette weiter, solange model[0] mit "google/" beginnt.
+// Läuft über den im OpenRouter-Account hinterlegten eigenen Google-AI-Key
+// (BYOK) — Kosten trägt Googles Gratis-Kontingent, nicht unser Guthaben.
+export const VISION_MODEL_CHAIN = [
+  "google/gemini-3.8-flash",
+  "google/gemini-3.7-flash",
+  "google/gemini-3.6-flash",
+];
+
 export function loadAgentConfig(storage = globalThis.localStorage) {
   try {
     const raw = storage?.getItem(STORAGE_KEY);
