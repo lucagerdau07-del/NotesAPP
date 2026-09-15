@@ -5,6 +5,7 @@ import { loadAgentConfig } from "./agentSettings.js";
 export async function requestCompletion({
   messages,
   tools,
+  models,
   signal,
   config = loadAgentConfig(),
 }) {
@@ -25,6 +26,7 @@ export async function requestCompletion({
       body: JSON.stringify({
         messages,
         ...(tools?.length ? { tools } : {}),
+        ...(models?.length ? { models } : {}),
       }),
     });
   } catch (error) {
