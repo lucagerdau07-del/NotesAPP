@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files, Calculator } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -18,6 +18,7 @@ const PlanScreen = lazy(() => import("./components/PlanScreen"));
 const AiChatPanel = lazy(() => import("./components/AiChatPanel"));
 const BrowserPanel = lazy(() => import("./components/BrowserPanel"));
 const PagesPanel = lazy(() => import("./components/PagesPanel"));
+const CalculatorPanel = lazy(() => import("./components/CalculatorPanel"));
 
 const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
 const RAIL_LEFT_INSET = 8;
@@ -92,10 +93,12 @@ function Editor({ activeNote, onBack }) {
   const [hasOpenedAgent, setHasOpenedAgent] = useState(false);
   const [hasOpenedBrowser, setHasOpenedBrowser] = useState(false);
   const [hasOpenedPages, setHasOpenedPages] = useState(false);
+  const [hasOpenedCalculator, setHasOpenedCalculator] = useState(false);
   useEffect(() => {
     if (panelMode === "agent") setHasOpenedAgent(true);
     if (panelMode === "browser") setHasOpenedBrowser(true);
     if (panelMode === "pages") setHasOpenedPages(true);
+    if (panelMode === "calculator") setHasOpenedCalculator(true);
   }, [panelMode]);
   const navigationSequenceRef = useRef(0);
   const railWidthRef = useRef(railWidth);
@@ -312,6 +315,13 @@ function Editor({ activeNote, onBack }) {
           >
             <Files size={18} />
           </button>
+          <button
+            className={`rail-btn rail-calculator-btn ${panelMode === "calculator" ? "active" : ""}`}
+            onClick={() => setPanelMode((mode) => (mode === "calculator" ? null : "calculator"))}
+            title="Taschenrechner (CASIO fx-991DEX)"
+          >
+            <Calculator size={18} />
+          </button>
           <div className="rail-divider" />
           </div>
         </div>
@@ -366,6 +376,14 @@ function Editor({ activeNote, onBack }) {
               onAddPage={() => inkControllerRef.current?.addPage?.()}
               onRemovePage={(pageId) => inkControllerRef.current?.removePage?.(pageId)}
               onReorderPages={(newIds) => inkControllerRef.current?.reorderPages?.(newIds)}
+              onClose={() => setPanelMode(null)}
+            />
+          </Suspense>
+        )}
+        {hasOpenedCalculator && (
+          <Suspense fallback={null}>
+            <CalculatorPanel
+              active={panelMode === "calculator"}
               onClose={() => setPanelMode(null)}
             />
           </Suspense>

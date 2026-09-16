@@ -3398,11 +3398,6 @@ body::after {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.rail-browser-btn {
-  color: #F1EEE7;
-}
-
-
 .rail-chat[hidden] {
   display: none;
 }
@@ -3858,6 +3853,11 @@ body::after {
   overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.browser-favicon {
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .browser-shortcut-icon {
@@ -4441,3 +4441,240 @@ body::after {
     align-items: flex-start;
   }
 }
+
+/* ==========================================================================
+   Calculator Panel & Casio fx-991DEX Simulator
+   ========================================================================== */
+
+.rail-calculator {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1eee7;
+  font-family: Manrope, sans-serif;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+  overflow: hidden;
+}
+
+.rail-calculator[hidden] {
+  display: none;
+}
+
+.calculator-panel-header {
+  flex: 0 0 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.calculator-panel-title {
+  font: 700 13px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calculator-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-popover-icon-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.editor-popover-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.calculator-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 12px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.casio-device-container {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 478 / 1024;
+  user-select: none;
+  margin: 0 auto;
+}
+
+.casio-base-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.65));
+  pointer-events: none;
+}
+
+/* Casio LCD Display */
+.casio-screen-overlay {
+  position: absolute;
+  background: #cad6c4;
+  background-image: 
+    radial-gradient(rgba(0,0,0,0.03) 1px, transparent 0),
+    linear-gradient(180deg, #d3ded0 0%, #c4d1be 100%);
+  background-size: 4px 4px, 100% 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 3.5% 4.5% 2%;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.35), 
+    inset 0 0 1px rgba(0, 0, 0, 0.5);
+  color: #101610;
+  font-family: 'Consolas', 'Courier New', ui-monospace, monospace;
+  pointer-events: none;
+}
+
+.casio-lcd-status {
+  height: 18%;
+  display: flex;
+  align-items: center;
+}
+
+.casio-status-badges {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #2b392b;
+}
+
+.casio-badge {
+  opacity: 0.2;
+}
+
+.casio-badge.active {
+  opacity: 0.95;
+}
+
+.casio-badge.history {
+  margin-left: auto;
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
+.casio-lcd-expression {
+  height: 44%;
+  display: flex;
+  align-items: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  color: #101610;
+}
+
+.casio-lcd-expression::-webkit-scrollbar {
+  display: none;
+}
+
+.casio-lcd-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: #101610;
+  animation: casio-cursor-blink 1s steps(2, start) infinite;
+  margin: 0 1px;
+  vertical-align: middle;
+}
+
+@keyframes casio-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.casio-lcd-error {
+  font-weight: 700;
+  color: #101610;
+}
+
+.casio-lcd-result {
+  height: 38%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.casio-result-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0b110b;
+}
+
+/* Hitboxes */
+.casio-hitbox-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.casio-hitbox {
+  position: absolute;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.08s, transform 0.06s;
+}
+
+.casio-hitbox:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.casio-hitbox.pressed,
+.casio-hitbox:active {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+  transform: scale(0.96);
+}
+
+.casio-shape-circle {
+  border-radius: 50%;
+}
+
+.casio-shape-rounded {
+  border-radius: 6px;
+}
+
+.casio-shape-num {
+  border-radius: 8px;
+}
+
