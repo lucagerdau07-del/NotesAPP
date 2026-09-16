@@ -4539,50 +4539,82 @@ body::after {
   position: absolute;
   background: #cad6c4;
   background-image: 
-    radial-gradient(rgba(0,0,0,0.03) 1px, transparent 0),
-    linear-gradient(180deg, #d3ded0 0%, #c4d1be 100%);
-  background-size: 4px 4px, 100% 100%;
+    radial-gradient(rgba(0,0,0,0.035) 1px, transparent 0),
+    linear-gradient(180deg, #d2dcce 0%, #c4d1be 100%);
+  background-size: 3px 3px, 100% 100%;
   border-radius: 3px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 3.5% 4.5% 2%;
+  padding: 2.5% 4.5% 2%;
   box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.35), 
-    inset 0 0 1px rgba(0, 0, 0, 0.5);
-  color: #101610;
+    inset 0 2px 4px rgba(0, 0, 0, 0.38), 
+    inset 0 0 1px rgba(0, 0, 0, 0.55);
+  color: #1a271e;
   font-family: 'Consolas', 'Courier New', ui-monospace, monospace;
   pointer-events: none;
 }
 
-.casio-lcd-status {
+.casio-lcd-header {
   height: 18%;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 0 1px;
 }
 
-.casio-status-badges {
-  width: 100%;
+.casio-indicators {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 0.68rem;
+  gap: 6.5px;
+}
+
+.casio-ind {
+  font-size: 0.62rem;
   font-weight: 700;
-  color: #2b392b;
+  color: #1a271e;
+  line-height: 1;
 }
 
-.casio-badge {
-  opacity: 0.2;
+.casio-ind.ghost {
+  opacity: 0.12;
 }
 
-.casio-badge.active {
+.casio-ind.active {
   opacity: 0.95;
 }
 
-.casio-badge.history {
-  margin-left: auto;
-  font-size: 0.6rem;
-  opacity: 0.8;
+.casio-natural-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-angle-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.2px solid #1a271e;
+  padding: 0 2px;
+  font-size: 7.5px;
+  height: 9.5px;
+  line-height: 8px;
+  font-weight: 800;
+  box-sizing: border-box;
+}
+
+.casio-history-arrow {
+  font-size: 0.55rem;
+  margin-left: 2px;
+}
+
+.casio-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.casio-solar-dot {
+  font-size: 0.55rem;
+  opacity: 0.7;
 }
 
 .casio-lcd-expression {
@@ -4595,45 +4627,23 @@ body::after {
   white-space: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
-  color: #101610;
+  color: #1a271e;
+  padding-left: 2px;
 }
 
 .casio-lcd-expression::-webkit-scrollbar {
   display: none;
 }
 
+/* Authentic Casio Block Cursor */
 .casio-lcd-cursor {
   display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  background: #101610;
-  animation: casio-cursor-blink 1s steps(2, start) infinite;
-  margin: 0 1px;
-  vertical-align: middle;
-}
-
-/* Casio Natural V.P.A.M. 2D Math Templates */
-.casio-placeholder-box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 9px;
+  width: 3px;
   height: 13px;
-  border: 1.5px solid #141c14;
-  border-radius: 1px;
+  background-color: #1a271e;
+  animation: casio-cursor-blink 0.85s steps(2, start) infinite;
   margin: 0 1.5px;
-  vertical-align: middle;
-  box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.casio-placeholder-box.active {
-  border-color: #0b110b;
-}
-
-.casio-placeholder-box .casio-lcd-cursor {
-  height: 8px;
-  margin: 0;
+  vertical-align: -1px;
 }
 
 .casio-slot-contents {

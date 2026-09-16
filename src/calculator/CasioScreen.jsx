@@ -130,18 +130,32 @@ export default function CasioScreen({
         height: `${CASIO_SCREEN_COORDS.height}%`,
       }}
     >
-      {/* LCD Status Header Bar */}
-      <div className="casio-lcd-status">
-        <div className="casio-status-badges">
-          {shift && <span className="casio-badge active">S</span>}
-          {alpha && <span className="casio-badge active">A</span>}
-          <span className="casio-badge active">{angleMode === 'DEG' ? 'D' : 'R'}</span>
-          <span className="casio-badge active">Math</span>
-          {hasHistory && <span className="casio-badge history">▲▼</span>}
+      {/* Authentic Casio Top LCD Status Bar with ghost LCD segments */}
+      <div className="casio-lcd-header">
+        <div className="casio-indicators">
+          <span className={`casio-ind ${shift ? 'active' : 'ghost'}`}>S</span>
+          <span className={`casio-ind ${alpha ? 'active' : 'ghost'}`}>A</span>
+          <span className="casio-ind active">M</span>
+          <span className="casio-ind active casio-natural-icon" title="Natural V.P.A.M.">
+            <svg width="13" height="9" viewBox="0 0 14 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M1 5.5l2 3 2.5-7h8" />
+              <path d="M9.5 4l1.8 3M11.3 4l-1.8 3" strokeWidth="1.1" />
+            </svg>
+          </span>
+          <span className="casio-ind active casio-angle-box">
+            {angleMode === 'DEG' ? 'D' : 'R'}
+          </span>
+          <span className="casio-ind ghost">i</span>
+          <span className="casio-ind ghost">FIX</span>
+          <span className="casio-ind ghost">SCI</span>
+          {hasHistory && <span className="casio-ind active casio-history-arrow">▲▼</span>}
+        </div>
+        <div className="casio-header-right">
+          <span className="casio-ind active casio-solar-dot">●</span>
         </div>
       </div>
 
-      {/* Main Natural V.P.A.M. Expression Line */}
+      {/* Main Natural V.P.A.M. Expression Line with Block Cursor */}
       <div className="casio-lcd-expression" ref={exprRef}>
         {error ? (
           <span className="casio-lcd-error">{error}</span>
