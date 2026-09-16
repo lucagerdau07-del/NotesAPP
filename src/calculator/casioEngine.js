@@ -1,8 +1,14 @@
 /**
- * Casio fx-991DEX ClassWiz Math & State Engine
+ * Casio fx-991DEX ClassWiz Natural V.P.A.M. Engine
+ * Supports 2D textbook math templates (Fractions, Roots, Powers, Integrals)
+ * and interactive cursor/box navigation matching the physical calculator.
  */
 
-// Helper: Convert decimal to simplest fraction (up to reasonable denominator)
+let idCounter = 1;
+export function nextId() {
+  return `casio_node_${idCounter++}`;
+}
+
 export function toFraction(val, maxDenominator = 10000, tolerance = 1e-9) {
   if (!Number.isFinite(val)) return null;
   if (Math.abs(val - Math.round(val)) < tolerance) {
@@ -31,8 +37,8 @@ export function toFraction(val, maxDenominator = 10000, tolerance = 1e-9) {
 
 export function createCasioState() {
   return {
-    tokens: [],
-    cursor: 0,
+    items: [],
+    cursorTarget: { nodeId: null, slot: null, index: 0 },
     resultText: null,
     numericResult: null,
     fractionResult: null,
@@ -46,7 +52,6 @@ export function createCasioState() {
   };
 }
 
-// Convert degree to radian if needed
 function degToRad(angle, isDeg) {
   return isDeg ? (angle * Math.PI) / 180 : angle;
 }
@@ -55,44 +60,123 @@ function radToDeg(rad, isDeg) {
   return isDeg ? (rad * 180) / Math.PI : rad;
 }
 
-export function evaluateCasioExpression(tokens, { angleMode = 'DEG', lastAnswer = 0 } = {}) {
-  if (!tokens || tokens.length === 0) return { error: null, value: null };
+// Find a node and its parent list inside the tree
+export function findNodeAndParent(items, nodeId) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (typeof item === 'object' && item !== null) {
+      if (item.id === nodeId) {
+        return { node: item, parentList: items, indexInParent: i };
+      }
+      if (item.type === 'frac') {
+        const inNum = findNodeAndParent(item.num, nodeId);
+        if (inNum) return inNum;
+        const inDen = findNodeAndParent(item.den, nodeId);
+        if (inDen) return inDen;
+      } else if (item.type === 'sqrt') {
+        const inContent = findNodeAndParent(item.content, nodeId);
+        if (inContent) return inContent;
+      } else if (item.type === 'pow') {
+        const inBase = findNodeAndParent(item.base, nodeId);
+        if (inBase) return inBase;
+        const inExp = findNodeAndParent(item.exp, nodeId);
+        if (inExp) return inExp;
+      } else if (item.type === 'integral') {
+        const inIntegrand = findNodeAndParent(item.integrand, nodeId);
+        if (inIntegrand) return inIntegrand;
+        const inLower = findNodeAndParent(item.lower, nodeId);
+        if (inLower) return inLower;
+        const inUpper = findNodeAndParent(item.upper, nodeId);
+        if (inUpper) return inUpper;
+      }
+    }
+  }
+  return null;
+}
 
-  let raw = tokens.join('');
+// Get the array currently pointed to by cursorTarget
+export function getTargetArray(items, cursorTarget) {
+  if (!cursorTarget.nodeId) {
+    return items;
+  }
+  const found = findNodeAndParent(items, cursorTarget.nodeId);
+  if (!found || !found.node) return items;
+  return found.node[cursorTarget.slot] || items;
+}
 
-  // 1. Replacements for math operators
-  let expr = raw
-    .replace(/×/g, '*')
-    .replace(/÷/g, '/')
-    .replace(/Ans/g, `(${lastAnswer})`)
-    .replace(/π/g, `(${Math.PI})`)
-    .replace(/e\b/g, `(${Math.E})`)
-    .replace(/\(-/g, '(-1*')
-    .replace(/²/g, '^2')
-    .replace(/³/g, '^3')
-    .replace(/⁻¹/g, '^(-1)');
+// Convert a tree of items into an evaluatable math expression string
+export function treeToMathString(items, { angleMode = 'DEG', lastAnswer = 0 } = {}) {
+  let res = '';
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (typeof item === 'string') {
+      let t = item;
+      if (t === '×') t = '*';
+      else if (t === '÷') t = '/';
+      else if (t === 'Ans') t = `(${lastAnswer})`;
+      else if (t === 'π') t = `(${Math.PI})`;
+      else if (t === 'e') t = `(${Math.E})`;
+      else if (t === '(-)') t = '(-1)*';
+      else if (t === '²') t = '^2';
+      else if (t === '³') t = '^3';
+      else if (t === '⁻¹') t = '^(-1)';
+      res += t;
+    } else if (item && typeof item === 'object') {
+      if (item.type === 'frac') {
+        const numStr = treeToMathString(item.num.length ? item.num : ['0'], { angleMode, lastAnswer });
+        const denStr = treeToMathString(item.den.length ? item.den : ['1'], { angleMode, lastAnswer });
+        res += `((${numStr})/(${denStr}))`;
+      } else if (item.type === 'sqrt') {
+        const contentStr = treeToMathString(item.content.length ? item.content : ['0'], { angleMode, lastAnswer });
+        res += `Math.sqrt(${contentStr})`;
+      } else if (item.type === 'pow') {
+        const baseStr = treeToMathString(item.base.length ? item.base : ['0'], { angleMode, lastAnswer });
+        const expStr = treeToMathString(item.exp.length ? item.exp : ['1'], { angleMode, lastAnswer });
+        res += `((${baseStr})**(${expStr}))`;
+      } else if (item.type === 'integral') {
+        // Numerical integration using Simpson's composite rule for x
+        const lowerStr = treeToMathString(item.lower.length ? item.lower : ['0'], { angleMode, lastAnswer });
+        const upperStr = treeToMathString(item.upper.length ? item.upper : ['1'], { angleMode, lastAnswer });
+        const funcStr = treeToMathString(item.integrand.length ? item.integrand : ['x'], { angleMode, lastAnswer });
+        res += `__integrate((${lowerStr}), (${upperStr}), (x) => (${funcStr}))`;
+      }
+    }
+  }
+  return res;
+}
 
-  // Unary minus at start or after operator
-  expr = expr.replace(/(^|[+\-*/^(])-/g, '$1(-1)*');
+// Numerical integration helper (Simpson's 1/3 rule)
+function numericalIntegrate(a, b, fn, steps = 30) {
+  if (a === b) return 0;
+  const n = steps % 2 === 0 ? steps : steps + 1;
+  const h = (b - a) / n;
+  let sum = fn(a) + fn(b);
+  for (let i = 1; i < n; i++) {
+    const x = a + i * h;
+    sum += (i % 2 === 0 ? 2 : 4) * fn(x);
+  }
+  return (h / 3) * sum;
+}
+
+export function evaluateCasioTree(items, { angleMode = 'DEG', lastAnswer = 0 } = {}) {
+  if (!items || items.length === 0) return { error: null, value: null };
+
+  let raw = treeToMathString(items, { angleMode, lastAnswer });
+  if (!raw || raw.trim() === '') return { error: null, value: null };
 
   // Implicit multiplication: e.g. 2(3) -> 2*(3), 2sin -> 2*sin, )3 -> )*3, )( -> )*(
-  expr = expr.replace(/(\d)(\()/g, '$1*$2');
-  expr = expr.replace(/(\))(\d)/g, '$1*$2');
-  expr = expr.replace(/(\))(\()/g, '$1*$2');
-  expr = expr.replace(/(\d)(sin|cos|tan|ln|log|√)/g, '$1*$2');
-  expr = expr.replace(/(\))(sin|cos|tan|ln|log|√)/g, '$1*$2');
+  raw = raw.replace(/(\d)(\()/g, '$1*$2');
+  raw = raw.replace(/(\))(\d)/g, '$1*$2');
+  raw = raw.replace(/(\))(\()/g, '$1*$2');
+  raw = raw.replace(/(\d)(sin|cos|tan|ln|log|Math\.sqrt)/g, '$1*$2');
+  raw = raw.replace(/(\))(sin|cos|tan|ln|log|Math\.sqrt)/g, '$1*$2');
 
-  // Scientific functions handling
   const isDeg = angleMode === 'DEG';
 
-  let jsExpr = expr
+  let jsExpr = raw
     .replace(/\^/g, '**')
-    .replace(/√\(/g, 'Math.sqrt(')
     .replace(/ln\(/g, 'Math.log(')
-    .replace(/log\(/g, 'Math.log10(');
-
-  // Trig replacements
-  jsExpr = jsExpr
+    .replace(/log\(/g, 'Math.log10(')
     .replace(/sin⁻¹\(/g, '__asin(')
     .replace(/cos⁻¹\(/g, '__acos(')
     .replace(/tan⁻¹\(/g, '__atan(')
@@ -111,9 +195,9 @@ export function evaluateCasioExpression(tokens, { angleMode = 'DEG', lastAnswer 
     openCount--;
   }
 
-  // Safe evaluation context
   const scope = {
     Math,
+    __integrate: (a, b, f) => numericalIntegrate(a, b, f),
     __sin: (x) => Math.sin(degToRad(x, isDeg)),
     __cos: (x) => {
       if (isDeg && Math.abs(x % 180) === 90) return 0;
@@ -129,17 +213,10 @@ export function evaluateCasioExpression(tokens, { angleMode = 'DEG', lastAnswer 
   };
 
   try {
-    if (/[^0-9+\-*/().,eE _*Mathsincoatalgqr0-9]/.test(jsExpr.replace(/__[a-z]+/g, ''))) {
-      return { error: 'Syntax ERROR', value: null };
-    }
-
     const func = new Function(...Object.keys(scope), `"use strict"; return (${jsExpr});`);
     const val = func(...Object.values(scope));
 
-    if (val === undefined || val === null || Number.isNaN(val)) {
-      return { error: 'Math ERROR', value: null };
-    }
-    if (!Number.isFinite(val)) {
+    if (val === undefined || val === null || Number.isNaN(val) || !Number.isFinite(val)) {
       return { error: 'Math ERROR', value: null };
     }
 
@@ -159,7 +236,11 @@ export function formatCasioNumber(val) {
 }
 
 export function handleCasioKeyPress(state, keyId) {
-  const next = { ...state };
+  const next = {
+    ...state,
+    items: JSON.parse(JSON.stringify(state.items)),
+    cursorTarget: { ...state.cursorTarget },
+  };
 
   if (next.error && keyId !== 'AC' && keyId !== 'ON') {
     next.error = null;
@@ -173,11 +254,19 @@ export function handleCasioKeyPress(state, keyId) {
     next.alpha = false;
   };
 
+  // Helper to insert into the currently targeted slot
+  const insertToken = (token) => {
+    const arr = getTargetArray(next.items, next.cursorTarget);
+    const idx = next.cursorTarget.index;
+    arr.splice(idx, 0, token);
+    next.cursorTarget.index = idx + 1;
+  };
+
   switch (keyId) {
     case 'ON':
     case 'AC':
-      next.tokens = [];
-      next.cursor = 0;
+      next.items = [];
+      next.cursorTarget = { nodeId: null, slot: null, index: 0 };
       next.resultText = null;
       next.numericResult = null;
       next.fractionResult = null;
@@ -185,17 +274,6 @@ export function handleCasioKeyPress(state, keyId) {
       next.error = null;
       next.shift = false;
       next.alpha = false;
-      return next;
-
-    case 'DEL':
-      if (next.tokens.length > 0 && next.cursor > 0) {
-        next.tokens = [
-          ...next.tokens.slice(0, next.cursor - 1),
-          ...next.tokens.slice(next.cursor),
-        ];
-        next.cursor -= 1;
-      }
-      consumeModifiers();
       return next;
 
     case 'SHIFT':
@@ -211,28 +289,6 @@ export function handleCasioKeyPress(state, keyId) {
     case 'MENU':
       if (isShift) {
         next.angleMode = next.angleMode === 'DEG' ? 'RAD' : 'DEG';
-      }
-      consumeModifiers();
-      return next;
-
-    case 'D_LEFT':
-      if (next.cursor > 0) next.cursor -= 1;
-      consumeModifiers();
-      return next;
-
-    case 'D_RIGHT':
-      if (next.cursor < next.tokens.length) next.cursor += 1;
-      consumeModifiers();
-      return next;
-
-    case 'D_UP':
-    case 'D_DOWN':
-      if (next.history.length > 0) {
-        const last = next.history[next.history.length - 1];
-        next.tokens = [...last.tokens];
-        next.cursor = next.tokens.length;
-        next.resultText = last.resultText;
-        next.numericResult = last.numericResult;
       }
       consumeModifiers();
       return next;
@@ -254,8 +310,8 @@ export function handleCasioKeyPress(state, keyId) {
     }
 
     case 'EQUALS': {
-      if (next.tokens.length === 0) return next;
-      const { error, value } = evaluateCasioExpression(next.tokens, {
+      if (next.items.length === 0) return next;
+      const { error, value } = evaluateCasioTree(next.items, {
         angleMode: next.angleMode,
         lastAnswer: next.lastAnswer,
       });
@@ -271,7 +327,7 @@ export function handleCasioKeyPress(state, keyId) {
         next.isFractionMode = false;
         next.resultText = formatCasioNumber(value);
         next.history = [...next.history, {
-          tokens: [...next.tokens],
+          items: JSON.parse(JSON.stringify(next.items)),
           resultText: next.resultText,
           numericResult: value,
         }];
@@ -280,19 +336,295 @@ export function handleCasioKeyPress(state, keyId) {
       return next;
     }
 
+    case 'D_LEFT': {
+      if (next.cursorTarget.index > 0) {
+        next.cursorTarget.index -= 1;
+      } else if (next.cursorTarget.nodeId) {
+        // Move before node in parent
+        const found = findNodeAndParent(next.items, next.cursorTarget.nodeId);
+        if (found) {
+          // If in frac.den, moving left goes to frac.num
+          if (found.node.type === 'frac' && next.cursorTarget.slot === 'den') {
+            next.cursorTarget.slot = 'num';
+            next.cursorTarget.index = found.node.num.length;
+          } else if (found.node.type === 'pow' && next.cursorTarget.slot === 'exp') {
+            next.cursorTarget.slot = 'base';
+            next.cursorTarget.index = found.node.base.length;
+          } else {
+            // Exit to parent
+            next.cursorTarget.nodeId = null;
+            next.cursorTarget.slot = null;
+            next.cursorTarget.index = found.indexInParent;
+          }
+        }
+      }
+      consumeModifiers();
+      return next;
+    }
+
+    case 'D_RIGHT': {
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      if (next.cursorTarget.index < arr.length) {
+        const nextItem = arr[next.cursorTarget.index];
+        if (typeof nextItem === 'object' && nextItem !== null) {
+          // Enter the node
+          if (nextItem.type === 'frac') {
+            next.cursorTarget = { nodeId: nextItem.id, slot: 'num', index: 0 };
+          } else if (nextItem.type === 'sqrt') {
+            next.cursorTarget = { nodeId: nextItem.id, slot: 'content', index: 0 };
+          } else if (nextItem.type === 'pow') {
+            next.cursorTarget = { nodeId: nextItem.id, slot: 'base', index: 0 };
+          } else if (nextItem.type === 'integral') {
+            next.cursorTarget = { nodeId: nextItem.id, slot: 'integrand', index: 0 };
+          }
+        } else {
+          next.cursorTarget.index += 1;
+        }
+      } else if (next.cursorTarget.nodeId) {
+        // At end of slot in node
+        const found = findNodeAndParent(next.items, next.cursorTarget.nodeId);
+        if (found) {
+          if (found.node.type === 'frac' && next.cursorTarget.slot === 'num') {
+            next.cursorTarget.slot = 'den';
+            next.cursorTarget.index = 0;
+          } else if (found.node.type === 'pow' && next.cursorTarget.slot === 'base') {
+            next.cursorTarget.slot = 'exp';
+            next.cursorTarget.index = 0;
+          } else {
+            // Exit to parent after this node
+            next.cursorTarget.nodeId = null;
+            next.cursorTarget.slot = null;
+            next.cursorTarget.index = found.indexInParent + 1;
+          }
+        }
+      }
+      consumeModifiers();
+      return next;
+    }
+
+    case 'D_UP': {
+      if (next.cursorTarget.nodeId) {
+        const found = findNodeAndParent(next.items, next.cursorTarget.nodeId);
+        if (found) {
+          if (found.node.type === 'frac' && next.cursorTarget.slot === 'den') {
+            next.cursorTarget.slot = 'num';
+            next.cursorTarget.index = found.node.num.length;
+          } else if (found.node.type === 'pow' && next.cursorTarget.slot === 'base') {
+            next.cursorTarget.slot = 'exp';
+            next.cursorTarget.index = 0;
+          } else if (found.node.type === 'integral') {
+            if (next.cursorTarget.slot === 'lower') {
+              next.cursorTarget.slot = 'integrand';
+              next.cursorTarget.index = 0;
+            } else if (next.cursorTarget.slot === 'integrand') {
+              next.cursorTarget.slot = 'upper';
+              next.cursorTarget.index = 0;
+            }
+          }
+        }
+      } else if (next.history.length > 0) {
+        const last = next.history[next.history.length - 1];
+        next.items = JSON.parse(JSON.stringify(last.items));
+        next.cursorTarget = { nodeId: null, slot: null, index: next.items.length };
+        next.resultText = last.resultText;
+        next.numericResult = last.numericResult;
+      }
+      consumeModifiers();
+      return next;
+    }
+
+    case 'D_DOWN': {
+      if (next.cursorTarget.nodeId) {
+        const found = findNodeAndParent(next.items, next.cursorTarget.nodeId);
+        if (found) {
+          if (found.node.type === 'frac' && next.cursorTarget.slot === 'num') {
+            next.cursorTarget.slot = 'den';
+            next.cursorTarget.index = 0;
+          } else if (found.node.type === 'pow' && next.cursorTarget.slot === 'exp') {
+            next.cursorTarget.slot = 'base';
+            next.cursorTarget.index = found.node.base.length;
+          } else if (found.node.type === 'integral') {
+            if (next.cursorTarget.slot === 'upper') {
+              next.cursorTarget.slot = 'integrand';
+              next.cursorTarget.index = 0;
+            } else if (next.cursorTarget.slot === 'integrand') {
+              next.cursorTarget.slot = 'lower';
+              next.cursorTarget.index = 0;
+            }
+          }
+        }
+      }
+      consumeModifiers();
+      return next;
+    }
+
+    case 'DEL': {
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      if (next.cursorTarget.index > 0) {
+        arr.splice(next.cursorTarget.index - 1, 1);
+        next.cursorTarget.index -= 1;
+      } else if (next.cursorTarget.nodeId) {
+        // Inside a node at index 0
+        const found = findNodeAndParent(next.items, next.cursorTarget.nodeId);
+        if (found) {
+          // Check if entire node is empty
+          const isNodeEmpty =
+            (found.node.type === 'frac' && found.node.num.length === 0 && found.node.den.length === 0) ||
+            (found.node.type === 'sqrt' && found.node.content.length === 0) ||
+            (found.node.type === 'pow' && found.node.base.length === 0 && found.node.exp.length === 0) ||
+            (found.node.type === 'integral' && found.node.integrand.length === 0);
+
+          if (isNodeEmpty) {
+            // Delete the empty template node completely
+            found.parentList.splice(found.indexInParent, 1);
+            next.cursorTarget = { nodeId: null, slot: null, index: found.indexInParent };
+          } else if (found.node.type === 'frac' && next.cursorTarget.slot === 'den') {
+            next.cursorTarget.slot = 'num';
+            next.cursorTarget.index = found.node.num.length;
+          } else {
+            // Exit node
+            next.cursorTarget = { nodeId: null, slot: null, index: found.indexInParent };
+          }
+        }
+      }
+      consumeModifiers();
+      return next;
+    }
+
+    // --- Natural V.P.A.M. Template Keys ---
+
+    case 'FRAC': {
+      // Create fraction node
+      const fracId = nextId();
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      const idx = next.cursorTarget.index;
+
+      // If preceded by a number or Ans, place it in numerator
+      let numItems = [];
+      let startSlot = 'den';
+      if (idx > 0 && typeof arr[idx - 1] === 'string' && /^[0-9Ansπe]$/.test(arr[idx - 1])) {
+        numItems = [arr.splice(idx - 1, 1)[0]];
+        next.cursorTarget.index = idx - 1;
+      } else {
+        startSlot = 'num';
+      }
+
+      const fracNode = {
+        type: 'frac',
+        id: fracId,
+        num: numItems,
+        den: [],
+      };
+
+      arr.splice(next.cursorTarget.index, 0, fracNode);
+      next.cursorTarget = { nodeId: fracId, slot: startSlot, index: 0 };
+      consumeModifiers();
+      return next;
+    }
+
+    case 'SQRT': {
+      const sqrtId = nextId();
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      const idx = next.cursorTarget.index;
+
+      const sqrtNode = {
+        type: 'sqrt',
+        id: sqrtId,
+        content: [],
+      };
+
+      arr.splice(idx, 0, sqrtNode);
+      next.cursorTarget = { nodeId: sqrtId, slot: 'content', index: 0 };
+      consumeModifiers();
+      return next;
+    }
+
+    case 'POW': {
+      const powId = nextId();
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      const idx = next.cursorTarget.index;
+
+      let baseItems = [];
+      let startSlot = 'exp';
+      if (idx > 0) {
+        // Take preceding item as base
+        baseItems = [arr.splice(idx - 1, 1)[0]];
+        next.cursorTarget.index = idx - 1;
+      } else {
+        // Both base and exp empty (shows [][])
+        startSlot = 'base';
+      }
+
+      const powNode = {
+        type: 'pow',
+        id: powId,
+        base: baseItems,
+        exp: [],
+      };
+
+      arr.splice(next.cursorTarget.index, 0, powNode);
+      next.cursorTarget = { nodeId: powId, slot: startSlot, index: 0 };
+      consumeModifiers();
+      return next;
+    }
+
+    case 'SQR': {
+      // x²: power with fixed exponent 2
+      const powId = nextId();
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      const idx = next.cursorTarget.index;
+
+      let baseItems = [];
+      if (idx > 0) {
+        baseItems = [arr.splice(idx - 1, 1)[0]];
+        next.cursorTarget.index = idx - 1;
+      }
+
+      const powNode = {
+        type: 'pow',
+        id: powId,
+        base: baseItems,
+        exp: ['2'],
+      };
+
+      arr.splice(next.cursorTarget.index, 0, powNode);
+      // Place cursor after the square
+      next.cursorTarget.index += 1;
+      consumeModifiers();
+      return next;
+    }
+
+    case 'INTEGRAL': {
+      const intId = nextId();
+      const arr = getTargetArray(next.items, next.cursorTarget);
+      const idx = next.cursorTarget.index;
+
+      const intNode = {
+        type: 'integral',
+        id: intId,
+        integrand: [],
+        lower: [],
+        upper: [],
+      };
+
+      arr.splice(idx, 0, intNode);
+      next.cursorTarget = { nodeId: intId, slot: 'integrand', index: 0 };
+      consumeModifiers();
+      return next;
+    }
+
     default:
       break;
   }
 
+  // Handle standard tokens & modifiers
   let inserted = null;
 
   if (isShift) {
     switch (keyId) {
       case 'EXP': inserted = 'π'; break;
       case 'ANS': inserted = '%'; break;
-      case 'SQRT': inserted = '∛('; break;
       case 'SQR': inserted = '³'; break;
-      case 'POW': inserted = '^(1/'; break;
       case 'LOG_B': inserted = '10^('; break;
       case 'LN': inserted = 'e^('; break;
       case 'SIN': inserted = 'sin⁻¹('; break;
@@ -333,10 +665,6 @@ export function handleCasioKeyPress(state, keyId) {
       case 'LPAREN': inserted = '('; break;
       case 'RPAREN': inserted = ')'; break;
       case 'NEG': inserted = '(-)'; break;
-      case 'FRAC': inserted = '÷'; break;
-      case 'SQRT': inserted = '√('; break;
-      case 'SQR': inserted = '²'; break;
-      case 'POW': inserted = '^('; break;
       case 'LOG_B': inserted = 'log('; break;
       case 'LN': inserted = 'ln('; break;
       case 'SIN': inserted = 'sin('; break;
@@ -349,16 +677,11 @@ export function handleCasioKeyPress(state, keyId) {
   }
 
   if (inserted) {
-    if (next.resultText && next.tokens.length === 0 && ['+', '-', '×', '÷'].includes(inserted)) {
-      next.tokens = ['Ans', inserted];
-      next.cursor = 2;
+    if (next.resultText && next.items.length === 0 && ['+', '-', '×', '÷'].includes(inserted)) {
+      insertToken('Ans');
+      insertToken(inserted);
     } else {
-      next.tokens = [
-        ...next.tokens.slice(0, next.cursor),
-        inserted,
-        ...next.tokens.slice(next.cursor),
-      ];
-      next.cursor += 1;
+      insertToken(inserted);
     }
   }
 

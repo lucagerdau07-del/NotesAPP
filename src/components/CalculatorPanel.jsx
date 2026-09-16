@@ -123,8 +123,8 @@ export default function CalculatorPanel({
 
           {/* LCD Screen Overlay */}
           <CasioScreen
-            tokens={state.tokens}
-            cursor={state.cursor}
+            items={state.items}
+            cursorTarget={state.cursorTarget}
             resultText={state.resultText}
             error={state.error}
             shift={state.shift}

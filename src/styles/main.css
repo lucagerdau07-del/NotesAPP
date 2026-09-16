@@ -4586,7 +4586,7 @@ body::after {
 }
 
 .casio-lcd-expression {
-  height: 44%;
+  height: 46%;
   display: flex;
   align-items: center;
   font-size: 1.05rem;
@@ -4610,6 +4610,162 @@ body::after {
   animation: casio-cursor-blink 1s steps(2, start) infinite;
   margin: 0 1px;
   vertical-align: middle;
+}
+
+/* Casio Natural V.P.A.M. 2D Math Templates */
+.casio-placeholder-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 9px;
+  height: 13px;
+  border: 1.5px solid #141c14;
+  border-radius: 1px;
+  margin: 0 1.5px;
+  vertical-align: middle;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.casio-placeholder-box.active {
+  border-color: #0b110b;
+}
+
+.casio-placeholder-box .casio-lcd-cursor {
+  height: 8px;
+  margin: 0;
+}
+
+.casio-slot-contents {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 1. Fraction Template */
+.casio-natural-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 2.5px;
+  font-size: 0.88em;
+}
+
+.casio-frac-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14px;
+  padding: 0 2px;
+}
+
+.casio-frac-bar {
+  width: 100%;
+  min-width: 13px;
+  height: 1.5px;
+  background-color: #141c14;
+  margin: 1px 0;
+}
+
+.casio-frac-den {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14px;
+  padding: 0 2px;
+}
+
+/* 2. Square Root Template */
+.casio-natural-sqrt {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.casio-sqrt-symbol {
+  font-size: 1.15em;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  padding-right: 1px;
+}
+
+.casio-sqrt-content {
+  border-top: 1.5px solid #141c14;
+  padding: 2px 2px 0 2px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 3. Power Template */
+.casio-natural-pow {
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.casio-pow-base {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-pow-exp {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72em;
+  transform: translateY(-0.55em);
+  margin-left: 1px;
+}
+
+.casio-pow-exp .casio-placeholder-box {
+  width: 7px;
+  height: 10px;
+  border-width: 1.2px;
+}
+
+/* 4. Integral Template */
+.casio-natural-integral {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.casio-int-symbol {
+  font-size: 1.35em;
+  line-height: 1;
+  font-weight: 600;
+  margin-right: 1px;
+}
+
+.casio-int-limits {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 28px;
+  margin-right: 3px;
+}
+
+.casio-int-upper .casio-placeholder-box,
+.casio-int-lower .casio-placeholder-box {
+  width: 7px;
+  height: 9px;
+  border-width: 1.2px;
+  margin: 0;
+}
+
+.casio-int-body {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-int-dx {
+  font-style: italic;
+  font-size: 0.9em;
+  margin-left: 2px;
 }
 
 @keyframes casio-cursor-blink {
