@@ -74,7 +74,20 @@ export default function CasioScreen({
     if (item.type === 'sqrt') {
       return (
         <span className="casio-natural-sqrt" key={item.id}>
-          <span className="casio-sqrt-symbol">√</span>
+          <svg
+            className="casio-sqrt-hook"
+            viewBox="0 0 10 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M 1 9.5 L 2.8 7.5 L 4.8 18 L 8.5 1.5 L 10 1.5"
+              stroke="#1a271e"
+              strokeWidth="1.3"
+              strokeLinecap="square"
+              strokeLinejoin="miter"
+            />
+          </svg>
           <span className="casio-sqrt-content">
             {renderSlot(item.content, item.id, 'content')}
           </span>
