@@ -10,501 +10,451 @@ export const CASIO_KEYS = [
   {
     "id": "SHIFT",
     "name": "SHIFT",
-    "label": "SHIFT",
     "shape": "circle",
-    "left": 10.251,
-    "top": 37.891,
-    "width": 7.113,
-    "height": 3.32
+    "left": 9.414,
+    "top": 38.086,
+    "width": 7.95,
+    "height": 3.711
   },
   {
     "id": "ALPHA",
     "name": "ALPHA",
-    "label": "ALPHA",
     "shape": "circle",
-    "left": 23.64,
-    "top": 37.891,
-    "width": 7.113,
-    "height": 3.32
+    "left": 22.594,
+    "top": 38.086,
+    "width": 7.95,
+    "height": 3.711
   },
   {
     "id": "MENU",
     "name": "MENU",
-    "label": "MENU",
     "shape": "circle",
-    "left": 69.247,
-    "top": 37.891,
-    "width": 7.113,
-    "height": 3.32
+    "left": 69.874,
+    "top": 38.086,
+    "width": 7.95,
+    "height": 3.711
   },
   {
     "id": "ON",
     "name": "ON",
-    "label": "ON",
     "shape": "circle",
-    "left": 82.636,
-    "top": 37.891,
-    "width": 7.113,
-    "height": 3.32
+    "left": 83.054,
+    "top": 38.086,
+    "width": 7.95,
+    "height": 3.711
   },
   {
     "id": "D_UP",
     "name": "Up",
-    "label": "^",
     "shape": "rounded",
-    "left": 46.234,
-    "top": 36.621,
-    "width": 7.531,
+    "left": 45.188,
+    "top": 37.207,
+    "width": 9.623,
     "height": 2.93
   },
   {
     "id": "D_DOWN",
     "name": "Down",
-    "label": "v",
     "shape": "rounded",
-    "left": 46.234,
-    "top": 44.434,
-    "width": 7.531,
+    "left": 45.188,
+    "top": 44.824,
+    "width": 9.623,
     "height": 2.93
   },
   {
     "id": "D_LEFT",
     "name": "Left",
-    "label": "<",
     "shape": "rounded",
-    "left": 38.703,
-    "top": 40.234,
+    "left": 38.494,
+    "top": 40.332,
     "width": 6.276,
-    "height": 3.516
+    "height": 4.492
   },
   {
     "id": "D_RIGHT",
     "name": "Right",
-    "label": ">",
     "shape": "rounded",
-    "left": 55.021,
-    "top": 40.234,
+    "left": 55.23,
+    "top": 40.332,
     "width": 6.276,
-    "height": 3.516
+    "height": 4.492
   },
   {
     "id": "OPTN",
     "name": "OPTN",
-    "label": "OPTN",
     "shape": "rounded",
-    "left": 8.159,
-    "top": 45.41,
-    "width": 11.715,
-    "height": 3.125
+    "left": 7.95,
+    "top": 45.996,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "CALC",
     "name": "CALC",
-    "label": "CALC",
     "shape": "rounded",
     "left": 22.594,
-    "top": 45.41,
-    "width": 11.715,
-    "height": 3.125
+    "top": 45.996,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "INTEGRAL",
     "name": "Integral",
-    "label": "int",
     "shape": "rounded",
-    "left": 65.69,
-    "top": 45.41,
-    "width": 11.715,
-    "height": 3.125
+    "left": 65.272,
+    "top": 45.996,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "X_VAR",
     "name": "x",
-    "label": "x",
     "shape": "rounded",
-    "left": 80.126,
-    "top": 45.41,
-    "width": 11.715,
-    "height": 3.125
+    "left": 79.916,
+    "top": 45.996,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "FRAC",
     "name": "Fraction",
-    "label": "a/b",
     "shape": "rounded",
-    "left": 8.159,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "left": 7.95,
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "SQRT",
     "name": "Square Root",
-    "label": "sqrt",
     "shape": "rounded",
     "left": 22.594,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "SQR",
-    "name": "x^2",
-    "label": "x^2",
+    "name": "x\u00b2",
     "shape": "rounded",
     "left": 37.029,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "POW",
-    "name": "x^n",
-    "label": "x^y",
+    "name": "x^\u25a0",
     "shape": "rounded",
-    "left": 51.464,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "left": 51.046,
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "LOG_B",
-    "name": "log_b(x)",
-    "label": "log",
+    "name": "log_\u25a0(\u25a0)",
     "shape": "rounded",
-    "left": 65.9,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "left": 65.272,
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "LN",
     "name": "ln",
-    "label": "ln",
     "shape": "rounded",
-    "left": 80.335,
-    "top": 50.391,
-    "width": 11.715,
-    "height": 3.125
+    "left": 79.916,
+    "top": 51.367,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "NEG",
     "name": "(-)",
-    "label": "(-)",
     "shape": "rounded",
-    "left": 8.159,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "left": 7.95,
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "DMS",
-    "name": "deg-min-sec",
-    "label": "deg",
+    "name": "\u00b0 ' \"",
     "shape": "rounded",
     "left": 22.594,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "INV",
-    "name": "x^-1",
-    "label": "1/x",
+    "name": "x\u207b\u00b9",
     "shape": "rounded",
     "left": 37.029,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "SIN",
     "name": "sin",
-    "label": "sin",
     "shape": "rounded",
-    "left": 51.464,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "left": 51.046,
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "COS",
     "name": "cos",
-    "label": "cos",
     "shape": "rounded",
-    "left": 65.9,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "left": 65.272,
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "TAN",
     "name": "tan",
-    "label": "tan",
     "shape": "rounded",
-    "left": 80.335,
-    "top": 55.566,
-    "width": 11.715,
-    "height": 3.125
+    "left": 79.916,
+    "top": 57.129,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "STO",
     "name": "STO",
-    "label": "STO",
     "shape": "rounded",
-    "left": 8.159,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "left": 7.95,
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "ENG",
     "name": "ENG",
-    "label": "ENG",
     "shape": "rounded",
     "left": 22.594,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "LPAREN",
     "name": "(",
-    "label": "(",
     "shape": "rounded",
     "left": 37.029,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "RPAREN",
     "name": ")",
-    "label": ")",
     "shape": "rounded",
-    "left": 51.464,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "left": 51.046,
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "SD",
     "name": "S<=>D",
-    "label": "S<=>D",
     "shape": "rounded",
-    "left": 65.9,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "left": 65.272,
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "MPLUS",
     "name": "M+",
-    "label": "M+",
     "shape": "rounded",
-    "left": 80.335,
-    "top": 60.742,
-    "width": 11.715,
-    "height": 3.125
+    "left": 79.916,
+    "top": 62.598,
+    "width": 12.134,
+    "height": 3.32
   },
   {
     "id": "NUM_7",
     "name": "7",
-    "label": "7",
     "shape": "num",
-    "left": 8.159,
-    "top": 68.75,
-    "width": 14.644,
-    "height": 4.102
+    "left": 7.741,
+    "top": 68.652,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_8",
     "name": "8",
-    "label": "8",
     "shape": "num",
-    "left": 25.523,
-    "top": 68.75,
-    "width": 14.644,
-    "height": 4.102
+    "left": 25.314,
+    "top": 68.652,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_9",
     "name": "9",
-    "label": "9",
     "shape": "num",
-    "left": 42.887,
-    "top": 68.75,
-    "width": 14.644,
-    "height": 4.102
+    "left": 42.678,
+    "top": 68.652,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "DEL",
     "name": "DEL",
-    "label": "DEL",
     "shape": "num",
-    "left": 60.251,
-    "top": 68.75,
-    "width": 14.644,
-    "height": 4.102
+    "left": 60.46,
+    "top": 68.652,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "AC",
     "name": "AC",
-    "label": "AC",
     "shape": "num",
-    "left": 77.615,
-    "top": 68.75,
-    "width": 14.644,
-    "height": 4.102
+    "left": 77.824,
+    "top": 68.652,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_4",
     "name": "4",
-    "label": "4",
     "shape": "num",
-    "left": 8.159,
+    "left": 7.741,
     "top": 75.391,
-    "width": 14.644,
-    "height": 4.102
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_5",
     "name": "5",
-    "label": "5",
     "shape": "num",
-    "left": 25.523,
+    "left": 25.314,
     "top": 75.391,
-    "width": 14.644,
-    "height": 4.102
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_6",
     "name": "6",
-    "label": "6",
     "shape": "num",
-    "left": 42.887,
+    "left": 42.678,
     "top": 75.391,
-    "width": 14.644,
-    "height": 4.102
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "MUL",
-    "name": "x",
-    "label": "x",
+    "name": "\u00d7",
     "shape": "num",
-    "left": 60.251,
+    "left": 60.46,
     "top": 75.391,
-    "width": 14.644,
-    "height": 4.102
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "DIV",
-    "name": "/",
-    "label": "/",
+    "name": "\u00f7",
     "shape": "num",
-    "left": 77.615,
+    "left": 77.824,
     "top": 75.391,
-    "width": 14.644,
-    "height": 4.102
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_1",
     "name": "1",
-    "label": "1",
     "shape": "num",
-    "left": 8.159,
-    "top": 82.031,
-    "width": 14.644,
-    "height": 4.102
+    "left": 7.741,
+    "top": 82.129,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_2",
     "name": "2",
-    "label": "2",
     "shape": "num",
-    "left": 25.523,
-    "top": 82.031,
-    "width": 14.644,
-    "height": 4.102
+    "left": 25.314,
+    "top": 82.129,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_3",
     "name": "3",
-    "label": "3",
     "shape": "num",
-    "left": 42.887,
-    "top": 82.031,
-    "width": 14.644,
-    "height": 4.102
+    "left": 42.678,
+    "top": 82.129,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "PLUS",
     "name": "+",
-    "label": "+",
     "shape": "num",
-    "left": 60.251,
-    "top": 82.031,
-    "width": 14.644,
-    "height": 4.102
+    "left": 60.46,
+    "top": 82.129,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "MINUS",
     "name": "-",
-    "label": "-",
     "shape": "num",
-    "left": 77.615,
-    "top": 82.031,
-    "width": 14.644,
-    "height": 4.102
+    "left": 77.824,
+    "top": 82.129,
+    "width": 14.854,
+    "height": 4.688
   },
   {
     "id": "NUM_0",
     "name": "0",
-    "label": "0",
     "shape": "num",
-    "left": 8.159,
-    "top": 88.672,
-    "width": 14.644,
-    "height": 4.102
+    "left": 7.741,
+    "top": 87.891,
+    "width": 14.854,
+    "height": 5.664
   },
   {
     "id": "DOT",
     "name": ",",
-    "label": ",",
     "shape": "num",
-    "left": 25.523,
-    "top": 88.672,
-    "width": 14.644,
-    "height": 4.102
+    "left": 25.314,
+    "top": 87.891,
+    "width": 14.854,
+    "height": 5.664
   },
   {
     "id": "EXP",
-    "name": "x10^x",
-    "label": "x10^x",
+    "name": "\u00d710^x",
     "shape": "num",
-    "left": 42.887,
-    "top": 88.672,
-    "width": 14.644,
-    "height": 4.102
+    "left": 42.678,
+    "top": 87.891,
+    "width": 14.854,
+    "height": 5.664
   },
   {
     "id": "ANS",
     "name": "Ans",
-    "label": "Ans",
     "shape": "num",
-    "left": 60.251,
-    "top": 88.672,
-    "width": 14.644,
-    "height": 4.102
+    "left": 60.46,
+    "top": 87.891,
+    "width": 14.854,
+    "height": 5.664
   },
   {
     "id": "EQUALS",
     "name": "=",
-    "label": "=",
     "shape": "num",
-    "left": 77.615,
-    "top": 88.672,
-    "width": 14.644,
-    "height": 4.102
+    "left": 77.824,
+    "top": 87.891,
+    "width": 14.854,
+    "height": 5.664
   }
 ];
