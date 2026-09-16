@@ -90,10 +90,20 @@ describe('casioEngine Natural V.P.A.M. evaluation', () => {
     // Evaluate
     state = handleCasioKeyPress(state, 'EQUALS');
     expect(state.numericResult).toBe(0.5);
+    expect(state.fractionResult).toEqual({ n: 1, d: 2 });
+    expect(state.isFractionMode).toBe(true);
+    expect(state.resultText).toBe('1/2');
 
-    // S<=>D toggle
+    // S<=>D toggle to decimal
     state = handleCasioKeyPress(state, 'SD');
-    expect(state.resultText).toBe('1 ⌟ 2');
+    expect(state.isFractionMode).toBe(false);
+    expect(state.resultText).toBe('0.5');
+
+    // S<=>D toggle back to fraction
+    state = handleCasioKeyPress(state, 'SD');
+    expect(state.isFractionMode).toBe(true);
+    expect(state.resultText).toBe('1/2');
+    expect(state.fractionResult).toEqual({ n: 1, d: 2 });
   });
 
   it('handles square root key press and evaluation', () => {

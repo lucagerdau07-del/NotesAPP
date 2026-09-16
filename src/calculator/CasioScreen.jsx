@@ -10,6 +10,8 @@ export default function CasioScreen({
   alpha = false,
   angleMode = 'DEG',
   hasHistory = false,
+  isFractionMode = false,
+  fractionResult = null,
 }) {
   const exprRef = useRef(null);
 
@@ -194,7 +196,20 @@ export default function CasioScreen({
       {/* Result Line (Right aligned) */}
       <div className="casio-lcd-result">
         {resultText !== null && !error && (
-          <span className="casio-result-value">{resultText}</span>
+          isFractionMode && fractionResult && fractionResult.d !== 1 ? (
+            <div className="casio-result-fraction-wrapper">
+              {fractionResult.n < 0 && (
+                <span className="casio-result-fraction-minus">−</span>
+              )}
+              <span className="casio-natural-fraction casio-result-fraction">
+                <span className="casio-frac-num">{Math.abs(fractionResult.n)}</span>
+                <span className="casio-frac-bar" />
+                <span className="casio-frac-den">{fractionResult.d}</span>
+              </span>
+            </div>
+          ) : (
+            <span className="casio-result-value">{resultText}</span>
+          )
         )}
       </div>
     </div>

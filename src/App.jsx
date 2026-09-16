@@ -385,6 +385,14 @@ function Editor({ activeNote, onBack }) {
             <CalculatorPanel
               active={panelMode === "calculator"}
               onClose={() => setPanelMode(null)}
+              onInsertToDocument={({ dataUrl }) => {
+                setImageDropRequest({
+                  id: `${Date.now()}-${Math.random()}`,
+                  dataUrl,
+                  x: null,
+                  y: null,
+                });
+              }}
             />
           </Suspense>
         )}

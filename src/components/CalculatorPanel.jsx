@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calculator, X, RotateCcw } from 'lucide-react';
+import { Calculator, X, RotateCcw, Copy, Check, ArrowDownToLine } from 'lucide-react';
 import casioImage from '../assets/casio-fx991dex.png';
 import { CASIO_KEYS } from '../calculator/casioKeyMap.js';
 import { createCasioState, handleCasioKeyPress } from '../calculator/casioEngine.js';
+import { renderMathCard, formatMathToText } from '../calculator/mathRenderer.js';
 import CasioScreen from '../calculator/CasioScreen.jsx';
 
 export default function CalculatorPanel({
   active = false,
   onClose,
+  onInsertToDocument,
 }) {
   const [state, setState] = useState(createCasioState);
   const [activeKeyId, setActiveKeyId] = useState(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [insertSuccess, setInsertSuccess] = useState(false);
   const keyFeedbackTimerRef = useRef(null);
 
   const pressKey = useCallback((keyId) => {
@@ -25,6 +29,93 @@ export default function CalculatorPanel({
   const handleReset = useCallback(() => {
     setState(createCasioState());
   }, []);
+
+  const hasContentToExport =
+    (state.items && state.items.length > 0) ||
+    state.resultText !== null ||
+    state.numericResult !== null;
+
+  const handleCopy = useCallback(async () => {
+    const text = formatMathToText({
+      items: state.items,
+      resultText: state.resultText,
+      numericResult: state.numericResult,
+      fractionResult: state.fractionResult,
+      isFractionMode: state.isFractionMode,
+    });
+
+    const card = renderMathCard({
+      items: state.items,
+      resultText: state.resultText,
+      numericResult: state.numericResult,
+      fractionResult: state.fractionResult,
+      isFractionMode: state.isFractionMode,
+      theme: 'card',
+      scale: 3,
+    });
+
+    let copied = false;
+
+    if (card?.dataUrl && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      try {
+        const res = await fetch(card.dataUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': blob,
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+          }),
+        ]);
+        copied = true;
+      } catch (err) {
+        // Fallback to text
+      }
+    }
+
+    if (!copied && text && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch {
+        // ignore
+      }
+    }
+
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 1600);
+  }, [state]);
+
+  const handleInsertToDocument = useCallback(() => {
+    const card = renderMathCard({
+      items: state.items,
+      resultText: state.resultText,
+      numericResult: state.numericResult,
+      fractionResult: state.fractionResult,
+      isFractionMode: state.isFractionMode,
+      theme: 'card',
+      scale: 3,
+    });
+
+    if (!card) return;
+
+    const text = formatMathToText({
+      items: state.items,
+      resultText: state.resultText,
+      numericResult: state.numericResult,
+      fractionResult: state.fractionResult,
+      isFractionMode: state.isFractionMode,
+    });
+
+    onInsertToDocument?.({
+      dataUrl: card.dataUrl,
+      width: card.width,
+      height: card.height,
+      text,
+    });
+
+    setInsertSuccess(true);
+    setTimeout(() => setInsertSuccess(false), 1600);
+  }, [state, onInsertToDocument]);
 
   // Keyboard shortcut listener when calculator is active
   useEffect(() => {
@@ -95,6 +186,26 @@ export default function CalculatorPanel({
         </span>
         <div className="calculator-panel-actions">
           <button
+            type="button"
+            className={`calculator-insert-pill ${insertSuccess ? 'success' : ''}`}
+            onClick={handleInsertToDocument}
+            title="Rechnung formatiert in Notiz einfügen"
+            disabled={!hasContentToExport}
+          >
+            {insertSuccess ? <Check size={13} /> : <ArrowDownToLine size={13} />}
+            <span>{insertSuccess ? 'Eingefügt!' : 'In Notiz'}</span>
+          </button>
+          <button
+            type="button"
+            className="editor-popover-icon-btn"
+            onClick={handleCopy}
+            title="Rechnung kopieren (Bild & Text)"
+            disabled={!hasContentToExport}
+          >
+            {copySuccess ? <Check size={13} color="#22c55e" /> : <Copy size={13} />}
+          </button>
+          <button
+            type="button"
             className="editor-popover-icon-btn"
             onClick={handleReset}
             title="Rechner zurücksetzen"
@@ -102,6 +213,7 @@ export default function CalculatorPanel({
             <RotateCcw size={13} />
           </button>
           <button
+            type="button"
             className="editor-popover-close"
             onClick={onClose}
             title="Schließen"
@@ -131,6 +243,8 @@ export default function CalculatorPanel({
             alpha={state.alpha}
             angleMode={state.angleMode}
             hasHistory={state.history.length > 0}
+            isFractionMode={state.isFractionMode}
+            fractionResult={state.fractionResult}
           />
 
           {/* Invisible Hitbox Buttons */}

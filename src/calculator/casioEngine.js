@@ -235,6 +235,20 @@ export function formatCasioNumber(val) {
   return String(val);
 }
 
+export function containsFractionOrDivision(items) {
+  if (!items || !Array.isArray(items)) return false;
+  for (const item of items) {
+    if (item === '÷') return true;
+    if (typeof item === 'object' && item !== null) {
+      if (item.type === 'frac') return true;
+      if (item.type === 'sqrt' && containsFractionOrDivision(item.content)) return true;
+      if (item.type === 'pow' && (containsFractionOrDivision(item.base) || containsFractionOrDivision(item.exp))) return true;
+      if (item.type === 'integral' && (containsFractionOrDivision(item.integrand) || containsFractionOrDivision(item.lower) || containsFractionOrDivision(item.upper))) return true;
+    }
+  }
+  return false;
+}
+
 export function handleCasioKeyPress(state, keyId) {
   const next = {
     ...state,
@@ -298,11 +312,13 @@ export function handleCasioKeyPress(state, keyId) {
         if (!next.fractionResult) {
           next.fractionResult = toFraction(next.numericResult);
         }
-        next.isFractionMode = !next.isFractionMode;
-        if (next.isFractionMode && next.fractionResult && next.fractionResult.d !== 1) {
-          next.resultText = `${next.fractionResult.n} ⌟ ${next.fractionResult.d}`;
-        } else {
-          next.resultText = formatCasioNumber(next.numericResult);
+        if (next.fractionResult && next.fractionResult.d !== 1) {
+          next.isFractionMode = !next.isFractionMode;
+          if (next.isFractionMode) {
+            next.resultText = `${next.fractionResult.n}/${next.fractionResult.d}`;
+          } else {
+            next.resultText = formatCasioNumber(next.numericResult);
+          }
         }
       }
       consumeModifiers();
@@ -319,17 +335,27 @@ export function handleCasioKeyPress(state, keyId) {
         next.error = error;
         next.resultText = null;
         next.numericResult = null;
+        next.fractionResult = null;
+        next.isFractionMode = false;
       } else {
         next.error = null;
         next.numericResult = value;
         next.lastAnswer = value;
         next.fractionResult = toFraction(value);
-        next.isFractionMode = false;
-        next.resultText = formatCasioNumber(value);
+        const hasFrac = containsFractionOrDivision(next.items);
+        if (hasFrac && next.fractionResult && next.fractionResult.d !== 1) {
+          next.isFractionMode = true;
+          next.resultText = `${next.fractionResult.n}/${next.fractionResult.d}`;
+        } else {
+          next.isFractionMode = false;
+          next.resultText = formatCasioNumber(value);
+        }
         next.history = [...next.history, {
           items: JSON.parse(JSON.stringify(next.items)),
           resultText: next.resultText,
           numericResult: value,
+          fractionResult: next.fractionResult,
+          isFractionMode: next.isFractionMode,
         }];
       }
       consumeModifiers();
@@ -428,6 +454,8 @@ export function handleCasioKeyPress(state, keyId) {
         next.cursorTarget = { nodeId: null, slot: null, index: next.items.length };
         next.resultText = last.resultText;
         next.numericResult = last.numericResult;
+        next.fractionResult = last.fractionResult || toFraction(last.numericResult);
+        next.isFractionMode = !!last.isFractionMode;
       }
       consumeModifiers();
       return next;

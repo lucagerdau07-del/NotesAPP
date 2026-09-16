@@ -44,6 +44,7 @@ import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/rend
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
 import { INPUT_MODES } from "../ink/inputPolicy";
+import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
 import LayerDrawer from "./document/LayerDrawer.jsx";
@@ -1772,13 +1773,16 @@ export default function DocumentView({
         if (cancelled) return;
         const maxWidth = Math.min(baseWidth * 0.8, width);
         const scale = maxWidth / width;
-        const point = mapViewportPoint(
-          pageLayout,
-          relativePoint(containerRef.current, {
-            clientX: imageDropRequest.x,
-            clientY: imageDropRequest.y,
-          }),
-        );
+        const point =
+          imageDropRequest.x != null && imageDropRequest.y != null
+            ? mapViewportPoint(
+                pageLayout,
+                relativePoint(containerRef.current, {
+                  clientX: imageDropRequest.x,
+                  clientY: imageDropRequest.y,
+                }),
+              )
+            : viewportCenterOnPage();
         insertObject(
           "image",
           { width: maxWidth, height: height * scale },
@@ -1795,6 +1799,44 @@ export default function DocumentView({
       cancelled = true;
     };
   }, [imageDropRequest]);
+
+  // System clipboard image paste listener
+  useEffect(() => {
+    const handlePaste = async (event) => {
+      const target = event.target;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            try {
+              const { src, width, height } = await readImageObjectSource(file);
+              const maxWidth = Math.min(baseWidth * 0.8, width);
+              const scale = maxWidth / width;
+              insertObject("image", { width: maxWidth, height: height * scale }, { src });
+            } catch {
+              // ignore
+            }
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [baseWidth, insertObject]);
 
   // Armed from the chat input's own circle-to-search button (see
   // AiChatPanel): the panel closes itself first so the canvas has full
@@ -1914,6 +1956,10 @@ export default function DocumentView({
     document: inkDocument,
     commitStroke: inkController?.inkLayerLocked ? () => {} : inkController?.commitStroke,
     removeStrokes: inkController?.inkLayerLocked ? () => {} : inkController?.removeStrokes,
+    addObject: inkController?.inkLayerLocked ? undefined : inkController?.addObject,
+    onHoldWithoutShape: inkController?.inkLayerLocked
+      ? undefined
+      : (stroke) => tryRecognizeLink(stroke, inkController),
     onDraftAppend: drawDraftSegment,
   });
   const redrawInkCanvasRef = useRef(null);
@@ -1955,20 +2001,13 @@ export default function DocumentView({
     });
   };
 
-  const previousDraftRef = useRef(null);
   useLayoutEffect(() => {
-    const canvas = inkCanvasRef.current;
-    if (!canvas) return;
-
-    const draftJustStarted =
-      inkPointer.draftStroke && previousDraftRef.current !== inkPointer.draftStroke;
-    previousDraftRef.current = inkPointer.draftStroke;
-    if (draftJustStarted && inkPointer.draftStroke.points?.length < 2) return;
-
+    if (!inkCanvasRef.current) return;
     redrawInkCanvasRef.current?.();
   }, [
     inkDocument,
     inkPointer.draftStroke,
+    inkPointer.draftVersion,
     inkTool,
     pagesCount,
     showPageBreaks,
@@ -2053,6 +2092,7 @@ export default function DocumentView({
   const clearAllGestures = () => {
     activePointers.current.clear();
     gutterPanData.current = null;
+    setPinchPreviewRef.current?.(false);
     if (pinchInitialData.current) {
       if (pendingFocusBox.current) {
         focusBoxState?.setFocusBox?.(pendingFocusBox.current);
@@ -2445,24 +2485,65 @@ export default function DocumentView({
     if (event.pointerType !== 'touch') return;
     if (inkPointer.shouldBlockTouch(event)) return;
     activePointers.current.set(event.pointerId, {
-      x: event.clientX, y: event.clientY, startedOnPage,
+      x: event.clientX, y: event.clientY, downX: event.clientX, downY: event.clientY, startedOnPage,
     });
 
     if (activePointers.current.size === 1 && (!startedOnPage || (isMoveMode && !placingTool))) {
       gutterPanData.current = startPan(event);
     }
 
-    if (activePointers.current.size !== 2) return;
-    // Two touches only mean a pinch where every touch is a finger. Without a
-    // digitizer the tip is a touch as well, so the ordinary pair here is the
-    // hand landing beside it — and aborting both strokes for a zoom is the
-    // stylus going dead the moment a palm touches down. The palm guard cannot
-    // separate them at this point either: a contact that has not moved yet is
-    // not recognisable as a hand, which is exactly when this runs. Zooming in
-    // this mode goes through the finger or move tool, where a touch is only
-    // ever a finger.
-    if (inputMode === "stylus" && palmGuard.passiveStylus) return;
+    if (activePointers.current.size === 2 && !needsPinchConfirmation()) {
+      // Outside passive-stylus mode every touch is already a deliberate
+      // finger (see needsPinchConfirmation), so there is no resting-hand
+      // ambiguity to wait out — arm immediately, same as before.
+      commitPinchArm(event);
+    }
+  };
+
+  // In passive-stylus mode a lone touch stands in for the pen (see
+  // useInkPointer), so a second one touching down is exactly as ambiguous as
+  // a hand landing beside the writing finger — shouldBlockTouch says as much.
+  // Every other mode has no such stand-in: two touches are always two fingers.
+  const needsPinchConfirmation = () => inputMode === "stylus" && palmGuard.passiveStylus;
+
+  // A freshly landed pair is armed once both contacts have actually travelled,
+  // not the instant a second one touches down. At touchdown a resting hand
+  // beside the writing finger and a real second finger look identical — only
+  // motion tells them apart, and a parked hand never contributes any. Below
+  // the threshold nothing is armed yet, so the moving contact just keeps
+  // drawing until this promotes it.
+  const armPinch = (event) => {
+    for (const p of activePointers.current.values()) {
+      if (Math.hypot(p.x - p.downX, p.y - p.downY) < palmGuard.restingPx) return;
+    }
+    commitPinchArm(event);
+  };
+
+  // The preview below moves every page's rendered box without touching the
+  // layout, which each page's IntersectionObserver reads as "scrolled out of
+  // view" and the glass MutationObserver reads as a content change. Both then
+  // spend real work undoing something that never happened — a pdf.js re-render
+  // per page, an html-to-image pass over the whole document. Flag the node
+  // carrying the preview so they can tell a gesture from a real move.
+  //
+  // Never leave it set once the fingers are gone: every mounted page holds a
+  // full-size canvas, the WebView renderer here is 32-bit, and a flag that
+  // sticks pins them all until it runs out of canvas memory and takes the app
+  // down with it (measured: SIGTRAP in CrRendererMain). Hence the clear on
+  // every path out of a gesture, not just the one that hands over the zoom.
+  const setPinchPreview = (on) => {
+    const content = containerRef.current;
+    if (!content) return;
+    if (on) content.setAttribute("data-pinch-preview", "");
+    else content.removeAttribute("data-pinch-preview");
+  };
+  // clearAllGestures is defined above this, so reach it late.
+  const setPinchPreviewRef = useRef(null);
+  setPinchPreviewRef.current = setPinchPreview;
+
+  const commitPinchArm = (event) => {
     gutterPanData.current = null;
+    setPinchPreview(true);
     // A snap still transitioning would animate every preview frame below.
     if (containerRef.current) containerRef.current.style.transition = "none";
 
@@ -2470,11 +2551,17 @@ export default function DocumentView({
       inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
     }
 
+    // Anchored on each contact's own touchdown spot, not where the threshold
+    // check above happened to catch it moving — otherwise the bit of pinch
+    // that occurred while still confirming it was real would be lost, and a
+    // fast pinch would visibly undershoot its first frame.
     const rect = scrollRef.current.getBoundingClientRect();
     const entries = Array.from(activePointers.current.entries());
-    const [id1, first] = entries[0];
-    const [id2, second] = entries[1];
-    
+    const [id1, down1] = entries[0];
+    const [id2, down2] = entries[1];
+    const first = { x: down1.downX, y: down1.downY };
+    const second = { x: down2.downX, y: down2.downY };
+
     pinchInitialData.current = {
       pointerIds: [id1, id2],
       distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
@@ -2532,7 +2619,14 @@ export default function DocumentView({
     }
     if (e.pointerType !== "touch") return;
 
-    if (inkPointer.shouldBlockTouch(e)) {
+    // A pending or armed pair is judged by armPinch's own movement check below,
+    // not by this — the classifier's palm election runs per contact and, on a
+    // panel that reports no contact geometry at all, decisively brands whichever
+    // finger hasn't moved *yet* the instant the other one does, which is simply
+    // the second finger of a pinch that has not started moving this frame. Once
+    // a pointer has already left the pair (or a third arrives), the normal
+    // per-touch guard below still applies.
+    if (inkPointer.shouldBlockTouch(e) && activePointers.current.size !== 2) {
       if (activePointers.current.has(e.pointerId)) {
         handleGestureEnd(e);
       }
@@ -2547,6 +2641,10 @@ export default function DocumentView({
     if (activePointers.current.size === 1 && gutterPanData.current?.pointerId === e.pointerId) {
       applyPan(e);
       return;
+    }
+
+    if (activePointers.current.size === 2 && !pinchInitialData.current) {
+      armPinch(e);
     }
 
     if (pinchInitialData.current) {
@@ -2761,7 +2859,9 @@ export default function DocumentView({
   const commitLivePinch = () => {
     const pending = livePinchRef.current;
     livePinchRef.current = null;
-    if (!pending) return;
+    // Armed but never moved (or a focus-box pinch, which never previews): no
+    // transform to hand over, so nothing below would clear the flag.
+    if (!pending) return setPinchPreview(false);
     pinchCommitRef.current = pending;
     // Same zoom means no re-render, so the layout effect would never run and
     // the transform would stick. Drop it here instead.
@@ -2774,6 +2874,7 @@ export default function DocumentView({
     const commit = pinchCommitRef.current;
     if (!commit) return;
     pinchCommitRef.current = null;
+    setPinchPreview(false);
     const content = containerRef.current;
     if (content) {
       content.style.transformOrigin = "";
@@ -2843,6 +2944,11 @@ export default function DocumentView({
         }
         pinchInitialData.current = null;
         commitLivePinch();
+        // commitLivePinch normally hands the flag on to dropPinchPreview, but a
+        // setZoom React bails on (the pending zoom already equals the one this
+        // closure captured) never re-renders, so that layout effect never runs.
+        // The fingers are off the glass either way — see setPinchPreview.
+        setPinchPreview(false);
       }
     }
   };

@@ -4505,6 +4505,38 @@ body::after {
   color: #fff;
 }
 
+.calculator-insert-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f5f9;
+  font: 600 11.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.calculator-insert-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+.calculator-insert-pill:active {
+  transform: scale(0.96);
+}
+
+.calculator-insert-pill.success {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
 .calculator-viewport {
   flex: 1;
   min-height: 0;
@@ -4801,6 +4833,42 @@ body::after {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #0b110b;
+}
+
+.casio-result-fraction-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  line-height: 1;
+}
+
+.casio-result-fraction-minus {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0b110b;
+  margin-right: 2px;
+}
+
+.casio-result-fraction {
+  margin: 0 1px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.casio-result-fraction .casio-frac-num,
+.casio-result-fraction .casio-frac-den {
+  min-height: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0b110b;
+  padding: 0 3px;
+}
+
+.casio-result-fraction .casio-frac-bar {
+  height: 1.8px;
+  background-color: #0b110b;
+  min-width: 14px;
+  margin: 1px 0;
 }
 
 /* Hitboxes */
