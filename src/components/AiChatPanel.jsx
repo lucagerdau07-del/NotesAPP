@@ -15,10 +15,11 @@ import {
   Pencil,
   ScanSearch,
   Globe,
+  Zap,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
-import { CHAT_MODELS, loadChatModel, saveChatModel } from "../agent/agentSettings";
+import { CHAT_MODELS, loadChatModel, saveChatModel, loadFastMode, saveFastMode } from "../agent/agentSettings";
 
 const SUGGESTIONS = [
   "Fasse das zusammen",
@@ -372,10 +373,19 @@ export default function AiChatPanel({
   onRequestCircleSearch,
   model,
   onModelChange,
+  onFinished,
 }) {
   const [draft, setDraft] = useState("");
   const [internalModel, setInternalModel] = useState(() => loadChatModel());
   const currentModelId = model ?? internalModel;
+  const [fast, setFast] = useState(() => loadFastMode());
+  const toggleFast = () => {
+    setFast((v) => {
+      const next = !v;
+      saveFastMode(next);
+      return next;
+    });
+  };
 
   const handleSelectModel = (modelId) => {
     if (!model) {
@@ -397,6 +407,7 @@ export default function AiChatPanel({
     error,
     tokens,
     elapsedMs,
+    streamText,
     send,
     stop,
     clear,
@@ -410,8 +421,22 @@ export default function AiChatPanel({
     subject,
     inkControllerRef,
     model: currentModelId,
+    fast,
   });
   const displayedTokens = useCountUp(tokens);
+
+  // Tells the toolbar to badge the AI button when a run finishes while this
+  // panel is closed — the agent itself keeps working either way (the hook
+  // above stays mounted regardless of `active`), this just surfaces "done".
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    if (isRunning) {
+      wasRunningRef.current = true;
+    } else if (wasRunningRef.current) {
+      wasRunningRef.current = false;
+      if (!active) onFinished?.();
+    }
+  }, [isRunning, active, onFinished]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -516,7 +541,13 @@ export default function AiChatPanel({
 
         {isRunning && steps.length > 0 && <StepList steps={steps} />}
 
-        {isRunning && (() => {
+        {isRunning && streamText && (
+          <div className="rail-chat-msg assistant">
+            <Markdown text={streamText} />
+          </div>
+        )}
+
+        {isRunning && !streamText && (() => {
           const researching = steps.some((step) => step.state === "running" && step.name === "search_web");
           return (
             <div className="rail-chat-status" aria-label="Der Assistent arbeitet">
@@ -577,6 +608,15 @@ export default function AiChatPanel({
               selectedModel={currentModelId}
               onSelectModel={handleSelectModel}
             />
+            <button
+              type="button"
+              className={`rail-chat-fast-btn ${fast ? "active" : ""}`}
+              title={fast ? "Fast-Modus an: recherchiert nur bei Bedarf" : "Fast-Modus aus: recherchiert bei Unsicherheit"}
+              aria-pressed={fast}
+              onClick={toggleFast}
+            >
+              <Zap size={14} />
+            </button>
           </div>
           {isRunning ? (
             <button type="button" className="rail-chat-send-btn" title="Stoppen" onClick={stop}>

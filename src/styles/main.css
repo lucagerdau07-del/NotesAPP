@@ -654,7 +654,6 @@ body::after {
    so unrelated content already paints above it in normal DOM order — focus
    outlines and inner button "active" states need no extra stacking rules. */
 [data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] {
-  position: relative;
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -1164,6 +1163,7 @@ body::after {
   padding: 8px 11px;
   border-radius: 14px;
   max-width: 88%;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.08);
   user-select: text;
 }
@@ -1347,6 +1347,29 @@ body::after {
 
 .rail-chat-model-name {
   pointer-events: none;
+}
+
+.rail-chat-fast-btn {
+  width: 26px !important;
+  height: 26px !important;
+  flex: 0 0 26px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(241, 238, 231, 0.5) !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rail-chat-fast-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-fast-btn.active {
+  background: rgba(255, 196, 0, 0.18) !important;
+  color: #FFD65C !important;
 }
 
 .rail-chat-model-chevron {
@@ -1833,7 +1856,7 @@ body::after {
   overflow-x: auto;
 }
 .md-code code { background: none; padding: 0; }
-.md-table-wrap { overflow-x: auto; margin: 8px 0; }
+.md-table-wrap { overflow-x: auto; max-width: 100%; margin: 8px 0; }
 .md-table { border-collapse: collapse; font-size: 12px; }
 .md-table th,
 .md-table td {
@@ -1911,6 +1934,25 @@ body::after {
 .rail-btn:disabled {
   opacity: 0.28;
   cursor: default;
+}
+
+.rail-btn {
+  position: relative;
+}
+
+.rail-btn-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3ED598;
+  color: #0B0F0D;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .rail-divider {

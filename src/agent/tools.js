@@ -785,7 +785,7 @@ export const AGENT_NO_DOCUMENT_TOOLS = AGENT_TOOLS.filter((tool) =>
 // (read_document's stroke count; the page actually filling up), one turn too
 // late to bundle - and both are small enough (~90/~80 tokens) that forcing a
 // dedicated round trip whenever they are needed would cost more than they do.
-const CORE_TOOL_NAMES = new Set([
+export const CORE_TOOL_NAMES = new Set([
   "read_document",
   "see_document",
   "write_text",

@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import {
   ExternalLink,
   Loader2,
@@ -517,10 +517,36 @@ function useDrag(onCommit) {
 // objects glued together cell by cell. Cells are only committed on blur (not
 // per keystroke), so cellText in the object never changes mid-edit and React
 // never stomps on a caret mid-word — same trick the text object above relies on.
-function TableContent({ object, editable, onResize, focusCell }) {
+function TableContent({ object, editable, onResize, focusCell, onExitEdit }) {
   const tableRef = useRef(null);
   const rows = object.rows || 1;
   const cols = object.cols || 1;
+
+  // Wrapped cell text can render taller than the stored height (set at insert
+  // time from a uniform rowHeight guess) — keep object.height following the
+  // real layout so the selection outline, hit-test box and the row/col +/-
+  // controls (all positioned off object.height) land where the table actually
+  // ends instead of cutting through a row.
+  // A ResizeObserver on the table itself would loop forever here: the table's
+  // own CSS height is `min-height: 100%` of the box we're setting from this
+  // measurement, so patching height changes the table's box, which changes
+  // its measured height again. Keying off the content instead (not height,
+  // not a live observer of the element we're resizing) breaks that cycle —
+  // it only re-measures when something that could actually change the
+  // rendered height changed.
+  // cellTextKey (not object.cellText itself): createPageObject rebuilds the
+  // cellText grid into fresh row arrays on every single update — including
+  // our own height-only patch — so the array reference never stabilizes and
+  // would retrigger this effect forever. A content string only changes when
+  // a cell's actual text does.
+  const cellTextKey = object.cellText?.map((row) => row.join(" ")).join("") ?? "";
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const height = table.offsetHeight;
+    if (Math.abs(height - object.height) > 0.5) onResize?.(object.id, { height });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [object.id, object.width, cellTextKey, object.cols, object.rows, object.fontSize]);
 
   // Entering edit mode (double-click) drops the caret in the cell that was
   // actually double-clicked (focusCell), falling back to the first cell —
@@ -551,6 +577,15 @@ function TableContent({ object, editable, onResize, focusCell }) {
   return (
     <table
       ref={tableRef}
+      onBlur={(event) => {
+        // Unlike the single-box text object, a table has many focusable td's
+        // — only leaving the last one (focus landing outside the whole table,
+        // or nowhere) actually ends editing. Without this, editingId stayed
+        // pinned to the table forever after the first double-click, so every
+        // later plain click hit a still-contentEditable cell and place a
+        // caret instead of selecting the table.
+        if (editable && !event.currentTarget.contains(event.relatedTarget)) onExitEdit?.();
+      }}
       style={{
         width: "100%",
         // Fills the object's box at minimum but is free to grow if a cell's
@@ -601,7 +636,7 @@ function TableContent({ object, editable, onResize, focusCell }) {
   );
 }
 
-function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null }) {
+function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null, onExitEdit }) {
   const editableRef = useRef(null);
   const bounds = objectLayoutBounds(object);
   const dashArray = dashArrayFor(object.strokeStyle);
@@ -735,6 +770,7 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
         editable={editable}
         onResize={onResize}
         focusCell={focusCell}
+        onExitEdit={onExitEdit}
       />
     );
   }
@@ -830,7 +866,10 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
         // instead of just overflowing past the edge.
         overflowWrap: "break-word",
         outline: "none",
-        overflow: "hidden",
+        // Hidden only mid-edit, where handleInput is about to grow the box to
+        // match — a finished box stays visible so a stale height estimate
+        // (insert_table/write_text) never crops real text at the bottom.
+        overflow: editable ? "hidden" : "visible",
         cursor: editable ? "text" : "inherit",
       }}
     >
@@ -1286,6 +1325,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                   if (!text.trim()) onDelete?.(id);
                   else onChange?.(id, { text });
                 }}
+                onExitEdit={() => onEditingChange?.(null)}
               />
             </div>
 

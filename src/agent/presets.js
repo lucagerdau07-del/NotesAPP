@@ -20,10 +20,13 @@ const CELL_TEXT_MARGIN = 8;
 export function buildTablePreset(args, bounds, defaultColor) {
   const rows = Math.round(clamp(args.rows, 1, 20, 3));
   const cols = Math.round(clamp(args.cols, 1, 10, 3));
-  const columnWidth = clamp(args.columnWidth, 40, 400, 140);
-  const rowHeight = clamp(args.rowHeight, 24, 200, 40);
   const x = clamp(args.x, bounds.minX, bounds.maxX, 0);
   const y = clamp(args.y, bounds.minY, bounds.maxY, 0);
+  // Column width caps to whatever's left of the page, so a high column count
+  // shrinks its columns instead of running the table off the right edge.
+  const maxTableWidth = Math.max(cols * 40, bounds.maxX - x);
+  const columnWidth = Math.min(clamp(args.columnWidth, 40, 400, 140), Math.floor(maxTableWidth / cols));
+  const rowHeight = clamp(args.rowHeight, 24, 200, 40);
   const lineColor = color(args.color, defaultColor);
   const headers = Array.isArray(args.headers) ? args.headers : null;
   const cellText = Array.isArray(args.cellText) ? args.cellText.map((row) => [...row]) : [];

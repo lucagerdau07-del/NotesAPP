@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files, Calculator } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files, Calculator, Check } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -94,8 +94,12 @@ function Editor({ activeNote, onBack }) {
   const [hasOpenedBrowser, setHasOpenedBrowser] = useState(false);
   const [hasOpenedPages, setHasOpenedPages] = useState(false);
   const [hasOpenedCalculator, setHasOpenedCalculator] = useState(false);
+  const [agentDone, setAgentDone] = useState(false);
   useEffect(() => {
-    if (panelMode === "agent") setHasOpenedAgent(true);
+    if (panelMode === "agent") {
+      setHasOpenedAgent(true);
+      setAgentDone(false);
+    }
     if (panelMode === "browser") setHasOpenedBrowser(true);
     if (panelMode === "pages") setHasOpenedPages(true);
     if (panelMode === "calculator") setHasOpenedCalculator(true);
@@ -282,6 +286,11 @@ function Editor({ activeNote, onBack }) {
             }}
             title="KI-Assistent"
           >
+            {agentDone && (
+              <span className="rail-btn-badge" aria-label="Agent fertig">
+                <Check size={11} strokeWidth={3} />
+              </span>
+            )}
             <svg width="31" height="31" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <g id="ai-bubble-group" transform="translate(12 12) scale(0.65) translate(-12 -11.25)">
                 <path d="M6 4h11a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-6l-4 3.5V15a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z" />
@@ -345,6 +354,7 @@ function Editor({ activeNote, onBack }) {
                 setPanelMode(null);
                 setArmCircleSearchRequest({ id: `${Date.now()}-${Math.random()}` });
               }}
+              onFinished={() => setAgentDone(true)}
             />
           </Suspense>
         )}

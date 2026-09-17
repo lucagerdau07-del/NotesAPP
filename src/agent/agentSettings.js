@@ -4,6 +4,7 @@
 // added directly to the existing SchoolMind server (app-backend Space, server.js).
 const STORAGE_KEY = "notes.agentConfig";
 const MODEL_STORAGE_KEY = "notes.chatModel";
+const FAST_MODE_STORAGE_KEY = "notes.fastMode";
 
 export const ULTIMATE_FALLBACK_MODEL = "deepseek/deepseek-v4-flash";
 
@@ -61,6 +62,22 @@ export function loadChatModel(storage = globalThis.localStorage) {
 export function saveChatModel(modelId, storage = globalThis.localStorage) {
   try {
     storage?.setItem(MODEL_STORAGE_KEY, modelId);
+  } catch {
+    // Storage blocked.
+  }
+}
+
+export function loadFastMode(storage = globalThis.localStorage) {
+  try {
+    return storage?.getItem(FAST_MODE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveFastMode(enabled, storage = globalThis.localStorage) {
+  try {
+    storage?.setItem(FAST_MODE_STORAGE_KEY, enabled ? "1" : "0");
   } catch {
     // Storage blocked.
   }

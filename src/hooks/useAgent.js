@@ -6,6 +6,7 @@ import {
   AGENT_READ_TOOLS,
   AGENT_NO_DOCUMENT_TOOLS,
   AGENT_EXTENDED_BY_NAME,
+  CORE_TOOL_NAMES,
   describeToolCall,
   executeTool,
 } from "../agent/tools.js";
@@ -138,7 +139,7 @@ function wireMessages(messages) {
  * document, and the document lives here. Every tool call is applied
  * immediately, as one undo step, so the user watches the work happen.
  */
-export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model }) {
+export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model, fast }) {
   const [sessions, setSessions] = useState(() => loadSessions(documentId));
   const [activeId, setActiveId] = useState(() => sessions[0]?.id ?? newSessionId());
   const [messages, setMessages] = useState(() => sessions[0]?.messages ?? []);
@@ -147,6 +148,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   const [error, setError] = useState(null);
   const [tokens, setTokens] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [streamText, setStreamText] = useState("");
   const abortRef = useRef(null);
   const loadedFor = useRef(documentId);
   const startTimeRef = useRef(null);
@@ -272,7 +274,9 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
 
       const controllerAtStart = inkControllerRef?.current;
       const canRead = Boolean(controllerAtStart?.getDocument);
-      const canEdit = editDocument && Boolean(controllerAtStart?.applyCommands);
+      // Fast mode trades editing for speed — the tools sent to the model
+      // never include document-writing ones, same as buildSystemPrompt's gate.
+      const canEdit = !fast && editDocument && Boolean(controllerAtStart?.applyCommands);
       const isWhiteboard = controllerAtStart?.document?.pages?.[0]?.kind === "whiteboard";
       const background = controllerAtStart?.document?.pages?.[0]?.background;
       const controller = new AbortController();
@@ -282,6 +286,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       setSteps([]);
       setTokens(0);
       setElapsedMs(0);
+      setStreamText("");
       startTimeRef.current = Date.now();
       let totalTokens = 0;
       // Only a chat's opening exchange gets a generated title.
@@ -321,6 +326,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             canRead,
             isWhiteboard,
             background,
+            fast,
           }),
         },
         ...messages,
@@ -346,7 +352,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                 : AGENT_NO_DOCUMENT_TOOLS,
             models: conversationHasImage(conversation) ? VISION_MODEL_CHAIN : undefined,
             signal: controller.signal,
+            stream: true,
+            onDelta: setStreamText,
           });
+          setStreamText("");
           totalTokens += usage?.total_tokens ?? 0;
           setTokens(totalTokens);
           conversation = [...conversation, reply];
@@ -384,12 +393,23 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
               // `tools` payload includes, so it's handled here rather than
               // going through executeTool/api at all.
               const requested = Array.isArray(args.names) ? args.names : [];
+              // Core tools (read_document, write_text, done, ...) are always
+              // on already — the model naming one here isn't wrong, just
+              // redundant, so it's a no-op rather than an "unknown tool"
+              // error. Only names that map to neither set are genuinely bad.
               const known = requested.filter((n) => AGENT_EXTENDED_BY_NAME.has(n));
-              const unknown = requested.filter((n) => !AGENT_EXTENDED_BY_NAME.has(n));
+              const alreadyCore = requested.filter((n) => CORE_TOOL_NAMES.has(n));
+              const unknown = requested.filter(
+                (n) => !AGENT_EXTENDED_BY_NAME.has(n) && !CORE_TOOL_NAMES.has(n),
+              );
               for (const n of known) enabledExtra.add(n);
               result =
-                known.length > 0
-                  ? { enabled: known, ...(unknown.length ? { unbekannt: unknown } : {}) }
+                known.length > 0 || alreadyCore.length > 0
+                  ? {
+                      enabled: known,
+                      ...(alreadyCore.length ? { bereits_verfügbar: alreadyCore } : {}),
+                      ...(unknown.length ? { unbekannt: unknown } : {}),
+                    }
                   : `Fehler: Kein bekanntes Werkzeug unter ${JSON.stringify(requested)}.`;
             } else {
               try {
@@ -510,7 +530,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         abortRef.current = null;
       }
     },
-    [activeId, documentId, inkControllerRef, messages, model, noteTitle, status, subject],
+    [activeId, documentId, fast, inkControllerRef, messages, model, noteTitle, status, subject],
   );
 
   return {
@@ -523,6 +543,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     error,
     tokens,
     elapsedMs,
+    streamText,
     send,
     stop,
     clear,
