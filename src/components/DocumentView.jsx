@@ -2368,6 +2368,7 @@ export default function DocumentView({
 
   const activePointers = useRef(new Map());
   const pinchInitialData = useRef(null);
+  const handledReleases = useRef(new WeakSet());
   const gutterPanData = useRef(null);
   // Full-mode move-tool drag nudges the page a little off its centered rest
   // position instead of scrolling it (there's usually no scroll room at all
@@ -2906,6 +2907,12 @@ export default function DocumentView({
   }, [zoom]);
 
   const handleGestureEnd = (event) => {
+    // Reachable twice for one release: the document-capture safety net below
+    // and the scroll container's own handler. Running the ink release twice
+    // would commit the stroke twice.
+    const native = event.nativeEvent ?? event;
+    if (handledReleases.current.has(native)) return;
+    handledReleases.current.add(native);
     const startedOnPage = containerRef.current?.contains(event.target) ?? false;
     if (!startedOnPage) {
       if (event.type === 'pointercancel') {
@@ -2952,6 +2959,32 @@ export default function DocumentView({
       }
     }
   };
+  const handleGestureEndRef = useRef(null);
+  handleGestureEndRef.current = handleGestureEnd;
+
+  // handleGestureEnd is a React handler on the scroll container, so it only
+  // runs for events that bubble up to it — and several children stop
+  // propagation (focus box drags, object layers). A contact whose pointerup is
+  // swallowed that way is never removed from activePointers, and it keeps the
+  // position it had when it was swallowed. The next single-finger move then
+  // measures the live finger against that frozen point: distance explodes and
+  // the pinch preview writes a wild transform (traced on the tablet with one
+  // finger down: scale(1.7475) and translateY(-6906px)). The stale entry only
+  // dies on remount, which is why reopening the document always fixed it.
+  // Capture on document sees every release regardless of who swallows it.
+  useEffect(() => {
+    const release = (event) => {
+      if (event.pointerType !== "touch") return;
+      if (!activePointers.current.has(event.pointerId)) return;
+      handleGestureEndRef.current?.(event);
+    };
+    document.addEventListener("pointerup", release, { capture: true });
+    document.addEventListener("pointercancel", release, { capture: true });
+    return () => {
+      document.removeEventListener("pointerup", release, { capture: true });
+      document.removeEventListener("pointercancel", release, { capture: true });
+    };
+  }, []);
 
   const handleFocusBoxDragStart = (e) => {
     e.stopPropagation();

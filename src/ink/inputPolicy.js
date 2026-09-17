@@ -22,6 +22,9 @@ export const PALM_GUARD_DEFAULTS = {
   // stylus mode would admit nothing at all. The elected contact stands in for
   // the pen until a real one shows up and takes the job back.
   passiveStylus: true,
+  // A tap with no travel becomes a dot. Held longer than this it is a graze,
+  // a rested hand or a lift that never meant to write, and leaves nothing.
+  tapMaxMs: 400,
   // How far back a stroke can still be taken away once its contact turns out
   // to have been a palm. The hand lands before the tip, so this has to cover a
   // whole short palm stroke, not just a frame.

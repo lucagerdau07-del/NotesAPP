@@ -198,6 +198,26 @@ describe('WhiteboardEditor', () => {
     expect(screen.getByTestId('whiteboard-canvas').style.transform).toBe('');
   });
 
+  // Regression: the drawing contact can be either finger of the pair — a
+  // pinch is usually started by touching a second finger down next to the one
+  // already writing, so it's finger 1, not the newly-landed finger 2, that
+  // owns the in-progress draft. Aborting only `event.pointerId` (finger 2)
+  // left finger 1's draft alive through the whole pinch, committing a stray
+  // dot the moment it lifted.
+  it('does not leave a stray dot from the writing finger when a second finger starts a pinch', () => {
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
   it('wires undo/redo buttons to the controller', () => {
     const undo = vi.fn();
     const redo = vi.fn();

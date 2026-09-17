@@ -59,6 +59,20 @@ describe('pointer admission and ownership policy', () => {
     expect(result.intent).toBe('start-draw');
   });
 
+  it('keeps a stationary passive-stylus tap alive long enough to become a dot', () => {
+    // The tap the user actually makes: down, a frame or two of jitter, up a
+    // few hundred ms later. Nothing travels, which used to read as a resting
+    // palm and cancel the draft mid-hold — so only a drawn loop left ink.
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch', 1_000, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('start-draw');
+    for (const at of [1_100, 1_200, 1_300]) {
+      result = reducePointerInput(result.state, event('move', 1, 'touch', at, FINGER_PX), 'stylus');
+      expect(result.intent).toBe('continue-draw');
+    }
+    result = reducePointerInput(result.state, event('up', 1, 'touch', 1_320, FINGER_PX), 'stylus');
+    expect(result.intent).toBe('finish-draw');
+  });
+
   it('allows touch navigation in stylus mode', () => {
     const result = reducePointerInput(createInputState(), event('move', 4, 'touch'), 'stylus');
     expect(result.intent).toBe('navigate');
@@ -208,10 +222,11 @@ describe('passive stylus admission', () => {
     expect(result.state.retroBlockedPointerIds).toContain(1);
   });
 
-  it('condemns a contact that has rested past the resting window', () => {
-    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20, x: 5, y: 5 }), 'stylus');
-    expect(result.intent).toBe('start-draw');
-    result = reducePointerInput(result.state, contact('move', 1, { size: 20, x: 6, y: 5, timeStamp: 1_400 }), 'stylus');
+  it('condemns a contact that has rested past the resting window beside a moving one', () => {
+    let result = reducePointerInput(createInputState(), contact('down', 2, { size: 20, x: 300, y: 200 }), 'stylus');
+    result = reducePointerInput(result.state, contact('down', 1, { size: 20, x: 5, y: 5, timeStamp: 1_050 }), 'stylus');
+    expect(result.state.drawingPointerId).toBe(1);
+    result = reducePointerInput(result.state, contact('move', 2, { size: 20, x: 340, y: 240, timeStamp: 1_400 }), 'stylus');
     expect(result.intent).toBe('cancel-draw');
     expect(result.state.retroBlockedPointerIds).toContain(1);
   });

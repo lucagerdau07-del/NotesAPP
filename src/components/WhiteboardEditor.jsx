@@ -11,6 +11,7 @@ import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js
 import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
+import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
@@ -178,6 +179,8 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     document,
     commitStroke: inkController.commitStroke,
     removeStrokes: inkController.removeStrokes,
+    addObject: inkController.addObject,
+    onHoldWithoutShape: (stroke) => tryRecognizeLink(stroke, inkController),
     onDraftAppend: (draft, appendedFrom) =>
       canvasControllerRef.current?.appendDraftSegment(draft, appendedFrom),
   });
@@ -279,7 +282,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     if (event.pointerType === "touch") {
       touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchesRef.current.size === 2) {
-        inkPointer.abortActiveStroke?.(event.pointerId, event.timeStamp);
+        // The drawing contact can be either finger — whichever landed first —
+        // so every id in the pair has to be offered, not just this one. It is
+        // a no-op for whichever finger was never drawing (see abortActiveStroke).
+        for (const pointerId of touchesRef.current.keys()) {
+          inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
+        }
         // Once here, at the start of the pinch; every frame of it then reuses
         // this via containerRectRef.
         const rect = refreshContainerRect();
@@ -1057,6 +1065,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           pageId={pageId}
           strokes={strokes}
           draftStroke={inkPointer.draftStroke}
+          draftVersion={inkPointer.draftVersion}
           camera={camera}
           width={size.width}
           height={size.height}

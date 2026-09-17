@@ -58,6 +58,31 @@ describe('deterministic complete-path ink renderer', () => {
     expect(context.globalAlpha).toBe(1);
   });
 
+  it('gives a tap a path with length, since a zero-length one paints nothing', () => {
+    // Skia drops a subpath that goes nowhere, round cap and all, so a dot built
+    // from two identical points never reached the screen.
+    const context = createContextDouble();
+
+    renderInkStroke(
+      context,
+      { id: 'd', pageId: 'p1', tool: 'pen', color: '#fff', width: 3, opacity: 1,
+        points: [{ x: 5, y: 7 }, { x: 5, y: 7 }] },
+      { offsetX: 0, offsetY: 0, scale: 1 },
+    );
+
+    expect(context.moveTo).toHaveBeenCalledWith(5, 7);
+    expect(context.lineTo).toHaveBeenLastCalledWith(5.01, 7);
+    expect(context.stroke).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a stroke that actually travelled untouched', () => {
+    const context = createContextDouble();
+
+    renderInkStroke(context, highlighter, { offsetX: 0, offsetY: 0, scale: 1 });
+
+    expect(context.lineTo).toHaveBeenLastCalledWith(5, 6);
+  });
+
   it('uses independent axes when supplied instead of the uniform scale', () => {
     const context = createContextDouble();
 
@@ -90,6 +115,28 @@ describe('deterministic complete-path ink renderer', () => {
     });
     expect(context.save).toHaveBeenCalledTimes(1);
     expect(context.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('thins a pen run where its samples carry light pressure', () => {
+    const context = createContextDouble();
+
+    renderInkStroke(context, {
+      id: 'p', pageId: 'p1', tool: 'pen', color: '#000000', width: 8, opacity: 1,
+      points: [{ x: 0, y: 0, p: 0.1 }, { x: 1, y: 1, p: 0.1 }, { x: 2, y: 2, p: 0.9 }],
+    }, { offsetX: 0, offsetY: 0, scale: 1 });
+
+    expect(context.drawn.map(entry => entry.lineWidth)).toEqual([4, 8]);
+  });
+
+  it('never tapers an eraser: a light patch has to wipe full width', () => {
+    const context = createContextDouble();
+
+    renderInkStroke(context, {
+      ...highlighter, tool: 'pixel-eraser', width: 8,
+      points: [{ x: 0, y: 0, p: 0.1 }, { x: 1, y: 1, p: 0.9 }],
+    }, { offsetX: 0, offsetY: 0, scale: 1 });
+
+    expect(context.drawn.map(entry => entry.lineWidth)).toEqual([8]);
   });
 
   it('does not render incomplete strokes', () => {

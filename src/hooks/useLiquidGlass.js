@@ -191,6 +191,17 @@ const CULL_MARGIN_PX = 48;
 // has been still this long, so it lands while nobody is touching the screen.
 const VIEWPORT_SETTLE_MS = 1500;
 
+// One re-capture is an html-to-image pass over a whole wrapper, and on a Galaxy
+// Tab A7 that is ~790ms of uninterruptible main thread (17% of all CPU spent
+// inside toDataURL alone, measured across a two-finger gesture on an open PDF).
+// Spending it while a finger or the pen is still down is exactly what reads as
+// draw lag and a stuttering pinch — and it is wasted anyway, since whatever it
+// captures is stale again by the next frame of the same gesture. Wait for the
+// hand to leave. Timestamp rather than a pointer count on purpose: a pointerup
+// swallowed by a capture or a cancelled gesture would leave a counter stuck
+// above zero and freeze the refraction for good.
+const HAND_OFF_MS = 300;
+
 // Layers that carry a whiteboard's camera as a CSS transform (origin 0 0,
 // filling the captured wrapper). "outer" holds the live gesture preview,
 // "inner" the committed camera; the ink canvas mirrors "outer".
@@ -279,6 +290,31 @@ export function cullCaptureToGlass(instance) {
   };
 }
 
+// A data-* attribute only changes pixels through a stylesheet selector, so the
+// ones nothing selects on are invisible to a capture. DocumentView rewrites
+// data-stroke-count on every stroke: treated as a content change, that queued a
+// ~600ms re-capture (html-to-image plus a toDataURL of the whole ink canvas,
+// measured on a Galaxy Tab A7) behind every pause in handwriting.
+//
+// ponytail: read once when the observer starts. A stylesheet loaded later that
+// selects on a new data-* attribute won't trigger re-captures for it (stale
+// refraction until the next real change). Re-scan when document.styleSheets
+// grows if that ever matters.
+function styledDataAttributes() {
+  const names = new Set();
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue; // Cross-origin sheet: unreadable, and never ours.
+    }
+    for (const rule of rules)
+      for (const [, name] of rule.cssText.matchAll(/\[\s*(data-[\w-]+)/g)) names.add(name);
+  }
+  return names;
+}
+
 export function recaptureBackgroundOnChange(instance, root) {
   const noop = () => {};
   const wrappers = Array.from(root.children).filter(
@@ -287,6 +323,7 @@ export function recaptureBackgroundOnChange(instance, root) {
       !["CANVAS", "IMG", "VIDEO"].includes(child.tagName),
   );
   if (!instance?.capture || wrappers.length === 0) return noop;
+  const styledData = styledDataAttributes();
 
   let timer = 0;
   // Only the wrapper that actually changed: a re-capture is one html-to-image
@@ -303,7 +340,43 @@ export function recaptureBackgroundOnChange(instance, root) {
       Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(noop);
   };
 
+  let lastPointerAt = -Infinity; // Nothing has touched the screen yet.
+  const touched = () => {
+    lastPointerAt = performance.now();
+  };
+  // Capture phase: a stroke or a pinch stops propagation long before this.
+  const touchOptions = { capture: true, passive: true };
+  document.addEventListener("pointerdown", touched, touchOptions);
+  document.addEventListener("pointermove", touched, touchOptions);
+
+  // Returns the timer id to store, and re-arms itself for as long as the screen
+  // is still being touched (see HAND_OFF_MS).
+  const scheduleCapture = (targets, delay) => {
+    const run = () => {
+      const since = performance.now() - lastPointerAt;
+      if (since < HAND_OFF_MS) {
+        const id = setTimeout(run, HAND_OFF_MS - since);
+        if (targets === dirty) timer = id;
+        else viewportTimer = id;
+        return;
+      }
+      capture(targets);
+    };
+    return setTimeout(run, delay);
+  };
+
   const observer = new MutationObserver((records) => {
+    // React re-applies some attributes with the value they already had on every
+    // render: DocumentView's hidden file input gets its type and name rewritten
+    // on each stroke commit. Only a net change across the batch can alter what a
+    // capture shows, so the first old value is compared with the value now.
+    const firstOldValues = new Map();
+    for (const record of records) {
+      if (record.type !== "attributes") continue;
+      const values = firstOldValues.get(record.target) ?? new Map();
+      if (!values.has(record.attributeName)) values.set(record.attributeName, record.oldValue);
+      firstOldValues.set(record.target, values);
+    }
     let contentChanged = false;
     for (const record of records) {
       const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
@@ -319,16 +392,22 @@ export function recaptureBackgroundOnChange(instance, root) {
         instance.markChanged?.(wrapper);
         continue;
       }
+      if (record.type === "attributes") {
+        const name = record.attributeName;
+        const unchanged =
+          firstOldValues.get(record.target).get(name) === record.target.getAttribute(name);
+        if (unchanged || (name.startsWith("data-") && !styledData.has(name))) continue;
+      }
       dirty.add(wrapper);
       contentChanged = true;
     }
     if (viewportMoved.size > 0) {
       clearTimeout(viewportTimer);
-      viewportTimer = setTimeout(() => capture(viewportMoved), VIEWPORT_SETTLE_MS);
+      viewportTimer = scheduleCapture(viewportMoved, VIEWPORT_SETTLE_MS);
     }
     if (!contentChanged) return;
     clearTimeout(timer);
-    timer = setTimeout(() => capture(dirty), BACKGROUND_QUIET_MS);
+    timer = scheduleCapture(dirty, BACKGROUND_QUIET_MS);
   });
   for (const wrapper of wrappers)
     observer.observe(wrapper, {
@@ -336,10 +415,13 @@ export function recaptureBackgroundOnChange(instance, root) {
       subtree: true,
       characterData: true,
       attributes: true,
+      attributeOldValue: true,
     });
 
   return () => {
     observer.disconnect();
+    document.removeEventListener("pointerdown", touched, touchOptions);
+    document.removeEventListener("pointermove", touched, touchOptions);
     clearTimeout(timer);
     clearTimeout(viewportTimer);
   };

@@ -104,9 +104,18 @@ export function classifyContacts(contacts, tuning = CONTACT_DEFAULTS, now = 0) {
   // pen out of them would break zoom for the sake of a palm that is not there.
   if (isPinchPair(contacts, tuning)) return { electedId: null, palmIds: oversized };
 
-  const resting = list
-    .filter((contact) => now - contact.downAt >= tuning.restingMs && contact.pathPx < tuning.restingPx)
-    .map((contact) => contact.id);
+  // Resting only means anything against a rival. A contact alone on the glass
+  // shadows no tip and steals no stroke, and "down a while without travelling"
+  // is also the exact shape of a deliberate tap — a press that by definition
+  // does not move. Condemning it there is why a tap left nothing and only a
+  // drawn loop put ink down. If a second contact lands later and this one turns
+  // out to have been the hand, it is condemned then, and the retro-revoke
+  // window takes back whatever it already wrote.
+  const resting = list.length < 2
+    ? []
+    : list
+        .filter((contact) => now - contact.downAt >= tuning.restingMs && contact.pathPx < tuning.restingPx)
+        .map((contact) => contact.id);
   const eligible = list.filter(
     (contact) => contact.maxSize < tuning.palmContactPx && !resting.includes(contact.id),
   );

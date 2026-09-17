@@ -7,8 +7,10 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.SslErrorHandler;
@@ -34,6 +36,7 @@ public final class SidebarBrowserView {
   private final FrameLayout root;
   private final Events events;
   private WebView webView;
+  private FrameLayout wrapper;
   private OnBackPressedCallback backCallback;
   private boolean requestedVisible;
 
@@ -63,6 +66,8 @@ public final class SidebarBrowserView {
       settings.setAllowContentAccess(false);
       settings.setAllowFileAccessFromFileURLs(false);
       settings.setAllowUniversalAccessFromFileURLs(false);
+      String desktopUa = settings.getUserAgentString().replaceAll("; wv\\)", ")");
+      settings.setUserAgentString(desktopUa);
       CookieManager cookies = CookieManager.getInstance();
       cookies.setAcceptCookie(true);
       cookies.setAcceptThirdPartyCookies(webView, true);
@@ -81,21 +86,51 @@ public final class SidebarBrowserView {
         ClipData clip = ClipData.newPlainText(IMAGE_DRAG_LABEL, imageUrl);
         return webView.startDragAndDrop(clip, new ImageDragShadow(webView), null, 0);
       });
-      root.addView(webView);
+      // Clipping the WebView itself via outline is unreliable — Chromium's WebView
+      // composites through a hardware surface that ignores View-level outline clip
+      // on some Android versions. Clipping the wrapping FrameLayout instead (whose
+      // canvas the WebView draws into) works consistently.
+      // The panel (.editor-sidebar) is a rounded 30px card whose top corners belong
+      // to the toolbar (clipped fine by CSS overflow:hidden); only the wrapper's
+      // bottom edge touches the panel's rounded bottom corners, so only those two
+      // get clipped here — rounding all 4 would notch the top corners open.
+      wrapper = new FrameLayout(activity);
+      float radius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 30f, activity.getResources().getDisplayMetrics());
+      wrapper.setOutlineProvider(new ViewOutlineProvider() {
+        @Override public void getOutline(View view, android.graphics.Outline outline) {
+          int w = view.getWidth();
+          int h = view.getHeight();
+          if (w <= 0 || h <= 0) return;
+          float r = Math.min(radius, Math.min(w, h) / 2f);
+          android.graphics.Path path = new android.graphics.Path();
+          path.moveTo(0, 0);
+          path.lineTo(w, 0);
+          path.lineTo(w, h - r);
+          path.arcTo(w - 2 * r, h - 2 * r, w, h, 0, 90, false);
+          path.lineTo(r, h);
+          path.arcTo(0, h - 2 * r, 2 * r, h, 90, 90, false);
+          path.close();
+          outline.setConvexPath(path);
+        }
+      });
+      wrapper.setClipToOutline(true);
+      wrapper.addView(webView, new FrameLayout.LayoutParams(
+          FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+      root.addView(wrapper);
       installBackHandler();
     }
     setFrame(x, y, width, height);
     requestedVisible = true;
-    webView.setVisibility(View.VISIBLE);
+    wrapper.setVisibility(View.VISIBLE);
     updateBackHandler();
   }
 
   public void setFrame(int x, int y, int width, int height) {
-    if (webView == null) return;
+    if (wrapper == null) return;
     FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(Math.max(1, width), Math.max(1, height));
     params.leftMargin = Math.max(0, x);
     params.topMargin = Math.max(0, y);
-    webView.setLayoutParams(params);
+    wrapper.setLayoutParams(params);
   }
 
   public void load(String url) {
@@ -104,10 +139,10 @@ public final class SidebarBrowserView {
     webView.loadUrl(url);
   }
 
-  public void show() { requestedVisible = true; if (webView != null) webView.setVisibility(View.VISIBLE); updateBackHandler(); }
-  public void hide() { requestedVisible = false; if (webView != null) webView.setVisibility(View.GONE); updateBackHandler(); }
-  public void pause() { if (webView != null) webView.setVisibility(View.GONE); updateBackHandler(); }
-  public void resume() { if (requestedVisible && webView != null) webView.setVisibility(View.VISIBLE); updateBackHandler(); }
+  public void show() { requestedVisible = true; if (wrapper != null) wrapper.setVisibility(View.VISIBLE); updateBackHandler(); }
+  public void hide() { requestedVisible = false; if (wrapper != null) wrapper.setVisibility(View.GONE); updateBackHandler(); }
+  public void pause() { if (wrapper != null) wrapper.setVisibility(View.GONE); updateBackHandler(); }
+  public void resume() { if (requestedVisible && wrapper != null) wrapper.setVisibility(View.VISIBLE); updateBackHandler(); }
   public void back() { if (webView != null && webView.canGoBack()) webView.goBack(); else { hide(); events.emit("back-at-root", currentUrl(), null, null); } }
   public void forward() { if (webView != null && webView.canGoForward()) webView.goForward(); }
   public void reload() { if (webView != null) webView.reload(); }
@@ -126,10 +161,13 @@ public final class SidebarBrowserView {
     webView.stopLoading();
     webView.setWebChromeClient(null);
     webView.setWebViewClient(null);
-    ViewGroup parent = (ViewGroup) webView.getParent();
-    if (parent != null) parent.removeView(webView);
+    if (wrapper != null) {
+      ViewGroup parent = (ViewGroup) wrapper.getParent();
+      if (parent != null) parent.removeView(wrapper);
+    }
     webView.destroy();
     webView = null;
+    wrapper = null;
   }
 
   private void ensureMounted() { if (webView == null) throw new IllegalStateException("Browser is not mounted"); }
@@ -137,7 +175,7 @@ public final class SidebarBrowserView {
   public boolean canGoBack() { return webView != null && webView.canGoBack(); }
   public boolean canGoForward() { return webView != null && webView.canGoForward(); }
   private void state() { events.emit("state", currentUrl(), webView == null ? null : webView.getTitle(), null); }
-  private void updateBackHandler() { if (backCallback != null) backCallback.setEnabled(requestedVisible && webView != null && webView.getVisibility() == View.VISIBLE); }
+  private void updateBackHandler() { if (backCallback != null) backCallback.setEnabled(requestedVisible && wrapper != null && wrapper.getVisibility() == View.VISIBLE); }
 
   private void installBackHandler() {
     if (!(activity instanceof OnBackPressedDispatcherOwner)) return;
@@ -158,7 +196,7 @@ public final class SidebarBrowserView {
     @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return route(view, request.getUrl()); }
     @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return route(view, Uri.parse(url)); }
     @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) { events.emit("load-start", url, null, null); state(); }
-    @Override public void onPageFinished(WebView view, String url) { events.emit("load-end", url, view.getTitle(), null); state(); }
+    @Override public void onPageFinished(WebView view, String url) { events.emit("load-end", url, view.getTitle(), null); state(); CookieManager.getInstance().flush(); }
     @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
       if (request.isForMainFrame()) events.emit("error", request.getUrl().toString(), null, error.getDescription().toString());
     }

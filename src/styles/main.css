@@ -654,6 +654,7 @@ body::after {
    so unrelated content already paints above it in normal DOM order — focus
    outlines and inner button "active" states need no extra stacking rules. */
 [data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] {
+  position: relative;
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -665,8 +666,32 @@ body::after {
   display: none;
 }
 
-
 [data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] > canvas {
+  pointer-events: none;
+}
+
+/* The refraction shader has no idea what's behind it — over a light page
+   (a whiteboard's white paper, a light PDF) it refracts pale pixels and the
+   white icon/text on top nearly vanishes. Real glass never actually goes
+   fully clear either: Apple's material keeps a constant dark fill under the
+   refraction so content stays legible over any background, light or dark
+   (this is also why Apple walked the transparency back after the iOS 26
+   betas shipped near-invisible controls over light content). Add that same
+   fixed scrim here — it sits above the canvas (default stacking beats the
+   canvas's z-index:-1) but below the icons/text, which are later in source
+   order or z-index:auto on top. */
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  /* 0.38 measured too weak: icon glyphs render at 55% white opacity (see
+     .liquid-glass-pill etc.), so a light scrim still left icon-on-scrim and
+     scrim-on-page too close in luminance over white paper (~213 vs ~161,
+     under 1.5:1 contrast). 0.82 matches the CSS fallback gradient's own
+     near-black end (line 515) so enhanced and fallback read the same. */
+  background: rgba(10, 10, 14, 0.82);
   pointer-events: none;
 }
 
@@ -1272,10 +1297,10 @@ body::after {
 }
 
 .rail-chat-circle-search {
-  width: 26px !important;
-  height: 26px !important;
-  flex: 0 0 26px !important;
-  border-radius: 8px !important;
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 36px !important;
+  border-radius: 10px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;

@@ -36,6 +36,10 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // On-device handwriting recognition for the ink-to-link gesture
+    // (DigitalInkPlugin.java) - free, offline after its one-time model
+    // download, no Play Services project config needed unlike Firebase ML.
+    implementation "com.google.mlkit:digital-ink-recognition:18.1.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

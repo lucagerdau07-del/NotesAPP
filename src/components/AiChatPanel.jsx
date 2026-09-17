@@ -21,9 +21,9 @@ import useAgent from "../hooks/useAgent";
 import { CHAT_MODELS, loadChatModel, saveChatModel } from "../agent/agentSettings";
 
 const SUGGESTIONS = [
-  "Fasse diese Notiz zusammen",
-  "Erstelle mir eine Übersichtsseite dazu",
-  "Erkläre mir das Thema Schritt für Schritt",
+  "Fasse das zusammen",
+  "Löse die Aufgaben",
+  "Erkläre mir das",
 ];
 
 // Rounds to the unit Claude Code itself uses in its status line: plain below

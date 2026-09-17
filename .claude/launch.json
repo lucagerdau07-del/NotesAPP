@@ -9,6 +9,14 @@
         "dev"
       ],
       "autoPort": true
+    },
+    {
+      "name": "app-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:\\Antigravity\\app-backend-temp\\server.js"
+      ],
+      "port": 7860
     }
   ]
 }

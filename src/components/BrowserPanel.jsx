@@ -33,6 +33,31 @@ function domainLabel(url) {
   }
 }
 
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?sz=64&domain=${host}`;
+  } catch {
+    return "";
+  }
+}
+
+function FaviconIcon({ url, size = 16, fallback = null }) {
+  const [failed, setFailed] = useState(false);
+  const src = faviconUrl(url);
+  if (!src || failed) return fallback ?? <Globe2 size={size} />;
+  return (
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      className="browser-favicon"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function IconButton({ title, children, ...props }) {
   return (
     <button
@@ -387,7 +412,11 @@ export default function BrowserPanel({
                           onClick={() => openUrl(shortcut.url)}
                         >
                           <span className="browser-shortcut-icon" aria-hidden="true">
-                            {shortcut.title.trim().slice(0, 1).toUpperCase() || <Globe2 size={19} />}
+                            <FaviconIcon
+                              url={shortcut.url}
+                              size={22}
+                              fallback={shortcut.title.trim().slice(0, 1).toUpperCase() || <Globe2 size={19} />}
+                            />
                           </span>
                           <span>{shortcut.title}</span>
                         </button>
@@ -461,7 +490,7 @@ export default function BrowserPanel({
                         aria-label={`${entry.title} öffnen`}
                         onClick={() => openUrl(entry.url)}
                       >
-                        <span className="browser-history-mark"><Globe2 size={16} /></span>
+                        <span className="browser-history-mark"><FaviconIcon url={entry.url} size={16} /></span>
                         <span className="browser-history-copy">
                           <strong>{entry.title}</strong>
                           <small>{entry.url}</small>

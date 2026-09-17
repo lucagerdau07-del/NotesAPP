@@ -7,6 +7,44 @@ import {
 } from "../ink/inputPolicy.js";
 import { findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
 import { loadPalmProfile, markPenSeen } from "../ink/palmSettings.js";
+import { recognizeShape } from "../ink/shapeRecognizer.js";
+import { createPageObject } from "../ink/pageObjects.js";
+
+// Shorter than Library.jsx's useLongPress: that gesture opens a menu on
+// static content, this one is a drawing pause mid-stroke and has to feel
+// immediate or it reads as lag, not a gesture.
+const HOLD_MS = 350;
+// How long a just-committed stroke stays eligible to be pulled into a held
+// shape guess - covers drawing a rect's four sides, or a shaft plus a
+// separate arrowhead, as one continuous doodle with brief pen lifts.
+const MERGE_WINDOW_MS = 4000;
+// How close two strokes' bounding boxes have to be (page/world units, camera
+// zoom already divided out by mapPoint) to count as the same doodle.
+const MERGE_MARGIN = 50;
+
+function bboxOf(points) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function expandBox(a, b) {
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  };
+}
+
+function boxesNear(a, b, margin) {
+  return !(b.minX > a.maxX + margin || b.maxX < a.minX - margin || b.minY > a.maxY + margin || b.maxY < a.minY - margin);
+}
 
 let nextStrokeNumber = 0;
 
@@ -17,7 +55,7 @@ function createStrokeId() {
   return `ink-${Date.now()}-${nextStrokeNumber}`;
 }
 
-function mappedPoint(value) {
+function mappedPoint(value, source) {
   if (
     !value ||
     !Number.isFinite(value.x) ||
@@ -26,8 +64,18 @@ function mappedPoint(value) {
     value.pageId.length === 0
   )
     return null;
-  return { pageId: value.pageId, x: value.x, y: value.y };
+  // Pressure rides along per sample so the renderer can taper the line. Only a
+  // reading that actually varies is worth storing: a panel with no pressure
+  // channel reports a flat 1 (or nothing at all), and points without `p` keep
+  // the renderer on its single-path fast path.
+  const pressure = source?.pressure;
+  return Number.isFinite(pressure) && pressure > 0 && pressure < 1
+    ? { pageId: value.pageId, x: value.x, y: value.y, p: pressure }
+    : { pageId: value.pageId, x: value.x, y: value.y };
 }
+
+const inkPoint = (point) =>
+  Number.isFinite(point.p) ? { x: point.x, y: point.y, p: point.p } : { x: point.x, y: point.y };
 
 function selectedTool(tool) {
   return tool === "eraser" ||
@@ -56,6 +104,21 @@ function ownsLivePage(owner, document) {
   );
 }
 
+// A pen or mouse tap is deliberate by construction — the tip only reaches the
+// glass because someone put it there. A touch is the passive-stylus case,
+// where the same contact channel also carries every graze of the hand, so it
+// has to look like a tap: brief. Size is deliberately NOT part of this test —
+// contactClassifier's own comments document a single contact's reported width
+// swinging 1-34px on this hardware, so a size cutoff here would reject real
+// taps at random. A hand that lands and lifts quickly still slips through,
+// but a hand that actually rests is already caught upstream (see the "resting
+// contact" handling in contactClassifier.js) before it ever reaches here.
+function isDeliberateTap(pointerType, downAt, liftedAt, tuning) {
+  if (pointerType !== "touch") return true;
+  if (downAt === null) return false;
+  return liftedAt - downAt <= tuning.tapMaxMs;
+}
+
 const palmGuard = (options) =>
   options.palmGuard ? { ...PALM_GUARD_DEFAULTS, ...options.palmGuard } : PALM_GUARD_DEFAULTS;
 
@@ -70,6 +133,8 @@ export default function useInkPointer(options) {
   const draftPointerTypeRef = useRef(null);
   const strokeEraserRef = useRef(false);
   const captureRef = useRef(null);
+  // When the live draft touched down, for the tap-to-dot duration test.
+  const tapDownAtRef = useRef(null);
   // Committed touch strokes stay revocable for a moment: on a device with no
   // digitizer we only learn that a contact was a palm after the tip arrives,
   // which is after that palm's stroke has already been written down. Timed
@@ -77,7 +142,15 @@ export default function useInkPointer(options) {
   // off the wall clock, or the window would depend on how fast tests run.
   const recentTouchStrokesRef = useRef([]);
   const lastEventTimeRef = useRef(0);
-  const [draftStroke, setDraftStroke] = useState(null);
+  // Set once the hold-still timer fires on a draft that isn't a recognized
+  // shape, so finalizeDraft knows to offer it for handwritten-link detection
+  // after it commits as ordinary ink.
+  const heldWithoutShapeRef = useRef(false);
+  const holdTimerRef = useRef(null);
+  // Non-eraser strokes committed in the last MERGE_WINDOW_MS, for the hold
+  // gesture to pull nearby ones into a multi-stroke shape guess.
+  const recentShapeStrokesRef = useRef([]);
+  const [draftVersion, setDraftVersion] = useState(0);
   const previousDocumentIdRef = useRef(options.document?.documentId);
   if (previousDocumentIdRef.current !== options.document?.documentId) {
     inputStateRef.current = createInputState({ sawPenPointer: inputStateRef.current.sawPenPointer });
@@ -88,7 +161,13 @@ export default function useInkPointer(options) {
     draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
     recentTouchStrokesRef.current = [];
-    setDraftStroke(null);
+    recentShapeStrokesRef.current = [];
+    heldWithoutShapeRef.current = false;
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    setDraftVersion((version) => version + 1);
     if (captureRef.current?.target?.releasePointerCapture) {
       captureRef.current.target.releasePointerCapture(captureRef.current.pointerId);
     }
@@ -107,15 +186,88 @@ export default function useInkPointer(options) {
     }
   }, []);
 
+  const clearHoldTimer = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }, []);
+
   const discardDraft = useCallback(() => {
     draftRef.current = null;
     draftOwnerRef.current = null;
     draftPointerIdRef.current = null;
     draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
-    setDraftStroke(null);
+    heldWithoutShapeRef.current = false;
+    clearHoldTimer();
+    setDraftVersion((version) => version + 1);
     releaseCapture();
-  }, [releaseCapture]);
+  }, [releaseCapture, clearHoldTimer]);
+
+  // Fires when the pen has sat still for HOLD_MS: a rect/ellipse/line/arrow
+  // guess becomes a real page object immediately (ladder: recognizer owns
+  // the confidence bar, so an ordinary drawing pause just keeps drawing).
+  // Anything else that was held just gets flagged for finalizeDraft to offer
+  // to onHoldWithoutShape once it commits as normal ink.
+  const armHoldTimer = useCallback(() => {
+    clearHoldTimer();
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      const draft = draftRef.current;
+      if (!draft || strokeEraserRef.current) return;
+      const current = optionsRef.current;
+
+      // Pull in just-drawn strokes near the current one - four sides of a
+      // rect, or a shaft plus a separately-drawn arrowhead, are usually a
+      // few quick strokes with brief pen lifts, not one unbroken loop.
+      const now = Date.now();
+      // Oldest first already (push order in finalizeDraft) - walking forward
+      // keeps that order, so no timestamp sort needed (and none would be
+      // reliable: strokes drawn within the same millisecond tie).
+      const recent = recentShapeStrokesRef.current;
+      let clusterBox = bboxOf(draft.points);
+      const merged = [];
+      for (const entry of recent) {
+        if (entry.pageId !== draft.pageId) continue;
+        if (now - entry.committedAt > MERGE_WINDOW_MS) continue;
+        const box = bboxOf(entry.points);
+        if (!boxesNear(clusterBox, box, MERGE_MARGIN)) continue;
+        clusterBox = expandBox(clusterBox, box);
+        merged.push(entry);
+      }
+
+      let shape = null;
+      if (merged.length > 0) {
+        shape = recognizeShape([...merged.flatMap((entry) => entry.points), ...draft.points]);
+      }
+      const usedMerge = shape !== null;
+      if (!shape) shape = recognizeShape(draft.points);
+
+      if (shape) {
+        if (typeof current.addObject === "function") {
+          current.addObject(
+            createPageObject({
+              ...shape,
+              pageId: draft.pageId,
+              color: draft.color,
+              strokeWidth: draft.width,
+            }),
+          );
+          if (usedMerge) {
+            const mergedIds = new Set(merged.map((entry) => entry.id));
+            current.removeStrokes?.(merged.map((entry) => entry.id));
+            recentShapeStrokesRef.current = recentShapeStrokesRef.current.filter((entry) => !mergedIds.has(entry.id));
+          }
+          discardDraft();
+        }
+        return;
+      }
+      if (draft.points.length >= 6 && typeof current.onHoldWithoutShape === "function") {
+        heldWithoutShapeRef.current = true;
+      }
+    }, HOLD_MS);
+  }, [clearHoldTimer, discardDraft]);
 
   const revokeCommitted = useCallback((pointerIds, at) => {
     const window = palmGuard(optionsRef.current).retroWindowMs;
@@ -187,21 +339,35 @@ export default function useInkPointer(options) {
     const isStrokeEraser = strokeEraserRef.current;
     const pointerId = draftPointerIdRef.current;
     const pointerType = draftPointerTypeRef.current;
+    const wasHeldWithoutShape = heldWithoutShapeRef.current;
     draftRef.current = null;
     draftOwnerRef.current = null;
     draftPointerIdRef.current = null;
     draftPointerTypeRef.current = null;
     strokeEraserRef.current = false;
-    setDraftStroke(null);
+    heldWithoutShapeRef.current = false;
+    clearHoldTimer();
+    setDraftVersion((version) => version + 1);
     releaseCapture();
 
     const current = optionsRef.current;
-    if (
-      !draft ||
-      draft.points.length < 2 ||
-      !ownsLivePage(owner, current.document)
-    )
+    if (!draft || draft.points.length === 0 || !ownsLivePage(owner, current.document))
       return;
+    // A tap fires down+up with no move in between, so the draft never grows
+    // past one point. Duplicate it into a zero-length segment instead of
+    // dropping it: the round line cap renders that as a dot.
+    if (draft.points.length === 1) {
+      if (
+        !isDeliberateTap(
+          pointerType,
+          tapDownAtRef.current,
+          lastEventTimeRef.current,
+          palmGuard(current),
+        )
+      )
+        return;
+      draft.points.push({ ...draft.points[0] });
+    }
     if (isStrokeEraser) {
       const strokeIds = findIntersectingStrokeIds(
         current.document,
@@ -213,6 +379,12 @@ export default function useInkPointer(options) {
       return;
     }
     current.commitStroke?.(draft);
+    const now = Date.now();
+    recentShapeStrokesRef.current = [
+      ...recentShapeStrokesRef.current.filter((entry) => now - entry.committedAt <= MERGE_WINDOW_MS),
+      { id: draft.id, pageId: draft.pageId, points: draft.points, committedAt: now },
+    ];
+    if (wasHeldWithoutShape) current.onHoldWithoutShape?.(draft);
     if (pointerType === 'touch' && pointerId !== null) {
       recentTouchStrokesRef.current.push({
         strokeId: draft.id,
@@ -220,11 +392,11 @@ export default function useInkPointer(options) {
         committedAt: lastEventTimeRef.current,
       });
     }
-  }, [releaseCapture]);
+  }, [releaseCapture, clearHoldTimer]);
 
   const startDraft = useCallback((event) => {
     const current = optionsRef.current;
-    const point = mappedPoint(current.mapPoint?.(event));
+    const point = mappedPoint(current.mapPoint?.(event), event);
     const owner = point ? draftOwner(current.document, point.pageId) : null;
     if (!point || !owner) return false;
 
@@ -237,24 +409,24 @@ export default function useInkPointer(options) {
       color: style.color,
       width: style.width,
       opacity: style.opacity,
-      points: [{ x: point.x, y: point.y }],
+      points: [inkPoint(point)],
     };
     draftRef.current = draft;
     draftOwnerRef.current = owner;
     draftPointerIdRef.current = event.pointerId;
     draftPointerTypeRef.current = event.pointerType;
+    tapDownAtRef.current = lastEventTimeRef.current;
     strokeEraserRef.current = current.tool === 'stroke-eraser'
       || (tool === 'pixel-eraser' && current.eraserMode === 'stroke');
-    // The live draft object is published once. Moves mutate it in place and are
-    // painted incrementally via onDraftAppend, so no re-render per pointer move.
-    setDraftStroke(draft);
+    // No render at pen-down: on slow tablets it stalls the first samples.
 
     if (typeof event.currentTarget?.setPointerCapture === 'function') {
       event.currentTarget.setPointerCapture(event.pointerId);
       captureRef.current = { target: event.currentTarget, pointerId: event.pointerId };
     }
+    armHoldTimer();
     return true;
-  }, []);
+  }, [armHoldTimer]);
 
   const onPointerDown = useCallback((event, options = {}) => {
     const routed = route(event, 'down');
@@ -296,7 +468,7 @@ export default function useInkPointer(options) {
 
       const appendedFrom = draft.points.length;
       for (const sample of samples) {
-        const point = mappedPoint(current.mapPoint?.(sample));
+        const point = mappedPoint(current.mapPoint?.(sample), sample);
         if (!point || point.pageId !== draft.pageId) {
           if (draft.points.length > appendedFrom)
             current.onDraftAppend?.(draft, appendedFrom);
@@ -304,11 +476,12 @@ export default function useInkPointer(options) {
           finalizeDraft();
           return;
         }
-        draft.points.push({ x: point.x, y: point.y });
+        draft.points.push(inkPoint(point));
       }
       current.onDraftAppend?.(draft, appendedFrom);
+      armHoldTimer();
     },
-    [abortDraft, discardDraft, finalizeDraft, route],
+    [abortDraft, discardDraft, finalizeDraft, route, armHoldTimer],
   );
 
   const onPointerUp = useCallback(
@@ -371,6 +544,10 @@ export default function useInkPointer(options) {
       recentTouchStrokesRef.current = [];
       discardDraft();
     },
-    draftStroke,
+    // Getter, not snapshot: nothing re-renders when a stroke starts.
+    get draftStroke() {
+      return draftRef.current;
+    },
+    draftVersion,
   };
 }

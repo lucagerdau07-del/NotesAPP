@@ -15,13 +15,13 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
   pageId,
   strokes = [],
   draftStroke,
+  draftVersion,
   camera,
   width,
   height,
   dpr = 1,
 }, forwardedRef) {
   const canvasRef = useRef(null);
-  const previousDraftRef = useRef(null);
 
   useImperativeHandle(forwardedRef, () => ({
     appendDraftSegment(draft, appendedFrom) {
@@ -49,10 +49,6 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
   // A camera commit or completed stroke redraws the stable scene once. Pointer
   // moves bypass React through appendDraftSegment above.
   useLayoutEffect(() => {
-    const draftJustStarted = draftStroke && previousDraftRef.current !== draftStroke;
-    previousDraftRef.current = draftStroke;
-    if (draftJustStarted && draftStroke.points?.length < 2) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -74,7 +70,7 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
     if (draftStroke && draftStroke.pageId === pageId) {
       renderInkStroke(ctx, draftStroke, transform);
     }
-  }, [pageId, strokes, draftStroke, camera, width, height, dpr]);
+  }, [pageId, strokes, draftStroke, draftVersion, camera, width, height, dpr]);
 
   return (
     <canvas

@@ -221,13 +221,78 @@ describe('useInkPointer', () => {
     expect(commitStroke).not.toHaveBeenCalled();
   });
 
-  it('does not commit a one-point draft when its owner lifts', () => {
+  it('commits a tap as a dot: a zero-length two-point stroke', () => {
     const { result, commitStroke } = renderInkPointer();
 
     act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
     act(() => result.current.onPointerUp(pointer(7, 'pen', 1, 2)));
 
-    expect(commitStroke).not.toHaveBeenCalled();
+    expect(commitStroke).toHaveBeenCalledOnce();
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      points: [{ x: 1, y: 2 }, { x: 1, y: 2 }],
+    }));
+  });
+
+  it('dots a quick touch tap but drops a long graze', () => {
+    const graze = renderInkPointer();
+    act(() => graze.result.current.onPointerDown(pointer(7, 'touch', 1, 2, undefined, 0)));
+    act(() => graze.result.current.onPointerUp(pointer(7, 'touch', 1, 2, undefined, 900)));
+    expect(graze.commitStroke).not.toHaveBeenCalled();
+
+    const tap = renderInkPointer();
+    act(() => tap.result.current.onPointerDown(pointer(8, 'touch', 1, 2, undefined, 0)));
+    act(() => tap.result.current.onPointerUp(pointer(8, 'touch', 1, 2, undefined, 60)));
+    expect(tap.commitStroke).toHaveBeenCalledOnce();
+  });
+
+  // Regression: a passive capacitive stylus tip reads far fatter than a real
+  // digitizer pen (and contactClassifier's own notes clock a single contact
+  // swinging 1-34px on the tablet this was measured on) — so gating the tap on
+  // contact size rejected real taps from that stylus outright. Duration alone
+  // decides now; a wide but quick contact still has to dot.
+  it('dots a quick tap even from a fat capacitive-stylus contact', () => {
+    const { result, commitStroke } = renderInkPointer();
+    const fat = { ...pointer(9, 'touch', 1, 2, undefined, 0), width: 32, height: 32 };
+    act(() => result.current.onPointerDown(fat));
+    act(() => result.current.onPointerUp({ ...fat, timeStamp: 60 }));
+    expect(commitStroke).toHaveBeenCalledOnce();
+  });
+
+  it('records pen pressure per sample and leaves flat readings out', () => {
+    const { result, commitStroke } = renderInkPointer();
+    const withPressure = (clientX, pressure) =>
+      ({ ...pointer(7, 'pen', clientX, 2), pressure });
+
+    act(() => result.current.onPointerDown(withPressure(1, 0.2)));
+    act(() => result.current.onPointerMove(withPressure(2, 0.8)));
+    act(() => result.current.onPointerMove(withPressure(3, 1)));
+    act(() => result.current.onPointerUp(withPressure(3, 1)));
+
+    expect(commitStroke).toHaveBeenCalledWith(expect.objectContaining({
+      points: [{ x: 1, y: 2, p: 0.2 }, { x: 2, y: 2, p: 0.8 }, { x: 3, y: 2 }],
+    }));
+  });
+
+  it('does not re-render when a stroke starts', () => {
+    let renders = 0;
+    const options = {
+      inputMode: 'stylus',
+      tool: 'pen',
+      color: '#ffffff',
+      width: 3,
+      document: { documentId: 'doc-1', pages: [{ id: 'p1' }], strokes: [] },
+      mapPoint: event => ({ pageId: 'p1', x: event.clientX, y: event.clientY }),
+    };
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useInkPointer(options);
+    });
+    const before = renders;
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 1, 2)));
+
+    expect(renders).toBe(before);
+    expect(result.current.draftStroke).toEqual(expect.objectContaining({ points: [{ x: 1, y: 2 }] }));
   });
 
   it('commits pixel erasing as a destination-out stroke', () => {
@@ -456,6 +521,127 @@ describe('useInkPointer', () => {
     act(() => result.current.onPointerUp(pointer(7, 'pen', 3, 4)));
 
     expect(commitStroke).toHaveBeenCalledOnce();
+  });
+});
+
+describe('hold-to-convert', () => {
+  function rectPoints(x, y, w, h, step = 4) {
+    const points = [];
+    const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
+    for (let i = 0; i < corners.length - 1; i += 1) {
+      const [ax, ay] = corners[i];
+      const [bx, by] = corners[i + 1];
+      const segLen = Math.hypot(bx - ax, by - ay);
+      const steps = Math.max(1, Math.round(segLen / step));
+      for (let s = 0; s < steps; s += 1) points.push({ x: ax + (bx - ax) * (s / steps), y: ay + (by - ay) * (s / steps) });
+    }
+    points.push({ x, y });
+    return points;
+  }
+
+  function drawPoints(result, points) {
+    act(() => result.current.onPointerDown(pointer(7, 'pen', points[0].x, points[0].y)));
+    for (const p of points.slice(1)) {
+      act(() => result.current.onPointerMove(pointer(7, 'pen', p.x, p.y)));
+    }
+  }
+
+  function rectSideStrokes(x, y, w, h, step = 4) {
+    const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
+    const sides = [];
+    for (let i = 0; i < corners.length - 1; i += 1) {
+      const [ax, ay] = corners[i];
+      const [bx, by] = corners[i + 1];
+      const segLen = Math.hypot(bx - ax, by - ay);
+      const steps = Math.max(1, Math.round(segLen / step));
+      const points = [];
+      for (let s = 0; s <= steps; s += 1) points.push({ x: ax + (bx - ax) * (s / steps), y: ay + (by - ay) * (s / steps) });
+      sides.push(points);
+    }
+    return sides;
+  }
+
+  it('turns a held rectangle-shaped draft into a shape object instead of ink', () => {
+    vi.useFakeTimers();
+    try {
+      const addObject = vi.fn();
+      const { result, commitStroke } = renderInkPointer({ addObject });
+      const points = rectPoints(0, 0, 100, 60);
+
+      drawPoints(result, points);
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'rect', x: 0, y: 0, width: 100, height: 60,
+      }));
+      expect(result.current.draftStroke).toBeNull();
+
+      act(() => result.current.onPointerUp(pointer(7, 'pen', points[points.length - 1].x, points[points.length - 1].y)));
+      expect(commitStroke).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('merges a rectangle drawn as four separate held strokes into one shape object', () => {
+    vi.useFakeTimers();
+    try {
+      const addObject = vi.fn();
+      const { result, commitStroke, removeStrokes } = renderInkPointer({ addObject });
+      const [top, right, bottom, left] = rectSideStrokes(0, 0, 100, 60);
+
+      for (const side of [top, right, bottom]) {
+        drawPoints(result, side);
+        act(() => result.current.onPointerUp(pointer(7, 'pen', side[side.length - 1].x, side[side.length - 1].y)));
+      }
+      expect(commitStroke).toHaveBeenCalledTimes(3);
+      const mergedIds = commitStroke.mock.calls.map((call) => call[0].id);
+
+      drawPoints(result, left);
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'rect' }));
+      expect(commitStroke).toHaveBeenCalledTimes(3);
+      expect(removeStrokes).toHaveBeenCalledWith(expect.arrayContaining(mergedIds));
+      expect(result.current.draftStroke).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('commits a rectangle-shaped draft as plain ink when lifted before the hold delay', () => {
+    const addObject = vi.fn();
+    const { result, commitStroke } = renderInkPointer({ addObject });
+    const points = rectPoints(0, 0, 100, 60);
+
+    drawPoints(result, points);
+    act(() => result.current.onPointerUp(pointer(7, 'pen', points[points.length - 1].x, points[points.length - 1].y)));
+
+    expect(addObject).not.toHaveBeenCalled();
+    expect(commitStroke).toHaveBeenCalledOnce();
+  });
+
+  it('offers a held non-shape draft to onHoldWithoutShape once it commits as ink', () => {
+    vi.useFakeTimers();
+    try {
+      const onHoldWithoutShape = vi.fn();
+      const { result, commitStroke } = renderInkPointer({ onHoldWithoutShape, addObject: vi.fn() });
+      const points = [
+        { x: 0, y: 0 }, { x: 10, y: 30 }, { x: 20, y: 5 }, { x: 30, y: 35 },
+        { x: 40, y: 0 }, { x: 50, y: 30 }, { x: 60, y: 5 },
+      ];
+
+      drawPoints(result, points);
+      act(() => vi.advanceTimersByTime(500));
+      expect(onHoldWithoutShape).not.toHaveBeenCalled();
+
+      act(() => result.current.onPointerUp(pointer(7, 'pen', points[points.length - 1].x, points[points.length - 1].y)));
+
+      expect(commitStroke).toHaveBeenCalledOnce();
+      expect(onHoldWithoutShape).toHaveBeenCalledWith(commitStroke.mock.calls[0][0]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -64,14 +64,24 @@ describe('contact classifier', () => {
     expect(verdict.palmIds).toEqual([1]);
   });
 
-  it('condemns a contact that rests without travelling', () => {
+  it('condemns a contact that rests without travelling beside another one', () => {
+    const contacts = track([
+      touch('down', 1, { size: 20, x: 5, y: 5, timeStamp: 1_000 }),
+      touch('down', 2, { size: 20, x: 300, y: 200, timeStamp: 1_000 }),
+      touch('move', 1, { size: 20, x: 6, y: 5, timeStamp: 1_400 }),
+      touch('move', 2, { size: 20, x: 340, y: 240, timeStamp: 1_400 }),
+    ]);
+    expect(classifyContacts(contacts, CONTACT_DEFAULTS, 1_400).palmIds).toEqual([1]);
+  });
+
+  it('leaves a lone contact alone when it holds still, so a tap can be a dot', () => {
+    // A press that does not travel is what a tap is. With nothing else on the
+    // glass there is no tip for it to be shadowing, so resting means nothing.
     const contacts = track([
       touch('down', 1, { size: 20, x: 5, y: 5, timeStamp: 1_000 }),
       touch('move', 1, { size: 20, x: 6, y: 5, timeStamp: 1_400 }),
     ]);
-    const verdict = classifyContacts(contacts, CONTACT_DEFAULTS, 1_400);
-    expect(verdict.palmIds).toEqual([1]);
-    expect(verdict.electedId).toBe(null);
+    expect(classifyContacts(contacts, CONTACT_DEFAULTS, 1_400).palmIds).toEqual([]);
   });
 
   it('elects the contact that travelled when the panel reports no geometry', () => {

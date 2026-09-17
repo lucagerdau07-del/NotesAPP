@@ -143,11 +143,85 @@ describe("recaptureBackgroundOnChange", () => {
     vi.useFakeTimers();
     const { body, captureElement, stop } = setup();
 
-    for (let i = 0; i < 20; i += 1) body.setAttribute("data-i", String(i));
+    for (let i = 0; i < 20; i += 1) body.setAttribute("class", `c${i}`);
     await settle();
 
     expect(captureElement).toHaveBeenCalledTimes(1);
     stop();
+    vi.useRealTimers();
+  });
+
+  it("ignores attribute writes that leave the value as it was", async () => {
+    // React re-applies an input's type and name on every render. DocumentView's
+    // hidden file input did that on each stroke commit, which queued a
+    // re-capture after every stroke even though nothing visible changed.
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup();
+    const input = document.createElement("input");
+    input.type = "file";
+    body.append(input);
+    await settle();
+    captureElement.mockClear();
+
+    input.name = "";
+    input.type = "file";
+    input.removeAttribute("name");
+    await settle();
+    expect(captureElement).not.toHaveBeenCalled();
+
+    input.type = "text";
+    await settle();
+    expect(captureElement).toHaveBeenCalledWith(body, true);
+
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("holds the capture back until the hand leaves the screen", async () => {
+    // An html-to-image pass is ~790ms of blocked main thread on the tablet.
+    // Running it while a finger is still down is the draw and pinch lag — and
+    // pointless, since the next frame of the same gesture invalidates it.
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup();
+
+    document.dispatchEvent(new Event("pointerdown"));
+    body.textContent = "gezeichnet";
+    await Promise.resolve();
+
+    // Still drawing 3s later: the capture keeps getting pushed back.
+    for (let i = 0; i < 20; i += 1) {
+      vi.advanceTimersByTime(150);
+      document.dispatchEvent(new Event("pointermove"));
+    }
+    expect(captureElement).not.toHaveBeenCalled();
+
+    // Hand lifts.
+    vi.advanceTimersByTime(1000);
+    expect(captureElement).toHaveBeenCalledWith(body, true);
+
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("ignores data-* attribute changes no stylesheet selects", async () => {
+    // DocumentView rewrites data-stroke-count on every stroke. Re-capturing for
+    // it froze the tablet for ~600ms after every pause in handwriting.
+    vi.useFakeTimers();
+    const style = document.createElement("style");
+    style.textContent = '[data-open="true"] { opacity: 0.5; }';
+    document.head.append(style);
+    const { body, captureElement, stop } = setup();
+
+    body.setAttribute("data-stroke-count", "79");
+    await settle();
+    expect(captureElement).not.toHaveBeenCalled();
+
+    body.setAttribute("data-open", "true");
+    await settle();
+    expect(captureElement).toHaveBeenCalledWith(body, true);
+
+    stop();
+    style.remove();
     vi.useRealTimers();
   });
 });

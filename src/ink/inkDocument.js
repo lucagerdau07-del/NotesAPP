@@ -296,7 +296,8 @@ function applyInkCommand(document, command) {
         changed = true;
         return {
           ...stroke,
-          points: stroke.points.map((point) => mapPoint(point.x, point.y)),
+          // Spread first so a moved stroke keeps its per-sample pressure.
+          points: stroke.points.map((point) => ({ ...point, ...mapPoint(point.x, point.y) })),
           width: Math.max(0.5, stroke.width * scale),
         };
       });

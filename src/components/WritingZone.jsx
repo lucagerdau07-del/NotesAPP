@@ -58,6 +58,28 @@ export default function WritingZone({
     [focusBox],
   );
 
+  // Paint only the newly appended segment straight onto the canvas that
+  // already has everything drawn so far. No layout read, no full redraw -
+  // mirrors DocumentView's drawDraftSegment.
+  const drawDraftSegment = (draft, appendedFrom) => {
+    if (inkTool === "stroke-eraser") return;
+    if (!focusBox || focusBox.width <= 0 || focusBox.height <= 0) return;
+    const points = draft.points.slice(Math.max(0, appendedFrom - 1));
+    if (points.length < 2) return;
+    const context = canvasRef.current?.getContext("2d");
+    if (!context) return;
+    const dpr = globalThis.devicePixelRatio || 1;
+    const scaleX = canvasSize.width / focusBox.width;
+    const scaleY = canvasSize.height / focusBox.height;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    renderInkStroke(context, { ...draft, points }, {
+      offsetX: -focusBox.x * scaleX,
+      offsetY: -focusBox.y * scaleY,
+      scaleX,
+      scaleY,
+    });
+  };
+
   const inkPointer = useInkPointer({
     inputMode: inkController?.inputMode || "stylus",
     tool: inkTool,
@@ -68,7 +90,7 @@ export default function WritingZone({
     document: inkDocument,
     commitStroke: inkController?.commitStroke,
     removeStrokes: inkController?.removeStrokes,
-    onDraftAppend: () => redrawInkCanvasRef.current?.(),
+    onDraftAppend: drawDraftSegment,
   });
 
   redrawInkCanvasRef.current = () => {
@@ -129,7 +151,7 @@ export default function WritingZone({
     const observer = new ResizeObserver(redraw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [focusBox, inkDocument, inkPointer.draftStroke, inkTool]);
+  }, [focusBox, inkDocument, inkPointer.draftStroke, inkPointer.draftVersion, inkTool]);
 
   useEffect(() => {
     if (typeof globalThis.matchMedia !== "function") return undefined;

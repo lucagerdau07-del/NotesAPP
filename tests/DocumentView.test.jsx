@@ -168,8 +168,6 @@ test.each([
   const focusBox = { pageId: 'page-1', x: 100, y: 100, width: 200, height: 100 };
   const setFocusBox = vi.fn();
   render(<DocumentView
-    // Pinch-zoom lives in the finger and move tools: with no digitizer the tip
-    // is a touch too, so the stylus tool cannot read a second touch as a zoom.
     inkController={createControllerDouble({ inputMode: 'finger' })}
     focusBoxState={{ focusBox, setFocusBox }}
     toolbarState={toolState({ layoutMode: 'split' })}
@@ -317,11 +315,12 @@ test.each(['stylus', 'finger'])(
   },
 );
 
-test('zooms and pans around the moving two-finger centroid', () => {
+test.each(['stylus', 'finger'])('zooms and pans around the moving two-finger centroid in %s mode', (inputMode) => {
   vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
-  // Pinch-zoom lives in the finger and move tools: with no digitizer the tip is
-  // a touch too, so the stylus tool cannot read a second touch as a zoom.
-  render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
+  // Two unblocked touches are always a deliberate gesture, in every mode — a
+  // lone finger still only draws in stylus mode (see the single-touch test
+  // above), but a second one never gets mistaken for a palm at this point.
+  render(<DocumentView inkController={createControllerDouble({ inputMode })} toolbarState={toolState()} />);
   const page = screen.getByTestId('document-page');
   const scroller = page.parentElement;
   scroller.scrollLeft = 50;
@@ -344,6 +343,35 @@ test('zooms and pans around the moving two-finger centroid', () => {
   expect(scroller.scrollTop).toBe(250);
 });
 
+
+test('a release swallowed by a child still ends the gesture', () => {
+  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
+  // Children stop propagation on their own drags, so a pointerup on one never
+  // reaches the scroll container's handler. The contact then stays in the
+  // gesture set at the position it was swallowed at, and the next single-finger
+  // move is measured against that frozen point — traced on the tablet as
+  // scale(1.7475) from one finger, and only cleared by reopening the document.
+  render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
+  const page = screen.getByTestId('document-page');
+  const swallow = (e) => e.stopPropagation();
+  page.addEventListener('pointerup', swallow);
+
+  fireEvent.pointerDown(page, { pointerId: 10, pointerType: 'touch', clientX: 100, clientY: 100 });
+  fireEvent.pointerDown(page, { pointerId: 11, pointerType: 'touch', clientX: 400, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
+  fireEvent.pointerMove(page, { pointerId: 11, pointerType: 'touch', clientX: 500, clientY: 150 });
+  fireEvent.pointerUp(page, { pointerId: 10, pointerType: 'touch', clientX: 150, clientY: 150 });
+  fireEvent.pointerUp(page, { pointerId: 11, pointerType: 'touch', clientX: 500, clientY: 150 });
+  page.removeEventListener('pointerup', swallow);
+
+  // Both fingers are off the glass, so a lone finger must not be able to
+  // revive the pinch against a contact that is no longer there.
+  fireEvent.pointerDown(page, { pointerId: 12, pointerType: 'touch', clientX: 300, clientY: 300 });
+  fireEvent.pointerMove(page, { pointerId: 12, pointerType: 'touch', clientX: 340, clientY: 360 });
+
+  expect(page.style.transform).not.toMatch(/scale/);
+});
+
 test('a render landing mid-pinch does not throw the preview away', () => {
   vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(cb => (cb(), 1));
   const view = render(<DocumentView inkController={createControllerDouble({ inputMode: 'finger' })} toolbarState={toolState()} />);
@@ -364,8 +392,6 @@ test('keeps a pinch-resized focus rectangle inside its selected page', () => {
     return 1;
   });
   const controller = createControllerDouble({
-    // Pinch-zoom lives in the finger and move tools: with no digitizer the tip
-    // is a touch too, so the stylus tool cannot read a second touch as a zoom.
     inputMode: 'finger',
     document: {
       version: 1,
