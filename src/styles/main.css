@@ -673,23 +673,19 @@ body::after {
    (a whiteboard's white paper, a light PDF) it refracts pale pixels and the
    white icon/text on top nearly vanishes. Real glass never actually goes
    fully clear either: Apple's material keeps a constant dark fill under the
-   refraction so content stays legible over any background, light or dark
-   (this is also why Apple walked the transparency back after the iOS 26
-   betas shipped near-invisible controls over light content). Add that same
-   fixed scrim here — it sits above the canvas (default stacking beats the
-   canvas's z-index:-1) but below the icons/text, which are later in source
-   order or z-index:auto on top. */
-[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+   refraction so content stays legible over any background, light or dark.
+   In the document view with a light or near-white background, keep this scrim
+   so controls remain legible; everywhere else (Library, Settings, dark notes),
+   the authentic crystal-clear Liquid Glass shines through. */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > [data-liquid-glass-control]::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  /* 0.38 measured too weak: icon glyphs render at 55% white opacity (see
-     .liquid-glass-pill etc.), so a light scrim still left icon-on-scrim and
-     scrim-on-page too close in luminance over white paper (~213 vs ~161,
-     under 1.5:1 contrast). 0.82 matches the CSS fallback gradient's own
-     near-black end (line 515) so enhanced and fallback read the same. */
+  /* 0.82 matches the CSS fallback gradient's own near-black end (line 515)
+     so enhanced and fallback read the same over light backgrounds. */
   background: rgba(10, 10, 14, 0.82);
   pointer-events: none;
 }

@@ -58,6 +58,7 @@ import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
+import { isLightBackground } from "../documents/pageStyles.js";
 
 
 // Default footprint per type, in page units. Inserts land centered on the
@@ -1321,6 +1322,21 @@ export default function DocumentView({
   const resolvedPageWidth = inkDocument.pages[0]?.width || baseWidth;
   const resolvedPageHeight = inkDocument.pages[0]?.height || pageHeight;
   const pageBackground = inkDocument.pages[0]?.background || DEFAULT_PAGE_BACKGROUND;
+
+  useEffect(() => {
+    const isLight = isLightBackground(pageBackground, note?.kind);
+    const shell = documentViewRef.current?.closest(".editor-shell");
+    if (shell) {
+      if (isLight) {
+        shell.setAttribute("data-document-theme", "light");
+        shell.classList.add("light-doc");
+      } else {
+        shell.setAttribute("data-document-theme", "dark");
+        shell.classList.remove("light-doc");
+      }
+    }
+  }, [pageBackground, note?.kind]);
+
   const documentHeight = resolvedPageHeight * pagesCount;
   const pageDescriptors =
     note?.kind === "imported" &&

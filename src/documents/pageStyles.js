@@ -55,3 +55,36 @@ export function resolvePageStyle(options = {}) {
     inkColor: backgroundPreset.inkColor,
   };
 }
+
+export function isLightBackground(background, kind) {
+  if (kind === 'imported') return true;
+  if (!background) return false;
+  const bgStr = String(background).trim().toLowerCase();
+  if (bgStr === 'white' || bgStr === 'beige' || bgStr === '#fff' || bgStr === '#ffffff') return true;
+  if (bgStr === 'dark' || bgStr === 'gray' || bgStr === '#000' || bgStr === '#000000') return false;
+
+  const hexMatch = bgStr.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    let hex = hexMatch[1];
+    if (hex.length === 3) {
+      hex = hex.split('').map((c) => c + c).join('');
+    }
+    const val = parseInt(hex, 16);
+    const r = (val >> 16) & 255;
+    const g = (val >> 8) & 255;
+    const b = val & 255;
+    const lum = r * 0.299 + g * 0.587 + b * 0.114;
+    return lum > 140;
+  }
+
+  const channels = [...bgStr.matchAll(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/gi)];
+  if (channels.length > 0) {
+    const avg = channels.reduce(
+      (acc, [, r, g, b]) => acc + Number(r) * 0.299 + Number(g) * 0.587 + Number(b) * 0.114,
+      0,
+    ) / channels.length;
+    return avg > 140;
+  }
+
+  return false;
+}

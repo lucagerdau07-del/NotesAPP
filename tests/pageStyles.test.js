@@ -4,6 +4,7 @@ import {
   BACKGROUND_PRESETS,
   RULING_PRESETS,
   resolvePageStyle,
+  isLightBackground,
 } from '../src/documents/pageStyles.js';
 
 describe('resolvePageStyle', () => {
@@ -69,5 +70,34 @@ describe('resolvePageStyle', () => {
       background: BACKGROUND_PRESETS.find((p) => p.id === 'dark').css,
       inkColor: '#EFECE4',
     });
+  });
+});
+
+describe('isLightBackground', () => {
+  it('correctly identifies light and near-white backgrounds', () => {
+    expect(isLightBackground('white')).toBe(true);
+    expect(isLightBackground('beige')).toBe(true);
+    expect(isLightBackground('#FFFFFF')).toBe(true);
+    expect(isLightBackground('#ffffff')).toBe(true);
+    expect(isLightBackground('#FFF')).toBe(true);
+    expect(isLightBackground('#EFECE4')).toBe(true);
+    expect(isLightBackground('rgb(250, 250, 250)')).toBe(true);
+    expect(isLightBackground('rgba(255, 255, 255, 1)')).toBe(true);
+    expect(isLightBackground(null, 'imported')).toBe(true);
+  });
+
+  it('correctly identifies dark backgrounds', () => {
+    expect(isLightBackground('dark')).toBe(false);
+    expect(isLightBackground('gray')).toBe(false);
+    expect(isLightBackground('#000000')).toBe(false);
+    expect(isLightBackground('#18181C')).toBe(false);
+    expect(isLightBackground('#3A3A3E')).toBe(false);
+    expect(
+      isLightBackground(
+        'linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)',
+      ),
+    ).toBe(false);
+    expect(isLightBackground(null)).toBe(false);
+    expect(isLightBackground('')).toBe(false);
   });
 });

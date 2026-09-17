@@ -1,6 +1,7 @@
 // src/components/WhiteboardEditor.jsx
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isLightBackground } from "../documents/pageStyles.js";
 import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso, Shapes, PaintBucket } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import useInkPointer from "../hooks/useInkPointer.js";
@@ -143,6 +144,21 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const pageId = document.pages[0]?.id || "";
   const strokes = document.strokes;
   const pageObjects = pageObjectsOf(document);
+
+  useEffect(() => {
+    const bg = document.pages[0]?.background;
+    const isLight = isLightBackground(bg);
+    const shell = containerRef.current?.closest(".editor-shell");
+    if (shell) {
+      if (isLight) {
+        shell.setAttribute("data-document-theme", "light");
+        shell.classList.add("light-doc");
+      } else {
+        shell.setAttribute("data-document-theme", "dark");
+        shell.classList.remove("light-doc");
+      }
+    }
+  }, [document.pages]);
 
   const mapOrigin = useCallback(
     () => worldToScreen(camera, { x: 0, y: 0 }),

@@ -10,6 +10,7 @@ import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { browserNoteRepository } from "./storage/noteRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "./documents/exportDocument.js";
+import { isLightBackground } from "./documents/pageStyles.js";
 
 // These screens/panels are not needed on initial load (library or a plain
 // note), so they're split into their own chunks and fetched on demand.
@@ -177,10 +178,16 @@ function Editor({ activeNote, onBack }) {
     };
   }, [isRailResizing]);
 
+  const isLightDoc = useMemo(() => {
+    const bg = activeNote?.background || activeNote?.pages?.[0]?.background;
+    return isLightBackground(bg, activeNote?.kind);
+  }, [activeNote]);
+
   return (
     <BrowserLinkProvider openLink={openAppLink}>
     <div
-      className={`editor-shell ${isImmersive ? "immersive" : ""}`}
+      className={`editor-shell ${isImmersive ? "immersive" : ""} ${isLightDoc ? "light-doc" : ""}`}
+      data-document-theme={isLightDoc ? "light" : "dark"}
       ref={glassRootRef}
     >
       <div className="liquid-glass-scene" />
