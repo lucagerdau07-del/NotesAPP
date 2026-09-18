@@ -32,6 +32,13 @@ export function resolveInkLayerIndex(document) {
   return fillCount;
 }
 
+// A whiteboard keeps every object above the ink until something was explicitly
+// sent below it (the legacy "fills go below" default is a paged-document rule
+// and would bury ordinary objects there).
+export function whiteboardInkLayerIndex(document) {
+  return Number.isFinite(document?.inkLayerIndex) ? resolveInkLayerIndex(document) : 0;
+}
+
 export function createInkDocument(documentId, pages = 1, pageDefaults = {}) {
   if (documentId && typeof documentId === "object") {
     const src = documentId;

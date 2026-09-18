@@ -28,6 +28,8 @@ export default function SplitLayout({
   onCircleToSearch,
   armCircleSearchRequest,
   onArmCircleSearchHandled,
+  openRequest,
+  onOpenHandled,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -137,6 +139,8 @@ export default function SplitLayout({
           onArmCircleSearchHandled={onArmCircleSearchHandled}
           navigatePageRequest={navigatePageRequest}
           onNavigatePageHandled={onNavigatePageHandled}
+          openRequest={openRequest}
+          onOpenHandled={onOpenHandled}
         />
         {layoutMode === "split" && (
           <WritingZone

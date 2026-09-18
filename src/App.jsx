@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, Files, Calculator, Check } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -55,6 +55,12 @@ function Editor({ activeNote, onBack }) {
   const [isImmersive, setIsImmersive] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  // "Öffnen": the picked PDF is handed down to whichever editor is showing.
+  const [openRequest, setOpenRequest] = useState(null);
+  const openInputRef = useRef(null);
+  // An imported note's pages are fixed by its source file.
+  const canOpenPdf = activeNote?.kind !== "imported";
   const inkControllerRef = useRef(null);
   const browserBridge = useMemo(() => createBrowserBridge(), []);
   const browserRepository = useMemo(
@@ -110,15 +116,29 @@ function Editor({ activeNote, onBack }) {
   const railWidthRef = useRef(railWidth);
   const resizePointerRef = useRef(null);
   const exportMenuRef = useRef(null);
+  const moreMenuRef = useRef(null);
 
   useEffect(() => {
-    if (!isExportMenuOpen) return undefined;
+    if (!isExportMenuOpen && !isMoreMenuOpen) return undefined;
     const handleDown = (event) => {
       if (!exportMenuRef.current?.contains(event.target)) setIsExportMenuOpen(false);
+      if (!moreMenuRef.current?.contains(event.target)) setIsMoreMenuOpen(false);
     };
     document.addEventListener("pointerdown", handleDown);
     return () => document.removeEventListener("pointerdown", handleDown);
-  }, [isExportMenuOpen]);
+  }, [isExportMenuOpen, isMoreMenuOpen]);
+
+  useEffect(() => {
+    if (!canOpenPdf) return undefined;
+    const handleKeyDown = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "o") return;
+      event.preventDefault();
+      openInputRef.current?.click();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canOpenPdf]);
 
   const openAppLink = (url) => {
     if (!isInternalBrowserUrl(url)) return;
@@ -204,6 +224,7 @@ function Editor({ activeNote, onBack }) {
     <div
       className={`editor-shell ${isImmersive ? "immersive" : ""} ${isLightDoc ? "light-doc" : ""}`}
       data-document-theme={isLightDoc ? "light" : "dark"}
+      data-whiteboard={activeNote?.pageKind === "whiteboard" ? "" : undefined}
       ref={glassRootRef}
     >
       <div className="liquid-glass-scene" />
@@ -258,8 +279,18 @@ function Editor({ activeNote, onBack }) {
             background: "rgba(255,255,255,.14)",
           }}
         />
-        <span className="editor-subject">
-          {activeNote?.subject ? `${activeNote.subject} · ` : ""}{currentPage}/{pageCount}
+        {/* min-width 5ch reserves room for the page counter; the icon needs none. */}
+        <span
+          className="editor-subject"
+          style={activeNote?.pageKind === "whiteboard" ? { minWidth: 0 } : undefined}
+        >
+          {activeNote?.subject ? `${activeNote.subject} · ` : ""}
+          {/* A whiteboard has no pages to count. */}
+          {activeNote?.pageKind === "whiteboard" ? (
+            <Presentation size={13} aria-label="Whiteboard" style={{ verticalAlign: "-2px" }} />
+          ) : (
+            `${currentPage}/${pageCount}`
+          )}
         </span>
       </div>
       <div className="editor-actions-pill" data-liquid-glass-control="actions">
@@ -290,9 +321,42 @@ function Editor({ activeNote, onBack }) {
             </div>
           )}
         </div>
-        <button className="rail-btn" title="Mehr">
-          <MoreHorizontal size={16} />
-        </button>
+        <div style={{ position: "relative" }} ref={moreMenuRef}>
+          <button
+            className={`rail-btn ${isMoreMenuOpen ? "active" : ""}`}
+            title="Mehr"
+            onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {isMoreMenuOpen && (
+            <div className="export-menu">
+              <button
+                disabled={!canOpenPdf}
+                style={{ whiteSpace: "nowrap" }}
+                onClick={() => {
+                  setIsMoreMenuOpen(false);
+                  openInputRef.current?.click();
+                }}
+              >
+                <FolderOpen size={15} /> PDF als Hintergrund öffnen
+                <span style={{ marginLeft: "auto", opacity: 0.55 }}>Strg+O</span>
+              </button>
+            </div>
+          )}
+          <input
+            ref={openInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            data-testid="open-pdf-input"
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) setOpenRequest({ id: `${Date.now()}-${Math.random()}`, file });
+            }}
+          />
+        </div>
       </div>
       {/* One glass control: the library re-measures each control's own
           offsetWidth/Height every frame and keeps the canvas content in
@@ -374,7 +438,6 @@ function Editor({ activeNote, onBack }) {
           >
             <Calculator size={18} />
           </button>
-          <div className="rail-divider" />
           </div>
         </div>
         <div
@@ -495,6 +558,8 @@ function Editor({ activeNote, onBack }) {
           onArmCircleSearchHandled={(id) =>
             setArmCircleSearchRequest((current) => (current?.id === id ? null : current))
           }
+          openRequest={openRequest}
+          onOpenHandled={(id) => setOpenRequest((current) => (current?.id === id ? null : current))}
         />
       </div>
     </div>

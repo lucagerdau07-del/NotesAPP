@@ -234,17 +234,17 @@ describe('WhiteboardEditor', () => {
 
   it('toggles eraser on and off', () => {
     render(<WhiteboardEditor inkController={createControllerDouble()} />);
-    const eraserBtn = screen.getByTitle('Radierer');
+    const eraserBtn = screen.getByTitle('Radiergummi');
     expect(eraserBtn).not.toHaveClass('active');
     fireEvent.click(eraserBtn);
     expect(eraserBtn.className).toContain('active');
   });
 
-  it('opens a color/width popover and updates the ink color', () => {
-    const setColor = vi.fn();
-    render(<WhiteboardEditor inkController={createControllerDouble({ setColor })} />);
-    fireEvent.click(screen.getByTitle('Farbe & Breite'));
-    expect(screen.getByTestId('whiteboard-color-popover')).toBeInTheDocument();
+  it("has the document rail: the active color slot opens the color wheel", () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    fireEvent.click(screen.getByTestId("color-slot-0"));
+    expect(screen.getByTestId("color-wheel-popover")).toBeInTheDocument();
+    expect(screen.getByTestId("layers-toggle-btn")).toBeInTheDocument();
   });
 
   it('lasso-selects a stroke drawn inside the loop and deletes it on Delete', () => {
@@ -261,7 +261,7 @@ describe('WhiteboardEditor', () => {
     const surface = screen.getByTestId('whiteboard-surface');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
 
-    fireEvent.click(screen.getByTitle('Lasso-Auswahl'));
+    fireEvent.click(screen.getByTestId('lasso-tool-btn'));
     fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 0 });
     fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 200, clientY: 0 });
     fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 200, clientY: 200 });
@@ -279,7 +279,7 @@ describe('WhiteboardEditor', () => {
     const surface = screen.getByTestId('whiteboard-surface');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
 
-    fireEvent.click(screen.getByTitle('Einfügen'));
+    fireEvent.click(screen.getByTestId('design-tools-btn'));
     fireEvent.click(screen.getByTestId('insert-rect'));
     fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
     fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
@@ -313,7 +313,7 @@ describe('WhiteboardEditor', () => {
     const surface = screen.getByTestId('whiteboard-surface');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
 
-    fireEvent.click(screen.getByTitle('Eimer-Füllung'));
+    fireEvent.click(screen.getByTestId('bucket-tool-btn'));
     fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
     fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
 

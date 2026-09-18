@@ -2,8 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isLightBackground } from "../documents/pageStyles.js";
-import { Undo2, Redo2, PenLine, Eraser, Palette, X, Lasso, Shapes, PaintBucket } from "lucide-react";
-import { HexColorPicker } from "react-colorful";
+import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, Trash2, Layers, Move, Columns2 } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
@@ -12,15 +11,23 @@ import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js
 import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
+import { isPdfFile, pdfWhiteboardBackgroundCommands, pdfWhiteboardObjects, readPdfPages } from "../ink/pdfObject.js";
+import { whiteboardInkLayerIndex } from "../ink/inkDocument.js";
 import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
+import LayerDrawer from "./document/LayerDrawer.jsx";
 import {
   DESIGN_TOOLS,
   TEXT_TOOL,
+  PEN_TOOL_ICONS,
+  ColorSlot,
+  ColorWheelPopover,
   DesignToolsPopover,
+  EraserSettingsPopover,
+  PenSettingsPopover,
   TextSettingsPopover,
   ShapeSettingsPopover,
 } from "./DocumentView.jsx";
@@ -43,64 +50,21 @@ function relativePoint(element, event) {
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
-function ColorWidthPopover({ color, onColorChange, width, onWidthChange, onClose }) {
-  const popoverRef = useRef(null);
-  React.useEffect(() => {
-    const handleDown = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target) && !e.target.closest?.(".whiteboard-color-btn")) {
-        onClose();
-      }
-    };
-    document.addEventListener("pointerdown", handleDown);
-    return () => document.removeEventListener("pointerdown", handleDown);
-  }, [onClose]);
-
-  return (
-    <div
-      ref={popoverRef}
-      data-testid="whiteboard-color-popover"
-      style={{
-        position: "absolute",
-        left: 60,
-        top: 120,
-        zIndex: 50,
-        width: 220,
-        padding: 16,
-        borderRadius: 14,
-        background: "#18181C",
-        color: "#FFFFFF",
-        boxShadow: "0 20px 48px -12px rgba(0,0,0,.8)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-          <Palette size={14} /> Farbe & Breite
-        </span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer" }}>
-          <X size={14} />
-        </button>
-      </div>
-      <HexColorPicker color={color} onChange={onColorChange} />
-      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>Breite</span>
-        <input
-          type="range"
-          min={1}
-          max={20}
-          value={width}
-          onChange={(e) => onWidthChange(Number(e.target.value))}
-          style={{ flex: 1 }}
-        />
-        <span style={{ fontSize: 12, width: 24, textAlign: "right" }}>{width}</span>
-      </div>
-    </div>
-  );
-}
-
-export default function WhiteboardEditor({ inkController, railSlot }) {
+export default function WhiteboardEditor({
+  inkController,
+  toolbarState,
+  focusBoxState,
+  railSlot,
+  panelSlot,
+  panelMode,
+  setPanelMode,
+  openRequest,
+  onOpenHandled,
+}) {
   const containerRef = useRef(null);
   const canvasControllerRef = useRef(null);
   const objectLayerRef = useRef(null);
+  const belowLayerRef = useRef(null);
   const touchesRef = useRef(new Map());
   const pinchRef = useRef(null);
   const pinchCommitRef = useRef(false);
@@ -112,7 +76,22 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const panPointerRef = useRef(null);
   const [isEraser, setIsEraser] = useState(false);
-  const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
+  // Same rail as DocumentView: pen/eraser/color popovers, long-press timers,
+  // clear-confirm and the layers drawer.
+  const [customColors, setCustomColors] = useState(["#EFECE4", "#3E7BD8", "#D8615B"]);
+  const [activePickerIndex, setActivePickerIndex] = useState(0);
+  const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
+  const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [confirmClearCanvas, setConfirmClearCanvas] = useState(false);
+  const [popoverTop, setPopoverTop] = useState(120);
+  const [localLayersOpen, setLocalLayersOpen] = useState(false);
+  const penLongPressTimer = useRef(null);
+  const penLongPressFired = useRef(false);
+  const textLongPressTimer = useRef(null);
+  const textLongPressFired = useRef(false);
+  const confirmClearTimerRef = useRef(null);
+  const rootRef = useRef(null);
   const [isLassoMode, setIsLassoMode] = useState(false);
   const [isBucketMode, setIsBucketMode] = useState(false);
   const [lassoDraft, setLassoDraft] = useState(null);
@@ -207,10 +186,12 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
   const setPreview = (translateX, translateY, scale) => {
     canvasControllerRef.current?.setViewportPreview(translateX, translateY, scale);
     objectLayerRef.current?.setViewportPreview(translateX, translateY, scale);
+    belowLayerRef.current?.setViewportPreview(translateX, translateY, scale);
   };
   const clearPreview = () => {
     canvasControllerRef.current?.clearViewportPreview();
     objectLayerRef.current?.clearViewportPreview();
+    belowLayerRef.current?.clearViewportPreview();
   };
 
   useLayoutEffect(() => {
@@ -864,10 +845,16 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     event.target.value = "";
     if (!file) return;
     try {
+      const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
+      if (isPdfFile(file)) {
+        const objects = pdfWhiteboardObjects(pageId, await readPdfPages(file), center);
+        inkController.applyCommands?.(objects.map((object) => ({ type: "add-object", object })));
+        setSelectedObjectId(objects[0].id);
+        return;
+      }
       const { src, width, height } = await readImageObjectSource(file);
       const maxWidth = Math.min(600, width);
       const scale = maxWidth / width;
-      const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
       const object = createPageObject({
         pageId,
         type: "image",
@@ -936,6 +923,87 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
     }
   }, [selectedObjectId]);
 
+  const inputMode = inkController.inputMode;
+  const isMoveMode = inputMode === "move";
+  const isDesignPlacing = Boolean(placingTool) && placingTool.id !== "text";
+  const penColor = inkController.color;
+  const isLayersOpen = setPanelMode ? panelMode === "layers" : localLayersOpen;
+  const toggleLayers = () =>
+    setPanelMode
+      ? setPanelMode((prev) => (prev === "layers" ? null : "layers"))
+      : setLocalLayersOpen((prev) => !prev);
+  const openLayers = () => (setPanelMode ? setPanelMode("layers") : setLocalLayersOpen(true));
+  const closeLayers = () => (setPanelMode ? setPanelMode(null) : setLocalLayersOpen(false));
+
+  const anchorPopoverToButton = (buttonEl, popoverHeight = 460) => {
+    const containerRect = rootRef.current?.getBoundingClientRect();
+    const buttonRect = buttonEl?.getBoundingClientRect();
+    if (containerRect && buttonRect) {
+      const maxTop = Math.max(8, containerRect.height - popoverHeight - 8);
+      setPopoverTop(Math.min(Math.max(8, buttonRect.top - containerRect.top), maxTop));
+    }
+  };
+
+  const handleColorChange = (index, color) => {
+    setCustomColors((colors) => colors.map((c, i) => (i === index ? color : c)));
+    inkController.setColor?.(color);
+    setIsEraser(false);
+  };
+
+  useEffect(() => () => clearTimeout(confirmClearTimerRef.current), []);
+  const handleClearCanvas = () => {
+    clearTimeout(confirmClearTimerRef.current);
+    if (confirmClearCanvas) {
+      setConfirmClearCanvas(false);
+      inkController.clearDocument?.();
+      return;
+    }
+    setConfirmClearCanvas(true);
+    confirmClearTimerRef.current = setTimeout(() => setConfirmClearCanvas(false), 2500);
+  };
+
+  const PenIcon = isMoveMode ? Move : PEN_TOOL_ICONS[inkController.tool] || PenLine;
+  const isPenActive =
+    Boolean(PEN_TOOL_ICONS[inkController.tool]) &&
+    !isEraser &&
+    !isMoveMode &&
+    !isBucketMode &&
+    !isLassoMode &&
+    !placingTool &&
+    !isDesignToolsOpen;
+
+  const isSplit = toolbarState?.layoutMode === "split";
+  const focusBox = focusBoxState?.focusBox;
+  const toggleSplit = () => {
+    if (!isSplit && focusBoxState?.setFocusBox) {
+      // Start the box centered in what is currently on screen.
+      const w = 250;
+      const h = 100;
+      const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
+      focusBoxState.setFocusBox({ pageId, x: center.x - w / 2, y: center.y - h / 2, width: w, height: h });
+    }
+    toolbarState?.setLayoutMode?.(isSplit ? "full" : "split");
+  };
+  const startFocusBoxDrag = (event) => {
+    if (!focusBox) return;
+    event.stopPropagation();
+    event.preventDefault();
+    let last = { x: event.clientX, y: event.clientY };
+    const move = (e) => {
+      focusBoxState.handleDrag((e.clientX - last.x) / camera.scale, (e.clientY - last.y) / camera.scale);
+      last = { x: e.clientX, y: e.clientY };
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
+  // Same buttons, order and behavior as DocumentView's rail.
   const railContent = (
     <>
       <button
@@ -956,92 +1024,272 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
       >
         <Redo2 size={19} />
       </button>
+      <div className="rail-divider" />
       <button
-        className={`rail-btn ${!isEraser ? "active" : ""}`}
-        onClick={() => setIsEraser(false)}
-        title="Stift"
+        className={`rail-btn pen-rail-btn ${isPenActive || isMoveMode ? "active" : ""}`}
+        onPointerDown={(e) => {
+          penLongPressFired.current = false;
+          const buttonEl = e.currentTarget;
+          penLongPressTimer.current = setTimeout(() => {
+            penLongPressFired.current = true;
+            anchorPopoverToButton(buttonEl);
+            setIsPenSettingsOpen(true);
+            setIsBucketMode(false);
+            setIsLassoMode(false);
+            setLassoSelection(null);
+            setIsColorPickerOpen(false);
+            setIsEraserSettingsOpen(false);
+          }, 500);
+        }}
+        onPointerUp={() => clearTimeout(penLongPressTimer.current)}
+        onPointerLeave={() => clearTimeout(penLongPressTimer.current)}
+        onClick={() => {
+          if (penLongPressFired.current) return;
+          if (isEraser || isBucketMode || isLassoMode || placingTool) {
+            setIsEraser(false);
+            setIsBucketMode(false);
+            setIsLassoMode(false);
+            setLassoSelection(null);
+            setPlacingTool(null);
+            if (isMoveMode) inkController.setInputMode?.("stylus");
+          } else {
+            inkController.setInputMode?.(isMoveMode ? "stylus" : "move");
+          }
+          setIsPenSettingsOpen(false);
+        }}
+        title="Stift: Klick = Bewegen, Halten = Einstellungen"
+        data-testid="pen-tool-btn"
       >
-        <PenLine size={19} />
+        <PenIcon size={18} />
       </button>
       <button
-        className={`rail-btn ${isEraser ? "active" : ""}`}
-        onClick={() => setIsEraser(true)}
-        title="Radierer"
+        className={`rail-btn eraser-rail-btn ${isEraser ? "active" : ""}`}
+        onClick={(e) => {
+          if (isEraser) {
+            anchorPopoverToButton(e.currentTarget);
+            setIsEraserSettingsOpen((prev) => !prev);
+          } else {
+            setIsEraser(true);
+            setIsPenSettingsOpen(false);
+            setIsColorPickerOpen(false);
+            if (isMoveMode) inkController.setInputMode?.("stylus");
+          }
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title="Radiergummi"
       >
-        <Eraser size={19} />
+        <Eraser size={18} />
       </button>
       <button
-        className="rail-btn whiteboard-color-btn"
-        onClick={() => setIsColorPopoverOpen((open) => !open)}
-        title="Farbe & Breite"
+        className={`rail-btn ${isBucketMode ? "active" : ""}`}
+        onClick={() => {
+          setIsBucketMode((prev) => {
+            if (!prev && isMoveMode) inkController.setInputMode?.("stylus");
+            return !prev;
+          });
+          setPlacingTool(null);
+          setIsEraser(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title="Eimer (Fläche füllen)"
+        data-testid="bucket-tool-btn"
       >
-        <Palette size={19} />
+        <PaintBucket size={18} />
       </button>
       <button
         className={`rail-btn ${isLassoMode ? "active" : ""}`}
         onClick={() => {
-          setIsLassoMode((mode) => !mode);
-          setLassoSelection(null);
+          const next = !isLassoMode;
+          setIsLassoMode(next);
+          if (!next) setLassoSelection(null);
           setPlacingTool(null);
           setIsBucketMode(false);
+          setIsEraser(false);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
         }}
-        title="Lasso-Auswahl"
+        title="Lasso (markieren, verschieben, vergrößern)"
+        data-testid="lasso-tool-btn"
       >
-        <Lasso size={19} />
+        <LassoSelect size={18} />
+      </button>
+      <button
+        className={`rail-btn design-rail-btn ${isDesignToolsOpen || isDesignPlacing ? "active" : ""}`}
+        onClick={(e) => {
+          if (isDesignPlacing) {
+            setPlacingTool(null);
+            return;
+          }
+          setPlacingTool(null);
+          anchorPopoverToButton(e.currentTarget);
+          setIsDesignToolsOpen((prev) => !prev);
+          setIsPenSettingsOpen(false);
+          setIsEraserSettingsOpen(false);
+          setIsColorPickerOpen(false);
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+        }}
+        title={
+          isDesignPlacing
+            ? `${placingTool.name} ziehen zum Platzieren (Klick zum Abbrechen)`
+            : "Pfeile, Formen, Bilder & Links einfügen"
+        }
+        data-testid="design-tools-btn"
+      >
+        {isDesignPlacing ? placingTool.icon : <Shapes size={18} />}
       </button>
       <button
         className={`rail-btn text-rail-btn ${
           isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
         }`}
-        onClick={() => {
-          if (placingTool?.id === "text") {
-            setPlacingTool(null);
-            return;
-          }
-          setIsTextSettingsOpen((prev) => !prev);
-          setIsShapeSettingsOpen(false);
-          setIsLassoMode(false);
-          setIsBucketMode(false);
+        onPointerDown={(e) => {
+          textLongPressFired.current = false;
+          const buttonEl = e.currentTarget;
+          textLongPressTimer.current = setTimeout(() => {
+            textLongPressFired.current = true;
+            anchorPopoverToButton(buttonEl);
+            setIsTextSettingsOpen(true);
+            setIsDesignToolsOpen(false);
+            setIsPenSettingsOpen(false);
+            setIsEraserSettingsOpen(false);
+            setIsColorPickerOpen(false);
+          }, 500);
         }}
-        title="Text: Schrift, Größe & Farbe"
+        onPointerUp={() => clearTimeout(textLongPressTimer.current)}
+        onPointerLeave={() => clearTimeout(textLongPressTimer.current)}
+        onClick={() => {
+          if (textLongPressFired.current) return;
+          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+          setIsEraser(false);
+          setIsTextSettingsOpen(false);
+        }}
+        title={
+          placingTool?.id === "text"
+            ? "Text ziehen zum Platzieren (Klick zum Abbrechen)"
+            : "Text: Klick = Platzieren, Halten = Einstellungen"
+        }
+        data-testid="text-tool-btn"
       >
-        <span style={{ fontSize: 15, fontWeight: 700 }}>T</span>
+        <Type size={18} />
+      </button>
+      <div className="rail-divider" />
+      {customColors.map((c, index) => (
+        <ColorSlot
+          key={index}
+          index={index}
+          colorValue={c}
+          isActive={penColor === c && !isEraser}
+          isEraser={isEraser}
+          onSelect={(buttonEl) => {
+            if (penColor === c && !isEraser) {
+              anchorPopoverToButton(buttonEl);
+              setIsColorPickerOpen((prev) => !prev);
+              setActivePickerIndex(index);
+            } else {
+              inkController.setColor?.(c);
+              setIsEraser(false);
+              setActivePickerIndex(index);
+            }
+            setIsPenSettingsOpen(false);
+          }}
+          onOpenPicker={(buttonEl) => {
+            anchorPopoverToButton(buttonEl);
+            setActivePickerIndex(index);
+            setIsColorPickerOpen(true);
+            setIsPenSettingsOpen(false);
+          }}
+        />
+      ))}
+      <div className="rail-divider" />
+      <button
+        className={`rail-btn ${confirmClearCanvas ? "confirm" : ""}`}
+        onClick={handleClearCanvas}
+        title={confirmClearCanvas ? "Nochmal tippen zum Leeren" : "Leeren"}
+      >
+        <Trash2 size={18} />
+      </button>
+      <div className="rail-divider" />
+      <button
+        className={`rail-btn ${isSplit ? "active" : ""}`}
+        onClick={toggleSplit}
+        title={isSplit ? "Geteilte Ansicht ausschalten" : "Geteilte Ansicht (Fokus-Box) einschalten"}
+        data-testid="layout-mode-btn"
+      >
+        <Columns2 size={18} />
       </button>
       <button
-        className={`rail-btn design-rail-btn ${isDesignToolsOpen || placingTool ? "active" : ""}`}
-        onClick={() => {
-          if (placingTool) setPlacingTool(null);
-          else setIsDesignToolsOpen((open) => !open);
-          setIsLassoMode(false);
-          setIsBucketMode(false);
-        }}
-        title="Einfügen"
+        className={`rail-btn ${isLayersOpen ? "active" : ""}`}
+        style={{ marginTop: "auto" }}
+        title="Ebenen"
+        data-testid="layers-toggle-btn"
+        onClick={toggleLayers}
       >
-        <Shapes size={19} />
-      </button>
-      <button
-        className={`rail-btn ${isBucketMode ? "active" : ""}`}
-        onClick={() => {
-          setIsBucketMode((mode) => !mode);
-          setIsLassoMode(false);
-          setPlacingTool(null);
-        }}
-        title="Eimer-Füllung"
-      >
-        <PaintBucket size={19} />
+        <Layers size={19} />
       </button>
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         style={{ display: "none" }}
         onChange={handleImageFile}
       />
     </>
   );
 
+  const inkIndex = whiteboardInkLayerIndex(document);
+  const objectLayerProps = {
+    pageLayout: objectLayerLayout,
+    mapOrigin,
+    perObjectTouchAction: false,
+    containerOffset: mapOrigin(),
+    containerScale: camera.scale,
+    selectedId: selectedObjectId,
+    editingId: editingObjectId,
+    onEditingChange: setEditingObjectId,
+    processingObjectId: processingImageId,
+    onSelect: handleSelectObject,
+    onChange: (id, changes) => inkController.updateObject?.(id, changes),
+    onDelete: (id) => inkController.removeObjects?.([id]),
+    onRemoveBackground: handleRemoveBackground,
+    onRestoreBackground: handleRestoreBackground,
+    onToggleLock: inkController.setLayerLock,
+    onShiftOrder: inkController.shiftLayerOrder,
+    onOpenLayers: openLayers,
+    panMode: isSpaceDown,
+  };
+
+  // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the bottom layer.
+  React.useEffect(() => {
+    if (!openRequest) return;
+    const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
+    (async () => {
+      try {
+        const pages = await readPdfPages(openRequest.file);
+        inkController.applyCommands(
+          pdfWhiteboardBackgroundCommands(inkController.getDocument(), pages, center),
+        );
+      } catch {
+        // A file pdf.js cannot read simply opens nothing.
+      } finally {
+        onOpenHandled?.(openRequest.id);
+      }
+    })();
+  }, [openRequest]);
+
   return (
     <div
+      ref={rootRef}
       data-testid="document-view"
       data-document-id={document.documentId}
       style={{
@@ -1076,6 +1324,8 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
         // context menu, which has nothing to show here anyway.
         onContextMenu={(event) => event.preventDefault()}
       >
+        {/* Objects sent below the ink (an opened PDF) sit under the canvas. */}
+        <PageObjectLayer ref={belowLayerRef} objects={pageObjects.slice(0, inkIndex)} {...objectLayerProps} />
         <WhiteboardCanvas
           ref={canvasControllerRef}
           pageId={pageId}
@@ -1087,6 +1337,28 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           height={size.height}
           dpr={globalThis.devicePixelRatio || 1}
         />
+        {isSplit && focusBox && (() => {
+          const at = worldToScreen(camera, focusBox);
+          return (
+            <div
+              className="focus-box"
+              data-testid="focus-box"
+              role="region"
+              aria-label="Fokusbereich"
+              style={{
+                left: at.x,
+                top: at.y,
+                width: focusBox.width * camera.scale,
+                height: focusBox.height * camera.scale,
+                border: "2px solid #1976D2",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                cursor: "move",
+                touchAction: "none",
+              }}
+              onPointerDown={startFocusBoxDrag}
+            />
+          );
+        })()}
         {draftPlacement && (() => {
           const x = Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width);
           const y = Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height);
@@ -1174,51 +1446,83 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
             }}
           />
         )}
-        <PageObjectLayer
-          ref={objectLayerRef}
-          objects={pageObjects}
-          pageLayout={objectLayerLayout}
-          mapOrigin={mapOrigin}
-          perObjectTouchAction={false}
-          containerOffset={mapOrigin()}
-          containerScale={camera.scale}
-          selectedId={selectedObjectId}
-          editingId={editingObjectId}
-          onEditingChange={setEditingObjectId}
-          processingObjectId={processingImageId}
-          onSelect={handleSelectObject}
-          onChange={(id, changes) => inkController.updateObject?.(id, changes)}
-          onDelete={(id) => inkController.removeObjects?.([id])}
-          onRemoveBackground={handleRemoveBackground}
-          onRestoreBackground={handleRestoreBackground}
-        />
+        <PageObjectLayer ref={objectLayerRef} objects={pageObjects.slice(inkIndex)} {...objectLayerProps} />
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}
-      {isDesignToolsOpen && (
-        <DesignToolsPopover onInsert={handleInsertTool} onClose={() => setIsDesignToolsOpen(false)} />
-      )}
-      {isColorPopoverOpen && (
-        <ColorWidthPopover
-          color={isEraser ? "#FFFFFF" : inkController.color}
-          onColorChange={(c) => inkController.setColor?.(c)}
-          width={isEraser ? inkController.eraserWidth : inkController.penWidth}
-          onWidthChange={(w) =>
-            isEraser ? inkController.setEraserWidth?.(w) : inkController.setPenWidth?.(w)
-          }
-          onClose={() => setIsColorPopoverOpen(false)}
+      {isPenSettingsOpen && (
+        <PenSettingsPopover
+          tool={inkController.tool}
+          setTool={inkController.setTool}
+          rawLineWidth={inkController.penWidth}
+          setLineWidth={inkController.setPenWidth}
+          penColor={penColor}
+          onClose={() => setIsPenSettingsOpen(false)}
+          setIsEraser={setIsEraser}
+          inputMode={inputMode}
+          setInputMode={inkController.setInputMode}
+          top={popoverTop}
         />
       )}
+      {isEraserSettingsOpen && (
+        <EraserSettingsPopover
+          eraserMode={inkController.eraserMode}
+          setEraserMode={inkController.setEraserMode}
+          eraserWidth={inkController.eraserWidth}
+          setEraserWidth={inkController.setEraserWidth}
+          onClose={() => setIsEraserSettingsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isDesignToolsOpen && (
+        <DesignToolsPopover
+          onInsert={handleInsertTool}
+          onClose={() => setIsDesignToolsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isColorPickerOpen && (
+        <ColorWheelPopover
+          customColors={customColors}
+          activePickerIndex={activePickerIndex}
+          setActivePickerIndex={setActivePickerIndex}
+          onColorChange={handleColorChange}
+          onClose={() => setIsColorPickerOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isLayersOpen &&
+        (() => {
+          const drawer = (
+            <LayerDrawer
+              isOpen={isLayersOpen}
+              objects={pageObjects}
+              inkLayerIndex={inkIndex}
+              inkLayerHidden={inkController.inkLayerHidden}
+              inkLayerLocked={inkController.inkLayerLocked}
+              strokeCount={strokes.length}
+              selectedObjectId={selectedObjectId}
+              onSelect={(id) => setSelectedObjectId(id === "__ink__" ? null : id)}
+              onToggleLock={inkController.setLayerLock}
+              onToggleVisibility={inkController.setLayerVisibility}
+              onReorder={inkController.reorderLayers}
+              onClose={closeLayers}
+            />
+          );
+          return panelSlot ? createPortal(drawer, panelSlot) : drawer;
+        })()}
       {isTextSettingsOpen && (
         <TextSettingsPopover
           style={selectedTextObject || textStyle}
           onStyleChange={handleTextStyleChange}
           paperStyle="blank"
+          top={popoverTop}
           hasSelection={Boolean(selectedTextObject)}
           onInsert={() => {
             setPlacingTool(TEXT_TOOL);
             setIsTextSettingsOpen(false);
           }}
           onClose={() => setIsTextSettingsOpen(false)}
+          top={popoverTop}
         />
       )}
       {isShapeSettingsOpen && selectedShapeObject && (
@@ -1226,6 +1530,7 @@ export default function WhiteboardEditor({ inkController, railSlot }) {
           object={selectedShapeObject}
           onChange={handleShapeStyleChange}
           onClose={() => setIsShapeSettingsOpen(false)}
+          top={popoverTop}
         />
       )}
     </div>

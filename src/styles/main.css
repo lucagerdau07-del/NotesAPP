@@ -700,7 +700,11 @@ body::after {
 [data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-title-pill::after,
 [data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-actions-pill::after,
 .editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-title-pill::after,
-.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after {
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after,
+/* A whiteboard's white canvas runs under the rail too (a page has a margin
+   there and shows the scene instead), so the rail needs the same carried-along
+   texture as the pills or it reads as a flat grey slab. */
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-sidebar::after {
   background-color: #08080A;
   background-image:
     linear-gradient(rgba(8, 8, 12, 0.74), rgba(8, 8, 12, 0.74)),

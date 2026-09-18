@@ -41,6 +41,16 @@ const finite = (value, fallback) =>
 const text = (value, fallback = "") =>
   typeof value === "string" ? value : fallback;
 
+// Image crop window as fractions (0-1) of the source image; null = uncropped.
+function normalizeCrop(value) {
+  if (!value || typeof value !== "object") return null;
+  const { x, y, width, height } = value;
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  const cx = Math.min(1, Math.max(0, x));
+  const cy = Math.min(1, Math.max(0, y));
+  return { x: cx, y: cy, width: Math.min(1 - cx, width), height: Math.min(1 - cy, height) };
+}
+
 let objectCounter = 0;
 
 function createObjectId() {
@@ -136,6 +146,7 @@ export function createPageObject(input = {}) {
         : [],
     headerRow: source.headerRow === true,
     rotation: ((finite(source.rotation, 0) % 360) + 360) % 360,
+    crop: normalizeCrop(source.crop),
     locked: source.locked === true,
     hidden: source.hidden === true,
     // Set only by the AI agent's write_text/edit_text — never by the user's

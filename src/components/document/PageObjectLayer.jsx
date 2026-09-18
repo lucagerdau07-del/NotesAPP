@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { hitTestObject, objectBounds, objectLayoutBounds, curveControlPoint, elbowBendX } from "../../ink/pageObjects.js";
 import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
+import { cropPatch, dragCropEdge, naturalSizeOf, rememberNaturalSize, sourceRect, visibleRect } from "../../ink/imageCrop.js";
 import {
   dashArrayFor,
   roughRectPaths,
@@ -162,10 +163,22 @@ function useTapSelect(onSelect) {
 // object.x/y/width/height) so confirming it is a plain page-space patch —
 // only the CSS positions below multiply by zoom.
 const CROP_MIN = 20;
+const CROP_HANDLE = 22;
 
 function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zoom, onConfirm, onCancel }) {
   const [natural, setNatural] = useState(null);
   const [rect, setRect] = useState(null);
+  const rootRef = useRef(null);
+
+  // Pressing anywhere outside the crop (its own frame and buttons included)
+  // abandons it, same as the cancel button.
+  useEffect(() => {
+    const handleDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) onCancel();
+    };
+    document.addEventListener("pointerdown", handleDown, true);
+    return () => document.removeEventListener("pointerdown", handleDown, true);
+  }, [onCancel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,16 +192,11 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
     };
   }, [object.src]);
 
-  // The visible image rect within the box, per objectFit:"contain" — crop
-  // selection can only move inside this, never into the letterboxed margin.
-  const containRect = natural
-    ? (() => {
-        const scale = Math.min(boxWidth / natural.width, boxHeight / natural.height);
-        const width = natural.width * scale;
-        const height = natural.height * scale;
-        return { x: (boxWidth - width) / 2, y: (boxHeight - height) / 2, width, height, scale };
-      })()
-    : null;
+  // Where the whole source sits in the box (a cropped one reaches past it) and
+  // the part of the box that shows image: the crop can only shrink inside that
+  // here; pulling it back out is what the edge handles are for.
+  const src = natural ? sourceRect(object, natural) : null;
+  const containRect = src ? visibleRect(object, src) : null;
 
   useEffect(() => {
     if (containRect && !rect) {
@@ -241,34 +249,17 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
     window.addEventListener("pointerup", up);
   };
 
-  const confirm = () => {
-    const sx = (rect.x - containRect.x) / containRect.scale;
-    const sy = (rect.y - containRect.y) / containRect.scale;
-    const sw = rect.width / containRect.scale;
-    const sh = rect.height / containRect.scale;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(sw));
-    canvas.height = Math.max(1, Math.round(sh));
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      onConfirm({
-        src: canvas.toDataURL("image/png"),
-        x: object.x + rect.x,
-        y: object.y + rect.y,
-        width: rect.width,
-        height: rect.height,
-      });
-    };
-    img.src = object.src;
-  };
+  const confirm = () => onConfirm(cropPatch(object, src, rect));
 
   return (
     <div
+      ref={rootRef}
       onPointerDown={(event) => event.stopPropagation()}
-      style={{ position: "absolute", inset: 0, overflow: "hidden", cursor: "default", zIndex: 50 }}
+      style={{ position: "absolute", inset: 0, cursor: "default", zIndex: 50 }}
     >
+      {/* Only the dimming is clipped to the object's box; the corner handles
+          sit outside this wrapper, so those on the box edge stay whole. */}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
       <div
         style={{
           position: "absolute",
@@ -277,7 +268,7 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
           width: rect.width * zoom,
           height: rect.height * zoom,
           boxShadow: "0 0 0 2000px rgba(0,0,0,0.5)",
-          outline: "1.5px solid #3E7BD8",
+          outline: "2px solid #3E7BD8",
           overflow: "hidden",
         }}
       >
@@ -287,13 +278,14 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
           draggable={false}
           style={{
             position: "absolute",
-            left: -(rect.x - containRect.x) * zoom,
-            top: -(rect.y - containRect.y) * zoom,
-            width: containRect.width * zoom,
-            height: containRect.height * zoom,
+            left: -(rect.x - src.x) * zoom,
+            top: -(rect.y - src.y) * zoom,
+            width: src.width * zoom,
+            height: src.height * zoom,
             pointerEvents: "none",
           }}
         />
+      </div>
       </div>
       {["nw", "ne", "sw", "se"].map((corner) => (
         <div
@@ -314,11 +306,13 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
         >
           <div
             style={{
-              width: HANDLE,
-              height: HANDLE,
+              width: CROP_HANDLE,
+              height: CROP_HANDLE,
               borderRadius: "50%",
               background: "#fff",
-              border: "2px solid #3E7BD8",
+              border: "3px solid #3E7BD8",
+              // Dark halo so the dot also reads on a white image.
+              boxShadow: "0 0 0 2px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.5)",
             }}
           />
         </div>
@@ -342,7 +336,7 @@ function useDrag(onCommit) {
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
 
-  const start = (event, object, mode, zoom, center = null) => {
+  const start = (event, object, mode, zoom, center = null, extra = null) => {
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -353,6 +347,7 @@ function useDrag(onCommit) {
       startX: event.clientX,
       startY: event.clientY,
       center,
+      extra,
       object,
     };
     draftRef.current = object;
@@ -397,6 +392,8 @@ function useDrag(onCommit) {
     let next;
     if (mode === "move") {
       next = { ...object, x: object.x + dx, y: object.y + dy };
+    } else if (mode === "crop") {
+      next = { ...object, ...dragCropEdge(object, active.extra?.natural, active.extra?.edge, dx, dy) };
     } else if (mode === "start") {
       next = {
         ...object,
@@ -429,6 +426,11 @@ function useDrag(onCommit) {
       // it stays put relative to the endpoints if they're later moved/resized.
       const baseT = typeof object.elbowBend === "number" ? object.elbowBend : 0.5;
       next = { ...object, elbowBend: object.width ? baseT + dx / object.width : baseT };
+    } else if (object.type === "image" && object.width && object.height) {
+      // A picture scales as a whole; making it another shape is what the edge
+      // handles (crop) are for.
+      const ratio = Math.max(0.05, (object.width + dx) / object.width, (object.height + dy) / object.height);
+      next = { ...object, width: object.width * ratio, height: object.height * ratio };
     } else {
       const nextHeight = object.height + dy;
       next = {
@@ -483,6 +485,7 @@ function useDrag(onCommit) {
       } else {
         const { x, y, width, height, fontSize, lineHeight } = committed;
         const patch = { x, y, width, height };
+        if (active.mode === "crop") patch.crop = committed.crop;
         if (active.object.type === "text") {
           patch.fontSize = fontSize;
           if (active.object.lineHeight > 0) patch.lineHeight = lineHeight;
@@ -510,7 +513,18 @@ function useDrag(onCommit) {
     };
   }, [draft, move, end]);
 
-  return { draft, start, move, end };
+  // A second finger arriving mid-drag means the gesture just became a
+  // page pan/zoom, not an object move — drop the draft with nothing
+  // committed instead of leaving it to fight the gesture for the same
+  // finger's moves.
+  const cancel = useCallback(() => {
+    if (!gesture.current) return;
+    gesture.current = null;
+    draftRef.current = null;
+    setDraft(null);
+  }, []);
+
+  return { draft, start, move, end, cancel };
 }
 
 // A real <table>: one shared grid of borders instead of separate rect+text
@@ -719,20 +733,44 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
   }
 
   if (object.type === "image" || object.type === "fill") {
-    return (
+    const crop = object.type === "image" ? object.crop : null;
+    const image = (
       <img
         src={object.src}
         alt={object.text || "Bild"}
         draggable={false}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          pointerEvents: "none",
-          opacity: isProcessing ? 0.5 : 1,
-          transition: "opacity 0.25s ease",
-        }}
+        onLoad={(event) =>
+          rememberNaturalSize(object.src, event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)
+        }
+        style={
+          crop
+            ? {
+                // The whole source, sized and offset so only the crop window
+                // falls inside the (clipping) box.
+                position: "absolute",
+                width: `${100 / crop.width}%`,
+                height: `${100 / crop.height}%`,
+                left: `${(-crop.x / crop.width) * 100}%`,
+                top: `${(-crop.y / crop.height) * 100}%`,
+                pointerEvents: "none",
+                opacity: isProcessing ? 0.5 : 1,
+                transition: "opacity 0.25s ease",
+              }
+            : {
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                pointerEvents: "none",
+                opacity: isProcessing ? 0.5 : 1,
+                transition: "opacity 0.25s ease",
+              }
+        }
       />
+    );
+    return crop ? (
+      <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>{image}</div>
+    ) : (
+      image
     );
   }
 
@@ -912,6 +950,45 @@ function Handle({ position, onPointerDown, containerScale = 1 }) {
           borderRadius: "50%",
           background: "#fff",
           border: "2px solid #3E7BD8",
+        }}
+      />
+    </div>
+  );
+}
+
+// Canva-style side handle: a pill on the middle of an edge. Dragging it crops.
+function EdgeHandle({ edge, bounds, zoom, onPointerDown, containerScale = 1 }) {
+  const vertical = edge === "e" || edge === "w";
+  const long = 30;
+  const short = 10;
+  const cx = edge === "w" ? 0 : edge === "e" ? bounds.width * zoom : (bounds.width * zoom) / 2;
+  const cy = edge === "n" ? 0 : edge === "s" ? bounds.height * zoom : (bounds.height * zoom) / 2;
+  return (
+    <div
+      data-testid={`crop-edge-${edge}`}
+      onPointerDown={onPointerDown}
+      style={{
+        position: "absolute",
+        left: cx - HANDLE_HIT / 2,
+        top: cy - HANDLE_HIT / 2,
+        width: HANDLE_HIT,
+        height: HANDLE_HIT,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: vertical ? "ew-resize" : "ns-resize",
+        touchAction: "none",
+        ...counterScale(containerScale),
+      }}
+    >
+      <div
+        style={{
+          width: vertical ? short : long,
+          height: vertical ? long : short,
+          borderRadius: 5,
+          background: "#fff",
+          border: "2px solid #3E7BD8",
+          boxShadow: "0 0 0 1.5px rgba(0,0,0,0.35)",
         }}
       />
     </div>
@@ -1121,6 +1198,15 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   // single child style. The caller then passes pageLayout.zoom as 1, since the
   // zoom lives here instead.
   containerScale = 1,
+  // DocumentView's outer scroll container arms two-finger pan/zoom from
+  // touch pointerdowns that bubble up to it — but every object stops that
+  // bubbling once it recognizes a hit, so a gesture whose finger lands on an
+  // object (near-certain on a page full of text blocks) never gets counted.
+  // Called directly so the object can still register the touch for gesture
+  // purposes while keeping its own hit-test/stopPropagation behavior.
+  onGestureStart,
+  // True while space is held (see DocumentView / WhiteboardEditor).
+  panMode = false,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -1156,6 +1242,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
       const node = containerRef.current;
       if (!node) return;
       node.style.transform = "";
+    },
+    cancelDrag() {
+      drag.cancel();
     },
   }), []);
 
@@ -1215,7 +1304,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
           ? { x: mapped.x - containerOffset.x, y: mapped.y - containerOffset.y }
           : mapped;
         const bounds = objectLayoutBounds(object);
-        const isSelected = selectedId === object.id;
+        // While cropping, the crop frame replaces the selection frame; it
+        // comes back when the crop ends (confirmed, cancelled or clicked away).
+        const isSelected = selectedId === object.id && croppingId !== object.id;
 
         return (
           <div
@@ -1227,6 +1318,24 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               // Right-click is the whiteboard's marquee gesture now — let it
               // pass through untouched instead of selecting/dragging.
               if (event.pointerType === "mouse" && event.button !== 0) return;
+              // Space held: the drag pans the view, wherever it starts — an
+              // object under the cursor must not take it as a select/move.
+              if (panMode) return;
+              // The page's two-finger pan/zoom is armed from touches that
+              // bubble up to the scroll container — but a hit here is about
+              // to stopPropagation below, and on a page full of text blocks
+              // almost every finger lands on an object. Register it with the
+              // gesture tracker directly so it still counts even though it
+              // never bubbles.
+              if (event.pointerType === "touch") onGestureStart?.(event);
+              // A second finger landing on an object mid-gesture is a pinch/pan
+              // point, not a tap on that object — isPrimary is false for every
+              // touch after the first, so this is exactly the signal. Skip the
+              // hit test and stopPropagation and let it bubble to the page's
+              // gesture handler instead, or a dense page would swallow every
+              // two-finger gesture whose second contact happens to land on an
+              // element.
+              if (event.pointerType === "touch" && !event.isPrimary) return;
               if (croppingId === object.id) return;
               if (object.type === "link" && !isSelected && editingId !== object.id && onOpenLink) {
                 event.stopPropagation();
@@ -1294,7 +1403,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               transformOrigin: "50% 50%",
               outline: isSelected ? "1.5px solid #3E7BD8" : "none",
               outlineOffset: 3,
-              zIndex: isSelected ? 20 : 1,
+              zIndex: isSelected || croppingId === object.id ? 20 : 1,
             }}
           >
             {/* Content is authored in page units and scaled as a whole, so one
@@ -1401,6 +1510,22 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                       onPointerDown={(event) => drag.start(event, object, "end", pointerScale)}
                       containerScale={containerScale}
                     />
+                    {object.type === "image" && !object.rotation && object.width > 0 && object.height > 0 &&
+                      ["n", "e", "s", "w"].map((edge) => (
+                        <EdgeHandle
+                          key={edge}
+                          edge={edge}
+                          bounds={bounds}
+                          zoom={zoom}
+                          containerScale={containerScale}
+                          onPointerDown={(event) =>
+                            drag.start(event, object, "crop", pointerScale, null, {
+                              edge,
+                              natural: naturalSizeOf(object.src),
+                            })
+                          }
+                        />
+                      ))}
                     <RotateHandle
                       position={{
                         left: (bounds.width * zoom) / 2,

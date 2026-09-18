@@ -54,6 +54,7 @@ import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject, createPageObject } from "../ink/pageObjects";
 import { resolveInkLayerIndex } from "../ink/inkDocument";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
+import { isPdfFile, pdfPageCommands, readPdfPages } from "../ink/pdfObject";
 import { removeImageBackground } from "../ink/imageBackground";
 import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
@@ -69,7 +70,7 @@ export const DESIGN_TOOLS = [
   { id: "line", name: "Linie", icon: <Minus size={15} />, width: 200, height: 0 },
   { id: "rect", name: "Rahmen", icon: <Square size={15} />, width: 200, height: 130 },
   { id: "ellipse", name: "Kreis", icon: <Circle size={15} />, width: 170, height: 170 },
-  { id: "image", name: "Bild", icon: <ImageIcon size={15} />, width: 260, height: 180 },
+  { id: "image", name: "Bild / PDF", icon: <ImageIcon size={15} />, width: 260, height: 180 },
   { id: "link", name: "Link", icon: <Link2 size={15} />, width: 230, height: 30 },
 ];
 
@@ -105,7 +106,7 @@ const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality
 
 // Rail button icon mirrors whichever pen type is currently picked, so the
 // standalone marker button (now folded into the pen popover) isn't missed.
-const PEN_TOOL_ICONS = {
+export const PEN_TOOL_ICONS = {
   pen: PenLine,
   fountain: PenTool,
   highlighter: Highlighter,
@@ -504,7 +505,7 @@ export function ShapeSettingsPopover({ object, onChange, onClose, top = 120 }) {
   );
 }
 
-function PenSettingsPopover({
+export function PenSettingsPopover({
   tool,
   setTool,
   rawLineWidth,
@@ -659,7 +660,7 @@ function PenSettingsPopover({
   );
 }
 
-function EraserSettingsPopover({
+export function EraserSettingsPopover({
   eraserMode,
   setEraserMode,
   eraserWidth,
@@ -785,7 +786,7 @@ function PresetSwatch({ color, isActive, onSelect, onDelete }) {
   );
 }
 
-function ColorWheelPopover({
+export function ColorWheelPopover({
   customColors,
   activePickerIndex,
   setActivePickerIndex,
@@ -935,7 +936,7 @@ function ColorWheelPopover({
   );
 }
 
-function ColorSlot({
+export function ColorSlot({
   colorValue,
   index,
   isActive,
@@ -1116,10 +1117,24 @@ export default function DocumentView({
   onArmCircleSearchHandled,
   navigatePageRequest,
   onNavigatePageHandled,
+  openRequest,
+  onOpenHandled,
 }) {
   const openLink = useBrowserLink();
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
-    return <WhiteboardEditor inkController={inkController} railSlot={railSlot} />;
+    return (
+      <WhiteboardEditor
+        inkController={inkController}
+        toolbarState={toolbarState}
+        focusBoxState={focusBoxState}
+        railSlot={railSlot}
+        panelSlot={panelSlot}
+        panelMode={panelMode}
+        setPanelMode={setPanelMode}
+        openRequest={openRequest}
+        onOpenHandled={onOpenHandled}
+      />
+    );
   }
 
   const {
@@ -1319,6 +1334,8 @@ export default function DocumentView({
   const [draftFocusBox, setDraftFocusBox] = useState(null);
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
+  const objectLayerBelowRef = useRef(null);
+  const objectLayerAboveRef = useRef(null);
   const inkCanvasRef = useRef(null);
   const resolvedPageWidth = inkDocument.pages[0]?.width || baseWidth;
   const resolvedPageHeight = inkDocument.pages[0]?.height || pageHeight;
@@ -1826,6 +1843,27 @@ export default function DocumentView({
     };
   }, [imageDropRequest]);
 
+  // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the pages' background.
+  useEffect(() => {
+    if (!openRequest) return undefined;
+    (async () => {
+      try {
+        const pages = await readPdfPages(openRequest.file);
+        inkController.applyCommands(
+          pdfPageCommands(inkController.getDocument(), pages, {
+            width: resolvedPageWidth,
+            height: resolvedPageHeight,
+          }),
+        );
+      } catch {
+        // A file pdf.js cannot read simply opens nothing.
+      } finally {
+        onOpenHandled?.(openRequest.id);
+      }
+    })();
+    return undefined;
+  }, [openRequest]);
+
   // System clipboard image paste listener
   useEffect(() => {
     const handlePaste = async (event) => {
@@ -1960,7 +1998,11 @@ export default function DocumentView({
     event.target.value = "";
     if (!file) return;
     try {
-      const { src, width, height } = await readImageObjectSource(file);
+      // A PDF inserted as an element is a movable image of its first page;
+      // "Öffnen" in the ··· menu is what turns whole PDFs into pages.
+      const { src, width, height } = isPdfFile(file)
+        ? (await readPdfPages(file, 1))[0]
+        : await readImageObjectSource(file);
       const maxWidth = Math.min(baseWidth * 0.8, width);
       const scale = maxWidth / width;
       insertObject("image", { width: maxWidth, height: height * scale }, { src });
@@ -2580,6 +2622,10 @@ export default function DocumentView({
   const commitPinchArm = (event) => {
     gutterPanData.current = null;
     setPinchPreview(true);
+    // A pinch/pan just armed — any single-finger drag an object started with
+    // one of these same fingers is no longer a drag, it's half of a gesture.
+    objectLayerBelowRef.current?.cancelDrag();
+    objectLayerAboveRef.current?.cancelDrag();
     // A snap still transitioning would animate every preview frame below.
     if (containerRef.current) containerRef.current.style.transition = "none";
 
@@ -2628,7 +2674,12 @@ export default function DocumentView({
     }
     if (pan.active && scrollRef.current) {
       scrollRef.current.scrollTop = pan.startScrollTop + dy;
-      if (pan.panX) {
+      // Page fits the viewport width and sits centered — nothing to reveal
+      // sideways, so the smallest x jitter of a vertical drag must not walk
+      // it off center. Only a genuinely overflowing (zoomed-in) page pans x.
+      const pageFitsWidth =
+        resolvedPageWidth * zoom <= scrollRef.current.clientWidth + 1;
+      if (pan.panX && !pageFitsWidth) {
         if (isFullMode) {
           applyDocOffset(
             clampDocOffsetX(
@@ -3604,7 +3655,7 @@ export default function DocumentView({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,application/pdf"
         onChange={handleImageFile}
         data-testid="object-image-input"
         style={{ display: "none" }}
@@ -3846,6 +3897,7 @@ export default function DocumentView({
           )}
           {/* Layers below ink canvas */}
           <PageObjectLayer
+            ref={objectLayerBelowRef}
             objects={objectsBelowInk}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
@@ -3862,6 +3914,8 @@ export default function DocumentView({
             onToggleLock={inkController?.setLayerLock}
             onShiftOrder={inkController?.shiftLayerOrder}
             onOpenLayers={openLayers}
+            onGestureStart={handleGestureStart}
+            panMode={isSpaceDown}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -3882,6 +3936,7 @@ export default function DocumentView({
           )}
           {/* Layers above ink canvas */}
           <PageObjectLayer
+            ref={objectLayerAboveRef}
             objects={objectsAboveInk}
             pageLayout={pageLayout}
             selectedId={selectedObjectId}
@@ -3898,6 +3953,8 @@ export default function DocumentView({
             onToggleLock={inkController?.setLayerLock}
             onShiftOrder={inkController?.shiftLayerOrder}
             onOpenLayers={openLayers}
+            onGestureStart={handleGestureStart}
+            panMode={isSpaceDown}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg

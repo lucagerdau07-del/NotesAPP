@@ -120,7 +120,8 @@ export function contentBoundsOf(inkDoc, pageId) {
   let maxY = -Infinity;
 
   (inkDoc.strokes || [])
-    .filter((stroke) => stroke.pageId === pageId)
+    // An eraser stroke draws nothing, so it must not stretch the frame.
+    .filter((stroke) => stroke.pageId === pageId && stroke.tool !== "pixel-eraser")
     .forEach((stroke) => {
       stroke.points.forEach((point) => {
         if (point.x < minX) minX = point.x;
@@ -250,7 +251,14 @@ function drawPreviewObject(context, object) {
       return;
     }
     context.save();
-    context.drawImage(image, left, top, w, h);
+    const crop = object.type === "image" ? object.crop : null;
+    if (crop) {
+      const nw = image.naturalWidth || image.width;
+      const nh = image.naturalHeight || image.height;
+      context.drawImage(image, crop.x * nw, crop.y * nh, crop.width * nw, crop.height * nh, left, top, w, h);
+    } else {
+      context.drawImage(image, left, top, w, h);
+    }
     context.restore();
     if (object.rotation) context.restore();
     return;
@@ -378,8 +386,6 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
   const below = objects.slice(0, clampedIndex);
   const above = objects.slice(clampedIndex);
 
-  below.forEach((object) => drawPreviewObject(inkContext, object));
-
   if (!inkDoc.inkLayerHidden) {
     (inkDoc.strokes || [])
       .filter((stroke) => stroke.pageId === page.id)
@@ -394,6 +400,9 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
   context.save();
   applyContentTransform(context);
   drawRuling(context, page, scale, view);
+  // Objects below the ink go on this canvas, not the ink one: on the real page
+  // they sit in their own layer, so an eraser stroke must not cut into them.
+  below.forEach((object) => drawPreviewObject(context, object));
   context.restore();
   context.drawImage(inkCanvas, 0, 0);
 
