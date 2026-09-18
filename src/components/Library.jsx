@@ -71,7 +71,8 @@ import {
 import NewDocumentDialog from "./NewDocumentDialog.jsx";
 import FolderDialog from "./FolderDialog.jsx";
 import UpcomingCard from "./UpcomingCard.jsx";
-import { loadUntisCredentials, UNTIS_API_URL } from "../ink/untisSettings.js";
+import { loadUntisCredentials } from "../ink/untisSettings.js";
+import { fetchUntisWeek, loadArchivedWeek, loadUpdatedAt, untisDateNumber, untisMonday, UNTIS_MAX_WEEKS_BACK } from "../ink/untisArchive.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
    matches the Ask AI pill's geometry rather than the panel's. */
@@ -2836,17 +2837,18 @@ function RecentListRow({ n, onOpen, onLongPress }) {
   );
 }
 
+// Muted, near-equal-lightness accents: a subject stays recognisable by colour
+// without the grid turning into a neon quilt. Colour only rides the left bar.
 const UNTIS_SUBJECT_PALETTE = [
-  { border: "#5ec8c0", bg: "rgba(94,200,192,.14)" },
-  { border: "#8f8fe8", bg: "rgba(143,143,232,.14)" },
-  { border: "#e8a15e", bg: "rgba(232,161,94,.14)" },
-  { border: "#e85e9e", bg: "rgba(232,94,158,.14)" },
-  { border: "#5e9ee8", bg: "rgba(94,158,232,.14)" },
-  { border: "#9ee85e", bg: "rgba(158,232,94,.14)" },
+  { accent: "#7ea8c4", bg: "rgba(126,168,196,.11)" },
+  { accent: "#89b39b", bg: "rgba(137,179,155,.11)" },
+  { accent: "#c1977c", bg: "rgba(193,151,124,.11)" },
+  { accent: "#a493c0", bg: "rgba(164,147,192,.11)" },
+  { accent: "#c2a86c", bg: "rgba(194,168,108,.11)" },
+  { accent: "#c18b95", bg: "rgba(193,139,149,.11)" },
 ];
 const UNTIS_WEEKDAYS_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const UNTIS_MONTHS_SHORT = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
-const UNTIS_PX_PER_MINUTE = 1.05;
 
 function untisSubjectColor(name) {
   let hash = 0;
@@ -2872,12 +2874,7 @@ function untisMinutes(hhmm) {
 
 // Real WebUntis-style grid: time axis on the left, Mo–Fr columns, lessons
 // positioned by minute so overlapping courses (Kurse) can sit side by side.
-function UntisWeekGrid({ lessons }) {
-  const monday = new Date();
-  const dow = monday.getDay();
-  monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
-  monday.setHours(0, 0, 0, 0);
-
+function UntisWeekGrid({ lessons, monday }) {
   const days = Array.from({ length: 5 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
@@ -2901,8 +2898,14 @@ function UntisWeekGrid({ lessons }) {
 
   const minStart = Math.min(...allLessons.map((l) => untisMinutes(l.startTime)));
   const maxEnd = Math.max(...allLessons.map((l) => untisMinutes(l.endTime)));
-  const gridHeight = (maxEnd - minStart) * UNTIS_PX_PER_MINUTE;
-  const axisTimes = [...new Set(allLessons.flatMap((l) => [l.startTime, l.endTime]))].sort((a, b) => a - b);
+  const total = maxEnd - minStart;
+  // Only lesson starts, and never two labels closer than 20 min: end times just
+  // repeated the next start a few pixels lower and made the axis unreadable.
+  const axisTimes = [];
+  for (const t of [...new Set(allLessons.map((l) => l.startTime))].sort((a, b) => a - b)) {
+    const last = axisTimes[axisTimes.length - 1];
+    if (last === undefined || untisMinutes(t) - untisMinutes(last) >= 20) axisTimes.push(t);
+  }
 
   // Cluster mutually overlapping lessons per day so parallel courses split the column width.
   const clusteredByDay = lessonsByDay.map((dayLessons) => {
@@ -2940,10 +2943,17 @@ function UntisWeekGrid({ lessons }) {
           </div>
         ))}
       </div>
-      <div className="untis-grid-body" style={{ height: gridHeight }}>
+      <div className="untis-grid-body">
+        {/* Behind the columns: one hairline per axis label, so the same time
+            lines up across all five days. */}
+        <div className="untis-gridlines" aria-hidden="true">
+          {axisTimes.map((t) => (
+            <span key={t} style={{ top: `${((untisMinutes(t) - minStart) / total) * 100}%` }} />
+          ))}
+        </div>
         <div className="untis-time-axis">
           {axisTimes.map((t) => {
-            const top = (untisMinutes(t) - minStart) * UNTIS_PX_PER_MINUTE;
+            const top = `${((untisMinutes(t) - minStart) / total) * 100}%`;
             const label = String(t).padStart(4, "0");
             return (
               <div key={t} className="untis-time-mark" style={{ top }}>
@@ -2958,18 +2968,26 @@ function UntisWeekGrid({ lessons }) {
               cluster.map((lesson, slotIndex) => {
                 const start = untisMinutes(lesson.startTime);
                 const end = untisMinutes(lesson.endTime);
-                const top = (start - minStart) * UNTIS_PX_PER_MINUTE;
-                const height = Math.max(18, (end - start) * UNTIS_PX_PER_MINUTE - 2);
+                const top = `${((start - minStart) / total) * 100}%`;
+                const height = `calc(${((end - start) / total) * 100}% - 2px)`;
                 const width = 100 / cluster.length;
                 const left = slotIndex * width;
-                const subject = lesson.su?.[0]?.longname || lesson.su?.[0]?.name || "—";
+                // Parallel courses only get half a column, where a long name is
+                // all ellipsis anyway — fall back to WebUntis' short code there.
+                const subject =
+                  (cluster.length > 1
+                    ? lesson.su?.[0]?.name || lesson.su?.[0]?.longname
+                    : lesson.su?.[0]?.longname || lesson.su?.[0]?.name) || "—";
                 const room = lesson.ro?.[0]?.name || "";
-                const cancelled = lesson.code === "cancelled";
+                // Entfall = flagged cancelled, or the teacher/room was struck out ("---")
+                // with no substitute entered (e.g. "eigenverantwortliches Arbeiten").
+                const removed = (list) => list?.length > 0 && list.every((x) => x.id === 0 || x.name === "---");
+                const cancelled = lesson.code === "cancelled" || removed(lesson.te) || removed(lesson.ro);
                 const irregular = lesson.code === "irregular";
                 const color = cancelled
-                  ? { border: "#ff453a", bg: "rgba(255,69,58,.12)" }
+                  ? { accent: "#ff5a4f", bg: "rgba(255,90,79,.24)" }
                   : irregular
-                  ? { border: "#ffb340", bg: "rgba(255,179,64,.12)" }
+                  ? { accent: "#dba55e", bg: "rgba(219,165,94,.11)" }
                   : untisSubjectColor(subject);
                 return (
                   <div
@@ -2980,13 +2998,17 @@ function UntisWeekGrid({ lessons }) {
                       height,
                       left: `${left}%`,
                       width: `calc(${width}% - 3px)`,
-                      borderColor: color.border,
+                      borderLeftColor: color.accent,
                       background: color.bg,
                     }}
-                    title={`${subject}${room ? " · " + room : ""}`}
+                    title={`${subject}${room ? " · " + room : ""}${cancelled ? " · Entfall" : ""}`}
                   >
                     <span className="untis-lesson-subject">{subject}</span>
-                    {room && <span className="untis-lesson-room">{room}</span>}
+                    {cancelled ? (
+                      <span className="untis-lesson-entfall">Entfall</span>
+                    ) : (
+                      room && <span className="untis-lesson-room">{room}</span>
+                    )}
                   </div>
                 );
               }),
@@ -3096,45 +3118,91 @@ export default function Library({
     [],
   );
 
-  const [untisStatus, setUntisStatus] = useState("idle"); // idle|missing|loading|ready|error
-  const [untisLessons, setUntisLessons] = useState([]);
-  const [untisError, setUntisError] = useState("");
+  const [untisMissing, setUntisMissing] = useState(false);
+  const [untisCreds, setUntisCreds] = useState(null);
+  const [untisWeekOffset, setUntisWeekOffset] = useState(0);
+  // Every loaded week, keyed by its Monday: lessons, or null when Untis refused
+  // it and nothing is archived. Loaded once up front, so swiping is instant.
+  const [untisWeeks, setUntisWeeks] = useState({});
+  const untisInflight = useRef(new Set());
+
+  function loadUntisWeek(creds, offset) {
+    const monday = untisMonday(offset);
+    const key = untisDateNumber(monday);
+    if (untisInflight.current.has(key)) return;
+    untisInflight.current.add(key);
+    fetchUntisWeek(creds, monday)
+      .catch(() => loadArchivedWeek(monday))
+      .then((lessons) => setUntisWeeks((w) => ({ ...w, [key]: lessons || null })));
+  }
 
   useEffect(() => {
     let cancelled = false;
     loadUntisCredentials().then((creds) => {
       if (cancelled) return;
       if (!creds?.school || !creds?.server || !creds?.username || !creds?.password) {
-        setUntisStatus("missing");
+        setUntisMissing(true);
         return;
       }
-      runUntisFetch(creds);
+      setUntisCreds(creds);
+      // Current week first, then last week (Untis locks it soon - archive it
+      // while it is still served) and the weeks Untis lets us see ahead.
+      for (const offset of [0, -1, 1, 2, 3, 4]) loadUntisWeek(creds, offset);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  function runUntisFetch(creds) {
-    setUntisStatus("loading");
-    fetch(UNTIS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(creds),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.success) throw new Error(data.error || "Stundenplan konnte nicht geladen werden.");
-        setUntisLessons(
-          [...(data.timetable || [])].sort((a, b) => a.startTime - b.startTime),
-        );
-        setUntisStatus("ready");
-      })
-      .catch((err) => {
-        setUntisError(err.message || "Stundenplan konnte nicht geladen werden.");
-        setUntisStatus("error");
-      });
-  }
+  // Anything not covered by the initial load (older weeks) is fetched once on demand.
+  useEffect(() => {
+    if (!untisCreds) return;
+    const monday = untisMonday(untisWeekOffset);
+    if (untisWeeks[untisDateNumber(monday)] === undefined && !loadArchivedWeek(monday)) {
+      loadUntisWeek(untisCreds, untisWeekOffset);
+    }
+  }, [untisCreds, untisWeekOffset, untisWeeks]);
+
+  // undefined = still loading, null = Untis refused and nothing archived.
+  const loadedWeek = untisWeeks[untisDateNumber(untisMonday(untisWeekOffset))];
+  const untisWeekLessons =
+    loadedWeek !== undefined
+      ? loadedWeek
+      : (untisWeekOffset < 0 && loadArchivedWeek(untisMonday(untisWeekOffset))) || undefined;
+  const untisLessons = untisWeekLessons || [];
+  const untisStatus = untisMissing
+    ? "missing"
+    : untisWeekLessons
+    ? "ready"
+    : untisWeekLessons === null
+    ? "error"
+    : "loading";
+  const untisError =
+    untisWeekOffset < 0
+      ? "Für diese Woche ist nichts gespeichert. Gespeichert wird ab jetzt."
+      : untisWeekOffset > 0
+      ? "Untis gibt diese Woche noch nicht frei."
+      : "Stundenplan konnte nicht geladen werden.";
+
+  // Horizontal swipe on the week grid steps through weeks (back up to ~6 months).
+  const untisSwipeRef = useRef(null);
+  const untisSwipe = {
+    onPointerDown: (e) => {
+      untisSwipeRef.current = { x: e.clientX, y: e.clientY };
+    },
+    onPointerUp: (e) => {
+      const start = untisSwipeRef.current;
+      untisSwipeRef.current = null;
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      setUntisWeekOffset((o) => Math.max(-UNTIS_MAX_WEEKS_BACK, o + (dx < 0 ? 1 : -1)));
+    },
+    onPointerCancel: () => {
+      untisSwipeRef.current = null;
+    },
+  };
 
   useLiquidGlass(liquidGlassRootRef, selectedSubject?.id || "all");
 
@@ -4094,14 +4162,52 @@ export default function Library({
           bottom: 20,
         }}
       >
+        <div className="lib-glass agent-panel-card">
+          <div className="agent-panel-head">
+            <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
+              Anstehend
+            </span>
+            {knowledge.isScanning && <span className="agent-badge">SCAN LÄUFT</span>}
+          </div>
+          <div className="agent-panel-body">
+            <UpcomingCard
+              events={knowledge.openEvents}
+              sourceNoteTitles={sourceNoteTitles}
+              onToggle={knowledge.setEventDone}
+            />
+          </div>
+        </div>
         <div className="lib-glass agent-panel-card" style={{ flex: "0 0 68%" }}>
           <div className="agent-panel-head">
             <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
               Stundenplan
             </span>
-            <span className="agent-badge">WEBUNTIS</span>
+            {untisStatus === "ready" && (() => {
+              const at = loadUpdatedAt(untisMonday(untisWeekOffset));
+              if (!at) return null;
+              const d = new Date(at);
+              const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+              const sameDay = d.toDateString() === new Date().toDateString();
+              return (
+                <span style={{ font: "500 10.5px Manrope,sans-serif", color: "rgba(255,255,255,.4)" }}>
+                  Stand {sameDay ? time : `${d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}, ${time}`}
+                </span>
+              );
+            })()}
+            {untisWeekOffset === 0 ? (
+              <span className="agent-badge">WEBUNTIS</span>
+            ) : (
+              <button
+                type="button"
+                className="agent-badge"
+                style={{ cursor: "pointer" }}
+                onClick={() => setUntisWeekOffset(0)}
+              >
+                HEUTE
+              </button>
+            )}
           </div>
-          <div className="agent-panel-body">
+          <div className="agent-panel-body" style={{ touchAction: "pan-y" }} {...untisSwipe}>
             {untisStatus === "missing" && (
               <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
                 WebUntis-Zugangsdaten fehlen. In den Einstellungen unter „KI & Netzwerk“ eintragen.
@@ -4117,22 +4223,9 @@ export default function Library({
                 {untisError}
               </div>
             )}
-            {untisStatus === "ready" && <UntisWeekGrid lessons={untisLessons} />}
-          </div>
-        </div>
-        <div className="lib-glass agent-panel-card">
-          <div className="agent-panel-head">
-            <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
-              Anstehend
-            </span>
-            {knowledge.isScanning && <span className="agent-badge">SCAN LÄUFT</span>}
-          </div>
-          <div className="agent-panel-body">
-            <UpcomingCard
-              events={knowledge.openEvents}
-              sourceNoteTitles={sourceNoteTitles}
-              onToggle={knowledge.setEventDone}
-            />
+            {untisStatus === "ready" && (
+              <UntisWeekGrid lessons={untisLessons} monday={untisMonday(untisWeekOffset)} />
+            )}
           </div>
         </div>
       </div>
