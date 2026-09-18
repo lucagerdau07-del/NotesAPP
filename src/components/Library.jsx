@@ -1915,11 +1915,15 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
       </div>
       <div className="agent-panel-body">
         {pages.length > 0 && (
-          <div>
+          <div style={{ flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column" }}>
             <div
               {...(pages.length > 1 ? swipeHandlers : {})}
               data-testid="note-detail-pages"
               style={{
+                flex: "1 1 0",
+                minHeight: 0,
+                alignSelf: "center",
+                maxWidth: "100%",
                 borderRadius: 18,
                 overflow: "hidden",
                 aspectRatio: pages[0].aspectRatio || 0.71,
@@ -1952,7 +1956,7 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
               </div>
             </div>
             {pages.length > 1 && (
-              <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8, flex: "none" }}>
                 {pages.map((p, i) => (
                   <button
                     key={p.id}
