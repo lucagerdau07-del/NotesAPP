@@ -43,7 +43,7 @@ describe("CommentLayer", () => {
 
   it("bearbeitet und löscht einen bestehenden Kommentar über seinen Marker", () => {
     const existing = { id: "c1", pageId: "p1", x: 10, y: 20, text: "Alt" };
-    const { onSave, onRemove } = setup([existing]);
+    const { onSave, onRemove, onClose } = setup([existing]);
 
     fireEvent.click(screen.getByTestId("comment-marker"));
     expect(screen.getByLabelText("Kommentartext")).toHaveValue("Alt");
@@ -54,5 +54,6 @@ describe("CommentLayer", () => {
     fireEvent.click(screen.getByTestId("comment-marker"));
     fireEvent.click(screen.getByText("Löschen"));
     expect(onRemove).toHaveBeenCalledWith("c1");
+    expect(onClose).toHaveBeenCalled();
   });
 });

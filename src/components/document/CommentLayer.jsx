@@ -132,6 +132,7 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
                 onClick={() => {
                   onRemove(draft.id);
                   setDraft(null);
+                  onClose();
                 }}
               >
                 Löschen
