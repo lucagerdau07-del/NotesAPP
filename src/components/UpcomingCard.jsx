@@ -10,7 +10,7 @@ function formatDue(due) {
 }
 
 function kindLabelOf(kind) {
-  return kind === "exam" ? "Klausur" : "Hausaufgabe";
+  return { exam: "Klausur", review: "Wiederholung" }[kind] || "Hausaufgabe";
 }
 
 function sourceTitleOf(sourceNoteId, sourceNoteTitles) {

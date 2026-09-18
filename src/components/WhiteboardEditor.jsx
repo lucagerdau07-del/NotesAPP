@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isLightBackground } from "../documents/pageStyles.js";
-import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, Trash2, Layers, Move, Columns2 } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Move, Columns2 } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
@@ -18,6 +18,8 @@ import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
+import CommentLayer from "./document/CommentLayer.jsx";
+import useComments from "../hooks/useComments.js";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import {
   DESIGN_TOOLS,
@@ -83,15 +85,14 @@ export default function WhiteboardEditor({
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [confirmClearCanvas, setConfirmClearCanvas] = useState(false);
   const [popoverTop, setPopoverTop] = useState(120);
   const [localLayersOpen, setLocalLayersOpen] = useState(false);
   const penLongPressTimer = useRef(null);
   const penLongPressFired = useRef(false);
   const textLongPressTimer = useRef(null);
   const textLongPressFired = useRef(false);
-  const confirmClearTimerRef = useRef(null);
   const rootRef = useRef(null);
+  const [isCommentMode, setIsCommentMode] = useState(false);
   const [isLassoMode, setIsLassoMode] = useState(false);
   const [isBucketMode, setIsBucketMode] = useState(false);
   const [lassoDraft, setLassoDraft] = useState(null);
@@ -123,6 +124,7 @@ export default function WhiteboardEditor({
   const pageId = document.pages[0]?.id || "";
   const strokes = document.strokes;
   const pageObjects = pageObjectsOf(document);
+  const { comments, addComment, editComment, removeComment } = useComments(document.documentId);
 
   useEffect(() => {
     const bg = document.pages[0]?.background;
@@ -950,18 +952,6 @@ export default function WhiteboardEditor({
     setIsEraser(false);
   };
 
-  useEffect(() => () => clearTimeout(confirmClearTimerRef.current), []);
-  const handleClearCanvas = () => {
-    clearTimeout(confirmClearTimerRef.current);
-    if (confirmClearCanvas) {
-      setConfirmClearCanvas(false);
-      inkController.clearDocument?.();
-      return;
-    }
-    setConfirmClearCanvas(true);
-    confirmClearTimerRef.current = setTimeout(() => setConfirmClearCanvas(false), 2500);
-  };
-
   const PenIcon = isMoveMode ? Move : PEN_TOOL_ICONS[inkController.tool] || PenLine;
   const isPenActive =
     Boolean(PEN_TOOL_ICONS[inkController.tool]) &&
@@ -1213,11 +1203,13 @@ export default function WhiteboardEditor({
       ))}
       <div className="rail-divider" />
       <button
-        className={`rail-btn ${confirmClearCanvas ? "confirm" : ""}`}
-        onClick={handleClearCanvas}
-        title={confirmClearCanvas ? "Nochmal tippen zum Leeren" : "Leeren"}
+        className={`rail-btn ${isCommentMode ? "active" : ""}`}
+        title="Kommentar"
+        aria-pressed={isCommentMode}
+        data-testid="comment-btn"
+        onClick={() => setIsCommentMode((on) => !on)}
       >
-        <Trash2 size={18} />
+        <MessageSquare size={18} />
       </button>
       <div className="rail-divider" />
       <button
@@ -1449,6 +1441,19 @@ export default function WhiteboardEditor({
           />
         )}
         <PageObjectLayer ref={objectLayerRef} objects={pageObjects.slice(inkIndex)} {...objectLayerProps} />
+        {isCommentMode && (
+          <CommentLayer
+            comments={comments}
+            locate={mapPoint}
+            project={(_pageId, x, y) => worldToScreen(camera, { x, y })}
+            onSave={({ id, text, ...point }) => {
+              if (id) editComment(id, text);
+              else addComment({ ...point, text });
+              setIsCommentMode(false);
+            }}
+            onRemove={removeComment}
+          />
+        )}
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}
       {isPenSettingsOpen && (

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Eraser,
-  Trash2,
+  MessageSquare,
   Undo2,
   Redo2,
   Lasso,
@@ -48,6 +48,8 @@ import { INPUT_MODES } from "../ink/inputPolicy";
 import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
+import CommentLayer from "./document/CommentLayer";
+import useComments from "../hooks/useComments";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
@@ -1234,6 +1236,9 @@ export default function DocumentView({
   // that object instead of an ink stroke. draftPlacement tracks that drag.
   const [placingTool, setPlacingTool] = useState(null);
   const [draftPlacement, setDraftPlacement] = useState(null);
+  // Kommentare sind nur im Kommentar-Modus sichtbar (siehe CommentLayer).
+  const [isCommentMode, setIsCommentMode] = useState(false);
+  const { comments, addComment, editComment, removeComment } = useComments(inkDocument.documentId);
   // A pen of its own: stays on until another tool is picked, fills whatever
   // ink/shape outlines enclose the next click.
   const [isBucketMode, setIsBucketMode] = useState(false);
@@ -1312,23 +1317,6 @@ export default function DocumentView({
   };
   const handleRedo = () => {
     inkController?.redo?.();
-  };
-  const [confirmClearCanvas, setConfirmClearCanvas] = useState(false);
-  const confirmClearTimerRef = useRef(null);
-  useEffect(() => () => clearTimeout(confirmClearTimerRef.current), []);
-  const handleClearCanvas = () => {
-    if (confirmClearCanvas) {
-      clearTimeout(confirmClearTimerRef.current);
-      setConfirmClearCanvas(false);
-      inkController?.clearDocument?.();
-      return;
-    }
-    setConfirmClearCanvas(true);
-    clearTimeout(confirmClearTimerRef.current);
-    confirmClearTimerRef.current = setTimeout(
-      () => setConfirmClearCanvas(false),
-      2500,
-    );
   };
 
   const [draftFocusBox, setDraftFocusBox] = useState(null);
@@ -3513,11 +3501,13 @@ export default function DocumentView({
       ))}
       <div className="rail-divider" />
       <button
-        className={`rail-btn ${confirmClearCanvas ? "confirm" : ""}`}
-        onClick={handleClearCanvas}
-        title={confirmClearCanvas ? "Nochmal tippen zum Leeren" : "Leeren"}
+        className={`rail-btn ${isCommentMode ? "active" : ""}`}
+        title="Kommentar"
+        aria-pressed={isCommentMode}
+        data-testid="comment-btn"
+        onClick={() => setIsCommentMode((on) => !on)}
       >
-        <Trash2 size={18} />
+        <MessageSquare size={18} />
       </button>
       <div className="rail-divider" />
       <button
@@ -4001,6 +3991,19 @@ export default function DocumentView({
               }}
               onPointerDown={handleFocusBoxDragStart}
               onKeyDown={handleFocusBoxKeyDown}
+            />
+          )}
+          {isCommentMode && (
+            <CommentLayer
+              comments={comments}
+              locate={(e) => mapViewportPoint(pageLayout, relativePoint(containerRef.current, e))}
+              project={(pageId, x, y) => pagePointToViewport(pageLayout, pageId, { x, y })}
+              onSave={({ id, text, ...point }) => {
+                if (id) editComment(id, text);
+                else addComment({ ...point, text });
+                setIsCommentMode(false);
+              }}
+              onRemove={removeComment}
             />
           )}
           {draftPlacement && draftPlacementViewport && (

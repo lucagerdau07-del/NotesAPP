@@ -138,72 +138,105 @@ describe("validateFindings", () => {
 
 describe("scanNote", () => {
   const note = { id: "note-1", title: "Ableitungsregeln", subject: "Mathe" };
-  const pages = [{ id: "p1", src: "data:image/jpeg;base64,AAA" }];
+  const comments = [{ id: "c1", pageId: "p1", x: 200, y: 300, text: "Nochmal erklären lassen" }];
+  const bounds = { minX: 0, minY: 0, maxX: 400, maxY: 600 };
+  const pages = [
+    { id: "p1", src: "data:image/jpeg;base64,AAA", bounds },
+    { id: "p2", src: "data:image/jpeg;base64,BBB", bounds },
+  ];
   const answer = JSON.stringify({
-    homework: [{ title: "Aufgabe 4", subject: "Mathe", due: "2026-09-08" }],
+    homework: [],
     exams: [],
-    terms: [{ term: "Ableitung", definition: "Steigung", subject: "Mathe" }],
+    review: [{ title: "Ableitung", subject: "Mathe", due: "2026-09-06" }],
+    terms: [],
+  });
+  const isTriage = (payload) => payload.messages[0].content.includes("entscheidest");
+  const triage = (needsPage) => ({ content: JSON.stringify({ comments: [{ n: 1, needsPage }] }) });
+
+  // Beantwortet den Triage-Aufruf anders als die Auswertung und merkt sich Letztere.
+  const modelFor = (needsPage, sent) => async (payload) => {
+    if (isTriage(payload)) return triage(needsPage);
+    sent.push(payload);
+    return { content: answer };
+  };
+
+  it("schickt die kommentierte Seite samt Ort als Bild, wenn der Kommentar sie braucht", async () => {
+    const sent = [];
+    const result = await scanNote(note, comments, {
+      renderPages: () => pages,
+      complete: modelFor(true, sent),
+      today,
+    });
+
+    const parts = sent[0].messages[1].content;
+    expect(parts[0].text).toContain("2026-09-04");
+    expect(parts[0].text).toContain("Nochmal erklären lassen");
+    expect(parts[0].text).toContain("50 % von links, 50 % von oben");
+    // Nur die Seite mit Kommentar, nicht p2.
+    expect(parts.filter((part) => part.type === "image_url")).toEqual([
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64,AAA" } },
+    ]);
+    expect(result.events).toEqual([
+      { kind: "review", title: "Ableitung", subject: "Mathe", due: "2026-09-06" },
+    ]);
   });
 
-  it("schickt die Seiten als Bildteile und liefert geprüfte Funde", async () => {
-    let sent = null;
-    const result = await scanNote(note, {
+  it("rendert und schickt keine Seite, wenn der Text allein reicht", async () => {
+    const sent = [];
+    let rendered = false;
+    await scanNote(note, comments, {
+      renderPages: () => {
+        rendered = true;
+        return pages;
+      },
+      complete: modelFor(false, sent),
+      today,
+    });
+
+    expect(rendered).toBe(false);
+    expect(typeof sent[0].messages[1].content).toBe("string");
+    expect(sent[0].models).toBeUndefined();
+  });
+
+  it("nimmt bei unlesbarer Triage-Antwort die Seite dazu", async () => {
+    const sent = [];
+    await scanNote(note, comments, {
       renderPages: () => pages,
       complete: async (payload) => {
-        sent = payload;
+        if (isTriage(payload)) return { content: "hä?" };
+        sent.push(payload);
         return { content: answer };
       },
       today,
     });
-
-    expect(sent.messages).toHaveLength(2);
-    expect(sent.messages[0].role).toBe("system");
-    const parts = sent.messages[1].content;
-    expect(parts[0].type).toBe("text");
-    expect(parts[0].text).toContain("2026-09-04");
-    expect(parts[0].text).toContain("Ableitungsregeln");
-    expect(parts[1]).toEqual({
-      type: "image_url",
-      image_url: { url: "data:image/jpeg;base64,AAA" },
-    });
-    expect(result.events).toHaveLength(1);
-    expect(result.terms).toHaveLength(1);
+    expect(sent[0].messages[1].content.some((part) => part.type === "image_url")).toBe(true);
   });
 
   it("schickt höchstens acht Seiten", async () => {
-    let sent = null;
-    await scanNote(note, {
-      renderPages: () =>
-        Array.from({ length: 12 }, (_, index) => ({ id: `p${index}`, src: `data:,${index}` })),
-      complete: async (payload) => {
-        sent = payload;
-        return { content: answer };
+    const sent = [];
+    const many = Array.from({ length: 12 }, (_, index) => ({ id: `p${index}`, src: `data:,${index}`, bounds }));
+    await scanNote(
+      note,
+      many.map((page) => ({ id: page.id, pageId: page.id, x: 1, y: 1, text: "x" })),
+      {
+        renderPages: () => many,
+        complete: async (payload) => {
+          if (isTriage(payload)) return { content: "{}" };
+          sent.push(payload);
+          return { content: answer };
+        },
+        today,
       },
-      today,
-    });
-    const images = sent.messages[1].content.filter((part) => part.type === "image_url");
-    expect(images).toHaveLength(8);
-  });
-
-  it("ruft das Modell gar nicht auf, wenn die Notiz keine Seiten hat", async () => {
-    let called = false;
-    const result = await scanNote(note, {
-      renderPages: () => [],
-      complete: async () => {
-        called = true;
-        return { content: answer };
-      },
-      today,
-    });
-    expect(called).toBe(false);
-    expect(result).toEqual({ events: [], terms: [] });
+    );
+    expect(sent[0].messages[1].content.filter((part) => part.type === "image_url")).toHaveLength(8);
   });
 
   it("wirft bei einer Antwort ohne brauchbares JSON", async () => {
     await expect(
-      scanNote(note, {
+      scanNote(note, comments, {
         renderPages: () => pages,
-        complete: async () => ({ content: "Ich kann das Bild nicht lesen." }),
+        complete: async (payload) =>
+          isTriage(payload) ? triage(true) : { content: "Ich kann das Bild nicht lesen." },
         today,
       }),
     ).rejects.toThrow(/JSON/);

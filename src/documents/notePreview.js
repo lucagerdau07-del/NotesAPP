@@ -541,6 +541,9 @@ export function renderPagesFromDocument(inkDoc, options = {}) {
       src: renderFullPage(inkDoc, styledPage, options),
       background: styledPage.background || "#0e0e12",
       aspectRatio: (maxX - minX) / Math.max(1, maxY - minY),
+      // Page units of the rendered area, so a point on the page (a comment) can
+      // be located on the image.
+      bounds: { minX, minY, maxX, maxY },
     };
   });
 }

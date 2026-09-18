@@ -1,129 +1,107 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { runScan } from "../src/knowledge/documentScan.js";
+import { createCommentRepository } from "../src/knowledge/commentRepository.js";
 import { createKnowledgeRepository } from "../src/knowledge/knowledgeRepository.js";
 
 const today = "2026-09-04";
 const now = new Date(2026, 8, 4, 16, 0, 0, 0).getTime();
-const HOUR = 60 * 60 * 1000;
 
 const answer = JSON.stringify({
   homework: [{ title: "Aufgabe 4", subject: "Mathe", due: "2026-09-08" }],
   exams: [],
   terms: [],
 });
+const noPage = '{"comments":[{"n":1,"needsPage":false}]}';
+const isTriage = (payload) => payload.messages[0].content.includes("entscheidest");
 
 let repository;
+let comments;
+let commentClock;
 
 beforeEach(() => {
   const values = new Map();
-  repository = createKnowledgeRepository(
-    { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) },
-    { now: () => now },
-  );
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  repository = createKnowledgeRepository(storage, { now: () => now });
+  commentClock = now - 1000;
+  comments = createCommentRepository(storage, { now: () => commentClock });
 });
 
-const renderPages = () => [{ id: "p1", src: "data:image/jpeg;base64,AAA" }];
+const run = (options) =>
+  runScan({ repository, commentRepository: comments, renderPages: () => [], now, today, ...options });
+
+const model = async (payload) => ({ content: isTriage(payload) ? noPage : answer });
 
 describe("runScan", () => {
-  it("scannt fällige Notizen und hält Zustand fest", async () => {
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now - 3 * HOUR }];
-    const result = await runScan({
-      notes,
-      repository,
-      renderPages,
-      complete: async () => ({ content: answer }),
-      now,
-      today,
-    });
+  it("wertet Notizen mit neuen Kommentaren aus und markiert sie erledigt", async () => {
+    comments.add("note-1", { pageId: "p1", x: 1, y: 1, text: "Aufgabe 4 bis Montag" });
+    const result = await run({ notes: [{ id: "note-1", title: "A", subject: "Mathe" }], complete: model });
 
-    expect(result).toMatchObject({ scanned: 1, skipped: false, error: null });
-    const state = repository.read();
-    expect(state.events).toHaveLength(1);
-    expect(state.scanState.notes["note-1"]).toBe(now);
-    expect(state.scanState.lastRunAt).toBe(now);
+    expect(result).toEqual({ scanned: 1, error: null });
+    expect(repository.read().events).toHaveLength(1);
+    expect(repository.read().scanState.notes["note-1"]).toBe(now);
+    expect(comments.pending()).toEqual({});
   });
 
-  it("überspringt den Lauf, wenn der Slot schon bedient ist", async () => {
-    repository.finishRun({ at: now - 30 * 60 * 1000, error: null });
-    let called = false;
-    const result = await runScan({
-      notes: [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now - 3 * HOUR }],
-      repository,
-      renderPages,
-      complete: async () => {
-        called = true;
-        return { content: answer };
+  it("ruft das Modell nicht auf, wenn nichts kommentiert ist", async () => {
+    let calls = 0;
+    const result = await run({
+      notes: [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: 1 }],
+      complete: async (payload) => {
+        calls += 1;
+        return model(payload);
       },
-      now,
-      today,
     });
-
-    expect(result.skipped).toBe(true);
-    expect(called).toBe(false);
+    expect(result.scanned).toBe(0);
+    expect(calls).toBe(0);
   });
 
-  it("läuft mit force trotz bedientem Slot", async () => {
-    repository.finishRun({ at: now - 30 * 60 * 1000, error: null });
-    const result = await runScan({
-      notes: [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now - 60 * 1000 }],
-      repository,
-      renderPages,
-      complete: async () => ({ content: answer }),
-      now,
-      today,
-      force: true,
-    });
+  it("wertet einen Kommentar nur einmal aus, bis er bearbeitet wird", async () => {
+    const { id } = comments.add("note-1", { pageId: "p1", x: 1, y: 1, text: "Aufgabe 4" });
+    const notes = [{ id: "note-1", title: "A", subject: "Mathe" }];
+    let calls = 0;
+    const counting = async (payload) => {
+      calls += 1;
+      return model(payload);
+    };
+    await run({ notes, complete: counting });
+    await run({ notes, complete: counting });
+    expect(calls).toBe(2); // Triage + Auswertung des ersten Laufs, sonst nichts
 
-    expect(result).toMatchObject({ scanned: 1, skipped: false });
+    commentClock = now + 1000;
+    comments.edit("note-1", id, "Aufgabe 5");
+    expect(Object.keys(comments.pending())).toEqual(["note-1"]);
   });
 
-  it("macht nach einem Fehler mit der nächsten Notiz weiter", async () => {
-    const notes = [
-      { id: "kaputt", title: "A", subject: "Mathe", updatedAt: now - 9 * HOUR },
-      { id: "gut", title: "B", subject: "Mathe", updatedAt: now - 3 * HOUR },
-    ];
-    const result = await runScan({
-      notes,
-      repository,
-      renderPages,
+  it("macht nach einem Fehler mit der nächsten Notiz weiter und lässt den Kommentar offen", async () => {
+    comments.add("kaputt", { pageId: "p1", x: 1, y: 1, text: "A" });
+    comments.add("gut", { pageId: "p1", x: 1, y: 1, text: "B" });
+    const result = await run({
+      notes: [
+        { id: "kaputt", title: "A" },
+        { id: "gut", title: "B", subject: "Mathe" },
+      ],
       complete: async (payload) =>
-        payload.messages[1].content[0].text.includes('"A"')
+        String(payload.messages[1].content).includes('"A"') && !isTriage(payload)
           ? { content: "kein json" }
-          : { content: answer },
-      now,
-      today,
+          : model(payload),
     });
 
     expect(result.scanned).toBe(1);
     expect(result.error).toMatch(/JSON/);
-    const state = repository.read();
-    expect(state.scanState.notes.kaputt).toBeUndefined();
-    expect(state.scanState.notes.gut).toBe(now);
+    expect(Object.keys(comments.pending())).toEqual(["kaputt"]);
   });
 
   it("meldet einen Netzwerkfehler und speichert nichts", async () => {
-    const result = await runScan({
-      notes: [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now - 3 * HOUR }],
-      repository,
-      renderPages,
+    comments.add("note-1", { pageId: "p1", x: 1, y: 1, text: "A" });
+    const result = await run({
+      notes: [{ id: "note-1", title: "A" }],
       complete: async () => {
         throw new Error("Server nicht erreichbar. Verbindung prüfen.");
       },
-      now,
-      today,
     });
 
-    expect(result.scanned).toBe(0);
-    expect(result.error).toBe("Server nicht erreichbar. Verbindung prüfen.");
+    expect(result).toEqual({ scanned: 0, error: "Server nicht erreichbar. Verbindung prüfen." });
     expect(repository.read().events).toEqual([]);
-  });
-
-  it("verdoppelt bei einem zweiten Lauf nichts", async () => {
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now - 3 * HOUR }];
-    const options = { notes, repository, renderPages, complete: async () => ({ content: answer }), today };
-    await runScan({ ...options, now });
-    notes[0].updatedAt = now + 4 * HOUR;
-    await runScan({ ...options, now: now + 7 * HOUR });
-    expect(repository.read().events).toHaveLength(1);
+    expect(Object.keys(comments.pending())).toEqual(["note-1"]);
   });
 });

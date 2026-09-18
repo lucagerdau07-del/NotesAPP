@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2 } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -341,6 +341,16 @@ function Editor({ activeNote, onBack }) {
               >
                 <FolderOpen size={15} /> PDF als Hintergrund öffnen
                 <span style={{ marginLeft: "auto", opacity: 0.55 }}>Strg+O</span>
+              </button>
+              <button
+                style={{ whiteSpace: "nowrap" }}
+                onClick={() => {
+                  setIsMoreMenuOpen(false);
+                  if (window.confirm("Alles auf dieser Notiz löschen?"))
+                    inkControllerRef.current?.clearDocument?.();
+                }}
+              >
+                <Trash2 size={15} /> Alles löschen
               </button>
             </div>
           )}

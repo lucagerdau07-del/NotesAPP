@@ -84,6 +84,9 @@ export function dailyBudgets(events, { today, days = PLAN_DAYS } = {}) {
 
 const MIN_BLOCK_MINUTES = 5;
 
+// "review" ist ein per Kommentar gewünschtes Wiederholen/Nachhilfe und plant wie eine Hausaufgabe.
+const KIND_LABELS = { exam: "Klausur", review: "Wiederholung" };
+
 const PLAN_SYSTEM_PROMPT = [
   "Du bist der Lernplaner einer Schul-Notizbuch-App. Du antwortest ausschließlich mit JSON, ohne Fließtext davor oder danach.",
   'Format: {"days":{"YYYY-MM-DD":[{"subject":"","task":"","minutes":0}]}}',
@@ -106,7 +109,7 @@ function planRequest({ events, terms, subjects, budgets, today }) {
     ...(open.length
       ? open.map(
           (event) =>
-            `- ${event.due} · ${event.kind === "exam" ? "Klausur" : "Hausaufgabe"} · ${event.subject || "ohne Fach"} · ${event.title}`,
+            `- ${event.due} · ${KIND_LABELS[event.kind] || "Hausaufgabe"} · ${event.subject || "ohne Fach"} · ${event.title}`,
         )
       : ["- keine"]),
     "",

@@ -13,13 +13,16 @@ vi.mock("../src/knowledge/documentScan.js", async (importOriginal) => ({
 import useKnowledge from "../src/hooks/useKnowledge.js";
 import { requestCompletion } from "../src/agent/agentClient.js";
 import { KNOWLEDGE_STORAGE_KEY } from "../src/knowledge/knowledgeRepository.js";
+import { browserCommentRepository } from "../src/knowledge/commentRepository.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
   globalThis.localStorage.clear();
 });
 
-const HOUR = 60 * 60 * 1000;
+const notes = [{ id: "note-1", title: "A", subject: "Mathe" }];
+const comment = (noteId) =>
+  browserCommentRepository.add(noteId, { pageId: "p1", x: 1, y: 1, text: "Aufgabe 4 bis Montag" });
 
 describe("useKnowledge", () => {
   it("liefert offene Termine sortiert und ohne abgehakte", async () => {
@@ -56,7 +59,7 @@ describe("useKnowledge", () => {
       KNOWLEDGE_STORAGE_KEY,
       JSON.stringify({ version: 1, settings: { autoScan: false } }),
     );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: Date.now() - 5 * HOUR }];
+    comment("note-1");
     renderHook(() => useKnowledge({ notes, subjects: [] }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requestCompletion).not.toHaveBeenCalled();
@@ -67,7 +70,7 @@ describe("useKnowledge", () => {
       KNOWLEDGE_STORAGE_KEY,
       JSON.stringify({ version: 1, settings: { autoScan: false } }),
     );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: Date.now() - 5 * HOUR }];
+    comment("note-1");
     const { result } = renderHook(() => useKnowledge({ notes, subjects: [] }));
 
     await act(async () => {
@@ -77,54 +80,29 @@ describe("useKnowledge", () => {
     await waitFor(() => expect(result.current.isScanning).toBe(false));
   });
 
-  it("scannt beim Einhängen automatisch, wenn ein Lauf fällig ist", async () => {
+  it("wertet beim Einhängen einen neuen Kommentar aus", async () => {
     globalThis.localStorage.setItem(
       KNOWLEDGE_STORAGE_KEY,
       JSON.stringify({ version: 1, settings: { autoScan: true } }),
     );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: Date.now() - 5 * HOUR }];
+    comment("note-1");
     const { result } = renderHook(() => useKnowledge({ notes, subjects: [] }));
 
     await waitFor(() => expect(result.current.scanState.notes["note-1"]).toEqual(expect.any(Number)));
-    expect(requestCompletion).toHaveBeenCalledTimes(1);
+    // Triage und Auswertung.
+    expect(requestCompletion).toHaveBeenCalledTimes(2);
     expect(result.current.scanState.lastRunAt).toEqual(expect.any(Number));
   });
 
-  it("unterdrückt einen automatischen Scan, wenn der aktuelle Slot bereits lief", async () => {
+  it("scannt beim Einhängen nicht, wenn nichts kommentiert wurde", async () => {
     globalThis.localStorage.setItem(
       KNOWLEDGE_STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        scanState: { lastRunAt: Date.now(), lastError: null, notes: {} },
-        settings: { autoScan: true },
-      }),
+      JSON.stringify({ version: 1, settings: { autoScan: true } }),
     );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: Date.now() - 5 * HOUR }];
     renderHook(() => useKnowledge({ notes, subjects: [] }));
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requestCompletion).not.toHaveBeenCalled();
-  });
-
-  it("erzwingt einen Scan trotz aktuellem Slot und Ruhezeit", async () => {
-    const now = Date.now();
-    globalThis.localStorage.setItem(
-      KNOWLEDGE_STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        scanState: { lastRunAt: now, lastError: null, notes: {} },
-        settings: { autoScan: false },
-      }),
-    );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: now }];
-    const { result } = renderHook(() => useKnowledge({ notes, subjects: [] }));
-
-    await act(async () => {
-      await result.current.scanNow();
-    });
-
-    expect(requestCompletion).toHaveBeenCalledTimes(1);
-    expect(result.current.scanState.notes["note-1"]).toEqual(expect.any(Number));
   });
 
   it("verhindert doppelte automatische Scans bei Rerendern und Strict Mode", async () => {
@@ -132,18 +110,17 @@ describe("useKnowledge", () => {
       KNOWLEDGE_STORAGE_KEY,
       JSON.stringify({ version: 1, settings: { autoScan: true } }),
     );
-    const notes = [{ id: "note-1", title: "A", subject: "Mathe", updatedAt: Date.now() - 5 * HOUR }];
+    comment("note-1");
     const { rerender } = renderHook(() => useKnowledge({ notes, subjects: [] }), {
       wrapper: StrictMode,
     });
 
-    await waitFor(() => expect(requestCompletion).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(requestCompletion).toHaveBeenCalledTimes(2));
     rerender();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(requestCompletion).toHaveBeenCalledTimes(1);
+    expect(requestCompletion).toHaveBeenCalledTimes(2);
   });
-
   it("speichert den erneuerten Plan und spiegelt ihn im Hook-Zustand", async () => {
     let resolveCompletion;
     requestCompletion.mockImplementationOnce(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestCompletion } from "../agent/agentClient.js";
 import { runScan, scanImagesOf } from "../knowledge/documentScan.js";
+import { browserCommentRepository } from "../knowledge/commentRepository.js";
 import { browserKnowledgeRepository } from "../knowledge/knowledgeRepository.js";
 import { buildPlan, isoDate } from "../knowledge/studyPlan.js";
 
@@ -16,12 +17,17 @@ function upcoming(events, today) {
 }
 
 /**
- * Bindet die reinen knowledge-Module an React. Der Scan läuft einmal beim
- * Einhängen der Bibliothek - ein Hintergrunddienst ist auf dem Tablet nicht
- * verfügbar, und die Slotgrenze in scanQueue verhindert, dass mehrmaliges
- * Öffnen mehrmals scannt.
+ * Bindet die reinen knowledge-Module an React. Ausgewertet werden Kommentare,
+ * einmal beim Einhängen der Bibliothek - ein Hintergrunddienst ist
+ * auf dem Tablet nicht verfügbar, und ein Kommentar gilt nach der Auswertung
+ * als erledigt, mehrmaliges Öffnen wertet also nichts doppelt aus.
  */
-export default function useKnowledge({ notes = [], subjects = [], repository = browserKnowledgeRepository } = {}) {
+export default function useKnowledge({
+  notes = [],
+  subjects = [],
+  repository = browserKnowledgeRepository,
+  commentRepository = browserCommentRepository,
+} = {}) {
   const [state, setState] = useState(() => repository.read());
   const [isScanning, setScanning] = useState(false);
   const [isPlanning, setPlanning] = useState(false);
@@ -32,7 +38,7 @@ export default function useKnowledge({ notes = [], subjects = [], repository = b
   subjectsRef.current = subjects;
 
   const scanNow = useCallback(
-    async ({ force = true } = {}) => {
+    async () => {
       if (busyRef.current) return;
       busyRef.current = true;
       setScanning(true);
@@ -41,11 +47,11 @@ export default function useKnowledge({ notes = [], subjects = [], repository = b
         await runScan({
           notes: notesRef.current,
           repository,
+          commentRepository,
           renderPages: scanImagesOf,
           complete: requestCompletion,
           now,
           today: isoDate(now),
-          force,
         });
       } finally {
         busyRef.current = false;
@@ -53,7 +59,7 @@ export default function useKnowledge({ notes = [], subjects = [], repository = b
         setState(repository.read());
       }
     },
-    [repository],
+    [repository, commentRepository],
   );
 
   const refreshPlan = useCallback(async () => {
@@ -91,13 +97,13 @@ export default function useKnowledge({ notes = [], subjects = [], repository = b
     [repository],
   );
 
-  // Nur einmal je Einhängen: force=false, damit Slotgrenze und Ruhezeit gelten.
+  // Nur einmal je Einhängen.
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     if (!repository.read().settings.autoScan) return;
-    scanNow({ force: false });
+    scanNow();
   }, [repository, scanNow]);
 
   return {
