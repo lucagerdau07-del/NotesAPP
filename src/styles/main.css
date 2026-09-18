@@ -1999,7 +1999,8 @@ body::after {
   width: 34px;
   height: 1px;
   background: rgba(255,255,255,.14);
-  margin: 4px 0;
+  /* The rail's own gap already spaces it evenly from both neighbours. */
+  margin: 0;
 }
 
 .export-menu {
