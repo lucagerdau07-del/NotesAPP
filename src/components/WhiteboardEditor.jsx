@@ -1290,11 +1290,13 @@ export default function WhiteboardEditor({
   return (
     <div
       ref={rootRef}
+      className="document-view"
       data-testid="document-view"
       data-document-id={document.documentId}
       style={{
-        position: "absolute",
-        inset: 0,
+        // A flex child of .split-layout (width from .document-view), so the
+        // writing zone lands to its right instead of taking the full row.
+        position: "relative",
         overflow: "hidden",
         background: document.pages[0]?.background || "#0B0B0D",
       }}
