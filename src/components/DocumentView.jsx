@@ -41,7 +41,7 @@ import useInkPointer from "../hooks/useInkPointer";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
 import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
-import useScrollbarGrip from "./document/useScrollbarGrip.js";
+import useScrollbarGrip, { useLeftHandScrubber } from "./document/useScrollbarGrip.js";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
 import { INPUT_MODES } from "../ink/inputPolicy";
@@ -2133,12 +2133,12 @@ export default function DocumentView({
 
   // Hold a finger in the right-hand strip to grab a fat scrollbar (see the
   // hook). Whatever the page had started with that finger is dropped.
-  useScrollbarGrip(scrollRef, {
-    onEngage: () => {
-      clearAllGestures();
-      inkPointer.reset?.();
-    },
-  });
+  const releaseGestures = () => {
+    clearAllGestures();
+    inkPointer.reset?.();
+  };
+  useScrollbarGrip(scrollRef, { onEngage: releaseGestures });
+  useLeftHandScrubber(scrollRef, { onEngage: releaseGestures });
 
   const handlePointerDown = (e) => {
     if (e.pointerType === "pen") {

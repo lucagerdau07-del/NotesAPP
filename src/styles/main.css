@@ -5022,3 +5022,43 @@ body::after {
   width: 12px;
   opacity: 1;
 }
+
+/* Left-hand scrubber: slim horizontal track at the very top-left quarter. */
+.scroll-scrubber {
+  position: fixed;
+  top: 4px;
+  left: 12px;
+  width: calc(25vw - 24px);
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  touch-action: none;
+  z-index: 2000;
+}
+
+/* Invisible fat hit area so the slim track is still easy to grab. */
+.scroll-scrubber::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0 -22px;
+}
+
+.scroll-scrubber-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: none;
+  pointer-events: none;
+  transition: background 0.12s ease;
+}
+
+.scroll-scrubber.is-gripped .scroll-scrubber-thumb {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.scroll-scrubber.is-idle {
+  opacity: 0.35;
+}

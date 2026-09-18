@@ -152,3 +152,93 @@ export default function useScrollbarGrip(scrollRef, { onEngage } = {}) {
     };
   }, [scrollRef]);
 }
+
+// Left-hand scrubber: a fat horizontal track in the top-left quarter of the
+// screen. Dragging the thumb scrolls the document sideways (x axis), so the left
+// hand can pan while the right one writes. Hidden while nothing overflows.
+export function useLeftHandScrubber(scrollRef, { onEngage } = {}) {
+  const onEngageRef = useRef(onEngage);
+  onEngageRef.current = onEngage;
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return undefined;
+
+    const track = document.createElement("div");
+    track.className = "scroll-scrubber";
+    const thumb = document.createElement("div");
+    thumb.className = "scroll-scrubber-thumb";
+    track.append(thumb);
+    document.body.append(track);
+
+    let frame = 0;
+    let dragId = null;
+    let offset = 0;
+
+    const geometry = () => {
+      const width = track.clientWidth;
+      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const size = clamp((width * scroller.clientWidth) / Math.max(1, scroller.scrollWidth), MIN_THUMB_PX, width);
+      return { width, max, size, travel: Math.max(0, width - size) };
+    };
+
+    const place = () => {
+      const { max, size, travel } = geometry();
+      track.classList.toggle("is-idle", max <= 1);
+      thumb.style.width = `${size}px`;
+      thumb.style.transform = `translateX(${(max > 0 ? scroller.scrollLeft / max : 0) * travel}px)`;
+    };
+
+    const drag = (clientX) => {
+      const { max, travel } = geometry();
+      const x = clientX - track.getBoundingClientRect().left;
+      scroller.scrollLeft = (travel > 0 ? clamp((x - offset) / travel, 0, 1) : 0) * max;
+    };
+
+    const onDown = (event) => {
+      if (dragId !== null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onEngageRef.current?.(event.pointerId);
+      dragId = event.pointerId;
+      track.setPointerCapture(dragId);
+      const { size } = geometry();
+      const left = track.getBoundingClientRect().left;
+      const thumbLeft = left + Number.parseFloat(/-?[\d.]+/.exec(thumb.style.transform)?.[0] || 0);
+      // Grabbing the thumb keeps it under the finger; the track centres it.
+      offset = event.clientX >= thumbLeft && event.clientX <= thumbLeft + size ? event.clientX - thumbLeft : size / 2;
+      track.classList.add("is-gripped");
+      drag(event.clientX);
+    };
+    const onMove = (event) => {
+      if (event.pointerId !== dragId) return;
+      event.preventDefault();
+      const x = event.clientX;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => drag(x));
+    };
+    const onUp = (event) => {
+      if (event.pointerId !== dragId) return;
+      dragId = null;
+      track.classList.remove("is-gripped");
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(place);
+    };
+
+    track.addEventListener("pointerdown", onDown);
+    track.addEventListener("pointermove", onMove);
+    track.addEventListener("pointerup", onUp);
+    track.addEventListener("pointercancel", onUp);
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    place();
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(frame);
+      track.remove();
+    };
+  }, [scrollRef]);
+}
