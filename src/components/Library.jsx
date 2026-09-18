@@ -4141,7 +4141,6 @@ export default function Library({
         data-testid="agent-panel"
         style={{
           top: "calc(20px + env(safe-area-inset-top, 0px))",
-          bottom: 20,
         }}
       >
         <div className="lib-glass agent-panel-card">

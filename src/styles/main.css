@@ -2947,12 +2947,8 @@ body::after {
   background: rgba(255, 255, 255, 0.4);
 }
 
-/* This chat's input isn't inside the panel — it's the same floating pill
-   from the Ask-AI capsule, absolutely positioned at bottom: 20 (52px tall),
-   overlapping the card's own bottom: 20. Without this, the last message
-   scrolls in right behind the pill instead of stopping above it. */
 .agent-panel-body.rail-chat-messages {
-  padding-bottom: 76px;
+  padding-bottom: 14px;
 }
 
 .agent-card {
