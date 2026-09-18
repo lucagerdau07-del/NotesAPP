@@ -41,6 +41,7 @@ import useInkPointer from "../hooks/useInkPointer";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
 import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
+import useScrollbarGrip from "./document/useScrollbarGrip.js";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
 import { INPUT_MODES } from "../ink/inputPolicy";
@@ -1458,11 +1459,20 @@ export default function DocumentView({
       const context = canvas?.getContext("2d");
       if (!context) return;
       context.setTransform(1, 0, 0, 1, 0, 0);
+      // Zoomed in, that canvas covers only the slice of the page that is on
+      // screen (see pageCanvasSlice), so the live segment has to land at the
+      // slice's origin and its resolution. Both are read back off the canvas
+      // rather than recomputed here, so this cannot drift from what
+      // InkPageCanvas actually allocated.
+      const cssWidth = parseFloat(canvas.style.width) || 0;
+      const cssHeight = parseFloat(canvas.style.height) || 0;
+      const perCssX = cssWidth > 0 ? canvas.width / cssWidth : 1;
+      const perCssY = cssHeight > 0 ? canvas.height / cssHeight : 1;
       renderInkStroke(context, segment, {
-        offsetX: 0,
-        offsetY: 0,
-        scaleX: canvas.width / pageBox.width,
-        scaleY: canvas.height / pageBox.height,
+        offsetX: -(parseFloat(canvas.style.left) || 0) * perCssX,
+        offsetY: -(parseFloat(canvas.style.top) || 0) * perCssY,
+        scaleX: perCssX * zoom,
+        scaleY: perCssY * zoom,
       });
       return;
     }
@@ -2120,6 +2130,15 @@ export default function DocumentView({
   };
   // clearAllGestures runs before commitLivePinch is defined, so reach it late.
   const commitLivePinchRef = useRef(null);
+
+  // Hold a finger in the right-hand strip to grab a fat scrollbar (see the
+  // hook). Whatever the page had started with that finger is dropped.
+  useScrollbarGrip(scrollRef, {
+    onEngage: () => {
+      clearAllGestures();
+      inkPointer.reset?.();
+    },
+  });
 
   const handlePointerDown = (e) => {
     if (e.pointerType === "pen") {

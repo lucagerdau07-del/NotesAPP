@@ -230,6 +230,45 @@ function intersects(a, b, margin) {
   );
 }
 
+// html-to-image clones a <canvas> by PNG-encoding it — canvas.toDataURL() on
+// every page canvas in the subtree, on the main thread, inside a capture that
+// already costs ~790ms on a Galaxy Tab A7. A PDF page canvas is millions of
+// pixels, and encoding it, holding the base64 string and decoding it back into
+// an <img> is seconds of blocked main thread and hundreds of MB of transient
+// allocation, per capture, per canvas. That is the stall after every scroll
+// with a PDF open. What comes out is only ever sampled as a blurred refraction
+// behind a glass panel, so hand the clone a thumbnail instead.
+export const SNAPSHOT_MAX_EDGE = 512;
+
+function thumbnailDataURL(...args) {
+  const edge = Math.max(this.width, this.height);
+  if (edge <= SNAPSHOT_MAX_EDGE)
+    return HTMLCanvasElement.prototype.toDataURL.apply(this, args);
+  const scale = SNAPSHOT_MAX_EDGE / edge;
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.round(this.width * scale));
+  small.height = Math.max(1, Math.round(this.height * scale));
+  small.getContext("2d")?.drawImage(this, 0, 0, small.width, small.height);
+  return small.toDataURL();
+}
+
+// Reference counted: captures of several wrappers run concurrently, and the
+// first to finish must not put the full-size encode back while the others are
+// still cloning.
+export function thumbnailCanvasClones(root) {
+  const patched = [...root.querySelectorAll("canvas")];
+  for (const canvas of patched) {
+    canvas.__thumbnailDepth = (canvas.__thumbnailDepth ?? 0) + 1;
+    canvas.toDataURL = thumbnailDataURL;
+  }
+  return () => {
+    for (const canvas of patched) {
+      canvas.__thumbnailDepth -= 1;
+      if (canvas.__thumbnailDepth === 0) delete canvas.toDataURL;
+    }
+  };
+}
+
 // A capture clones the wrapper and copies every computed style onto every
 // node, in one uninterruptible task: ~6-7ms per node on a Galaxy Tab A7, 1.9s
 // for a 79-object whiteboard. It is only ever sampled where a glass panel sits,
@@ -258,11 +297,22 @@ export function cullCaptureToGlass(instance) {
     if (cssW <= 0 || cssH <= 0 || w <= 0 || h <= 0) return;
     const viewport = viewportMatrix(element);
     const glassRects = [...instance.glassSet].map((glass) => glass.getBoundingClientRect());
-    const offGlass = [...element.querySelectorAll("[data-object-id]")].filter((object) => {
+    // A whole imported page counts as one: at fit-width no page reaches the
+    // rail or the pills, and cloning it drags its canvases and link layer
+    // through every capture (measured on a Galaxy Tab A7: ~750ms freeze after
+    // each pause in scrolling, style copy and toDataURL over pages nobody sees
+    // through glass).
+    const offGlass = [...element.querySelectorAll("[data-object-id], .document-page")].filter((object) => {
       const box = object.getBoundingClientRect();
       return !glassRects.some((glass) => intersects(box, glass, CULL_MARGIN_PX));
     });
-    const canvas = await this.captureToCanvas(element, cssW, cssH, offGlass);
+    const restoreFullSizeClones = thumbnailCanvasClones(element);
+    let canvas;
+    try {
+      canvas = await this.captureToCanvas(element, cssW, cssH, offGlass);
+    } finally {
+      restoreFullSizeClones();
+    }
     if (!canvas) return;
     this.cache.set(element, { canvas, w, h, viewport });
     this.onCacheUpdate?.(element);
@@ -381,6 +431,22 @@ export function recaptureBackgroundOnChange(instance, root) {
     for (const record of records) {
       const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
       if (!wrapper) continue;
+      // A page mounting, unmounting or resizing its canvases while scrolling
+      // (see DocumentPage). Each capture is a fixed ~800ms on a Galaxy Tab A7
+      // however small the tree, and one per page that scrolls into view is what
+      // reads as a hitch after every pause. A page clear of every glass panel
+      // is left out of the capture anyway (see cullCaptureToGlass), so nothing
+      // it does can change one; only one behind a panel needs refreshing, and
+      // that waits for the view to settle like a camera move does.
+      const page = record.target.closest?.(".document-page");
+      if (page) {
+        const box = page.getBoundingClientRect();
+        const behindGlass = [...(instance.glassSet ?? [])].some((glass) =>
+          intersects(box, glass.getBoundingClientRect(), CULL_MARGIN_PX),
+        );
+        if (behindGlass) viewportMoved.add(wrapper);
+        continue;
+      }
       // A camera move: the existing capture is redrawn shifted (see
       // cullCaptureToGlass), so only the glass needs repainting now.
       if (

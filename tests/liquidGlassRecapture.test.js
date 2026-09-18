@@ -3,6 +3,8 @@ import {
   cullCaptureToGlass,
   recaptureBackgroundOnChange,
   samplesEachOther,
+  SNAPSHOT_MAX_EDGE,
+  thumbnailCanvasClones,
 } from "../src/hooks/useLiquidGlass";
 
 function boxed(left, top, width, height) {
@@ -58,7 +60,7 @@ describe("cullCaptureToGlass", () => {
   });
 });
 
-function setup() {
+function setup(glassBox) {
   const root = document.createElement("div");
   const rail = document.createElement("div");
   rail.setAttribute("data-liquid-glass-control", "rail");
@@ -67,7 +69,9 @@ function setup() {
   document.body.append(root);
   const captureElement = vi.fn().mockResolvedValue(undefined);
   const markChanged = vi.fn();
-  const stop = recaptureBackgroundOnChange({ capture: { captureElement }, markChanged }, root);
+  if (glassBox) rail.getBoundingClientRect = () => glassBox;
+  const glassSet = new Set([rail]);
+  const stop = recaptureBackgroundOnChange({ capture: { captureElement }, markChanged, glassSet }, root);
   return { body, rail, captureElement, markChanged, stop };
 }
 
@@ -222,6 +226,112 @@ describe("recaptureBackgroundOnChange", () => {
 
     stop();
     style.remove();
+    vi.useRealTimers();
+  });
+});
+
+describe("thumbnailCanvasClones", () => {
+  it("hands html-to-image a thumbnail of a page canvas and restores the original after", () => {
+    const wrapper = document.createElement("div");
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = 4000;
+    pageCanvas.height = 3000;
+    wrapper.append(pageCanvas);
+    const original = pageCanvas.toDataURL;
+
+    const thumbnails = [];
+    const createElement = document.createElement.bind(document);
+    const spy = vi.spyOn(document, "createElement").mockImplementation((tag) => {
+      if (tag !== "canvas") return createElement(tag);
+      const stub = {
+        getContext: () => ({ drawImage: () => {} }),
+        toDataURL: () => "data:thumbnail",
+      };
+      thumbnails.push(stub);
+      return stub;
+    });
+
+    const restore = thumbnailCanvasClones(wrapper);
+    // A second capture is still in flight when the first one finishes.
+    const restoreConcurrent = thumbnailCanvasClones(wrapper);
+
+    expect(pageCanvas.toDataURL()).toBe("data:thumbnail");
+    expect(Math.max(thumbnails[0].width, thumbnails[0].height)).toBe(SNAPSHOT_MAX_EDGE);
+    expect(thumbnails[0].height).toBe(384); // 4000x3000 keeps its aspect ratio
+
+    restore();
+    expect(pageCanvas.toDataURL()).toBe("data:thumbnail");
+    restoreConcurrent();
+    expect(pageCanvas.toDataURL).toBe(original);
+
+    spy.mockRestore();
+  });
+});
+
+describe("cullCaptureToGlass pages", () => {
+  it("leaves imported pages that sit clear of every glass panel out of the capture", async () => {
+    const rail = boxed(0, 0, 100, 700);
+    const body = boxed(0, 0, 1300, 700);
+    const pageBehindRail = boxed(60, 0, 800, 1100);
+    pageBehindRail.className = "document-page";
+    const pageClear = boxed(700, 0, 500, 1100);
+    pageClear.className = "document-page";
+    body.append(pageBehindRail, pageClear);
+
+    const capture = {
+      cache: new Map(),
+      onCacheUpdate: vi.fn(),
+      captureToCanvas: vi.fn().mockResolvedValue({ width: 1, height: 1 }),
+      drawCachedElement: vi.fn(),
+      _captureWithHtmlToImage: vi.fn(),
+    };
+    cullCaptureToGlass({ capture, glassSet: new Set([rail]) });
+    await capture._captureWithHtmlToImage(body, 1300, 700, 1300, 700);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 1300, 700, [pageClear]);
+  });
+});
+
+describe("recaptureBackgroundOnChange pages", () => {
+  const box = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
+  const pageAt = (body, rect) => {
+    const page = document.createElement("div");
+    page.className = "document-page";
+    page.getBoundingClientRect = () => rect;
+    body.append(page);
+    return page;
+  };
+
+  it("does not re-capture for a page mounting canvases clear of every glass panel", async () => {
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
+    const page = pageAt(body, box(700, 0, 500, 1100));
+    await settle();
+    captureElement.mockClear();
+
+    page.append(document.createElement("canvas"));
+    await settle();
+    vi.advanceTimersByTime(2000);
+    expect(captureElement).not.toHaveBeenCalled();
+
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("re-captures a page behind glass, but only once the view settles", async () => {
+    vi.useFakeTimers();
+    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
+    const page = pageAt(body, box(60, 0, 800, 1100));
+    await settle();
+    captureElement.mockClear();
+
+    page.append(document.createElement("canvas"));
+    await settle();
+    expect(captureElement).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1500);
+    expect(captureElement).toHaveBeenCalledWith(body, true);
+
+    stop();
     vi.useRealTimers();
   });
 });

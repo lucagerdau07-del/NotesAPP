@@ -949,6 +949,13 @@ body::after {
   font: 400 11.5px Manrope, sans-serif;
   color: rgba(233,230,223,.5);
   white-space: nowrap;
+  /* The page counter changes while scrolling. With proportional digits the
+     pill grew or shrank by a pixel at nearly every page ("1/12" 311px, "2/12"
+     314px), which the glass reads as a resize and answers by re-capturing the
+     whole document behind it: ~800ms of frozen main thread on a Galaxy Tab A7,
+     once per page scrolled past. Fixed-width digits keep the pill still. */
+  font-variant-numeric: tabular-nums;
+  min-width: 5ch;
 }
 
 .editor-shell.immersive .editor-title-pill,
@@ -4994,3 +5001,24 @@ body::after {
   border-radius: 8px;
 }
 
+
+/* Fat scrollbar thumb, shown only while a finger holds the right-hand strip of
+   a document (see useScrollbarGrip). Positioned by the hook, never by React. */
+.scroll-grip-thumb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2000;
+  transition: opacity 0.12s ease, width 0.14s ease;
+}
+
+.scroll-grip-thumb.is-gripped {
+  width: 12px;
+  opacity: 1;
+}

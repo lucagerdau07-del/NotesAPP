@@ -147,3 +147,43 @@ describe('DocumentPage Virtualization', () => {
     expect(container.querySelector('canvas')).not.toBeInTheDocument();
   });
 });
+
+describe('DocumentPage during a scrollbar sweep', () => {
+  it('does not mount canvases for pages a sweep is only passing, then mounts once it settles', () => {
+    let cb;
+    globalThis.IntersectionObserver = class {
+      constructor(c) { cb = c; }
+      observe() {}
+      disconnect() {}
+    };
+    vi.useFakeTimers();
+    const scroller = document.createElement('div');
+    let top = 0;
+    Object.defineProperty(scroller, 'scrollTop', { get: () => top });
+    document.body.append(scroller);
+    const scrollTo = (y) => { top = y; scroller.dispatchEvent(new Event('scroll')); };
+
+    const page = { id: 'p1', index: 0, width: 800, height: 1200 };
+    const { container } = render(
+      <DocumentPage page={page} sourceType="pdf" sourceHandle={{ document: {} }} />,
+    );
+
+    // 950px in 50ms: 19000px/s, a scrollbar drag.
+    scrollTo(0);
+    vi.advanceTimersByTime(50);
+    scrollTo(950);
+    act(() => { cb([{ isIntersecting: true }]); });
+    expect(container.querySelector('canvas')).not.toBeInTheDocument();
+
+    // Still sweeping: the page leaves the band again and never mounts at all.
+    act(() => { cb([{ isIntersecting: false }]); vi.advanceTimersByTime(1000); });
+    expect(container.querySelector('canvas')).not.toBeInTheDocument();
+
+    // Back in the band once the sweep has stopped: mounts straight away.
+    act(() => { vi.advanceTimersByTime(300); cb([{ isIntersecting: true }]); });
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+
+    scroller.remove();
+    vi.useRealTimers();
+  });
+});

@@ -1,25 +1,115 @@
 import React, { useEffect, useRef } from "react";
-import { MAX_PAGE_CANVAS_PIXELS } from "../../documents/fileImport.js";
+import { backingScale } from "./pageCanvasSlice.js";
 
-// Below this a second bitmap is 32MB or less, which the renderer carries fine
-// and which covers zoom levels up to roughly 2x on this screen.
-const MAX_DOUBLE_BUFFER_PIXELS = 8_000_000;
+// A whole-page copy at a fixed cost, sized once and never by the zoom. The
+// sharp canvas above it only covers the slice of the page that is on screen, so
+// without this, scrolling past that slice would show bare white page until the
+// next render lands. Blurry for a moment beats blank. 4MB, and only allocated
+// once the page is actually being windowed.
+const BASE_CANVAS_PIXELS = 1_000_000;
 
 export default function PdfPageCanvas({
   page,
   sourceHandle,
   zoom = 1,
   dpr = 1,
+  canvasWindow = null,
 }) {
   const canvasRef = useRef(null);
-  const hasPaintedRef = useRef(false);
+  const baseRef = useRef(null);
+  // The window and zoom the bitmap currently on screen was painted for.
+  const paintedRef = useRef(null);
+  const windowed = canvasWindow != null;
+  // Zooming back out drops the window, but the canvas above still holds the
+  // slice it last painted until the full-page render lands — so the base has to
+  // outlive the window that needed it, or zooming out flashes white.
+  const everWindowedRef = useRef(false);
+  if (windowed) everWindowedRef.current = true;
+
+  useEffect(() => {
+    if (!windowed) return;
+    let cancelled = false;
+    let renderTask = null;
+
+    async function renderBase() {
+      const canvas = baseRef.current;
+      if (!sourceHandle?.document?.getPage || !canvas) return;
+      try {
+        const pdfPage = await sourceHandle.document.getPage(page.index + 1);
+        if (cancelled || !baseRef.current) {
+          pdfPage?.cleanup?.();
+          return;
+        }
+        const nativeViewport = pdfPage.getViewport({ scale: 1 });
+        const viewport = pdfPage.getViewport({
+          scale: Math.sqrt(
+            BASE_CANVAS_PIXELS / (nativeViewport.width * nativeViewport.height),
+          ),
+        });
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          pdfPage.cleanup?.();
+          return;
+        }
+        renderTask = pdfPage.render({ canvasContext: ctx, viewport });
+        await renderTask.promise;
+        pdfPage.cleanup?.();
+      } catch (err) {
+        if (err?.name !== "RenderingCancelledException") {
+          // Ignore cancelled renders
+        }
+      }
+    }
+
+    renderBase();
+    return () => {
+      cancelled = true;
+      try {
+        renderTask?.cancel();
+      } catch {}
+    };
+  }, [page.index, sourceHandle, windowed]);
 
   useEffect(() => {
     let renderTask = null;
     let cancelled = false;
 
     async function renderPage() {
-      if (!sourceHandle?.document?.getPage || !canvasRef.current) return;
+      const canvas = canvasRef.current;
+      if (!sourceHandle?.document?.getPage || !canvas) return;
+
+      // Zoomed in this is the slice of the page that is on screen, not the
+      // whole page (see pageCanvasSlice); below that it is the whole page and
+      // the offsets are zero.
+      const region = canvasWindow ?? {
+        left: 0,
+        top: 0,
+        width: page.width * zoom,
+        height: page.height * zoom,
+      };
+
+      // The box follows the new zoom immediately; until the render below lands
+      // the browser just scales the bitmap already in there. That bitmap covers
+      // the window it was painted for, so the box tracks *that* window at the
+      // new zoom rather than the one being rendered now — otherwise the old
+      // pixels would be stretched into a box they do not fill.
+      const painted = paintedRef.current;
+      const ratio = painted ? zoom / painted.zoom : 1;
+      const shown = painted
+        ? {
+            left: painted.region.left * ratio,
+            top: painted.region.top * ratio,
+            width: painted.region.width * ratio,
+            height: painted.region.height * ratio,
+          }
+        : region;
+      canvas.style.left = `${Math.round(shown.left)}px`;
+      canvas.style.top = `${Math.round(shown.top)}px`;
+      canvas.style.width = `${Math.round(shown.width)}px`;
+      canvas.style.height = `${Math.round(shown.height)}px`;
+
       try {
         const pdfPage = await sourceHandle.document.getPage(page.index + 1);
         if (cancelled || !canvasRef.current) {
@@ -27,44 +117,28 @@ export default function PdfPageCanvas({
           return;
         }
 
-        const logicalWidth = page.width * zoom;
-        const logicalHeight = page.height * zoom;
+        const scaleToBacking = backingScale(region, dpr);
         const nativeViewport = pdfPage.getViewport({ scale: 1 });
-        const scaleToCanonical = (page.width * zoom) / nativeViewport.width;
-        let scale = scaleToCanonical * dpr;
-
-        if (nativeViewport.width * scale * nativeViewport.height * scale > MAX_PAGE_CANVAS_PIXELS) {
-          scale = Math.sqrt(
-            MAX_PAGE_CANVAS_PIXELS / (nativeViewport.width * nativeViewport.height),
-          );
-        }
-
-        const viewport = pdfPage.getViewport({ scale });
-        const canvas = canvasRef.current;
-        const width = Math.round(viewport.width);
-        const height = Math.round(viewport.height);
-
-        // The box follows the new zoom immediately; until the render below
-        // lands the browser just scales the bitmap already in there.
-        canvas.style.width = `${Math.round(logicalWidth)}px`;
-        canvas.style.height = `${Math.round(logicalHeight)}px`;
+        // The native page width maps onto the canonical page width at this
+        // zoom; the window only moves the origin, never the scale, so text
+        // stays exactly as sharp as it was before the page was windowed.
+        const scale = (page.width * zoom * scaleToBacking) / nativeViewport.width;
+        const viewport = pdfPage.getViewport({
+          scale,
+          offsetX: -region.left * scaleToBacking,
+          offsetY: -region.top * scaleToBacking,
+        });
+        const width = Math.round(region.width * scaleToBacking);
+        const height = Math.round(region.height * scaleToBacking);
 
         // Assigning width/height clears a canvas, and pdf.js needs 100-400ms
-        // to fill it again at these sizes (measured on a Galaxy Tab A7, with
-        // pages clamped to 16M pixels). Doing that to the live canvas leaves
-        // the page's white background showing for the whole gap — that is the
-        // flash on every pinch. Render the new zoom level off screen and swap
-        // it in with one drawImage instead. First paint has nothing on screen
-        // to protect, so it skips the second allocation.
-        // ...but the copy is a second full-size bitmap, and at high zoom these
-        // reach the 16M pixel clamp, i.e. 61MB each. Holding two of those while
-        // pdf.js renders is what pushes CrRendererMain over its allocation
-        // ceiling (measured: renderer RSS 730MB at 3x, SIGTRAP abort). Past
-        // this budget take the flash over the crash.
-        const affordsCopy = width * height <= MAX_DOUBLE_BUFFER_PIXELS;
-        const offscreen = hasPaintedRef.current && affordsCopy
-          ? document.createElement("canvas")
-          : canvas;
+        // to fill it again at these sizes (measured on a Galaxy Tab A7). Doing
+        // that to the live canvas leaves whatever is behind it showing for the
+        // whole gap — that is the flash on every pinch. Render the new zoom
+        // level off screen and swap it in with one drawImage instead. First
+        // paint has nothing on screen to protect, so it skips the second
+        // allocation.
+        const offscreen = painted ? document.createElement("canvas") : canvas;
         offscreen.width = width;
         offscreen.height = height;
 
@@ -87,11 +161,15 @@ export default function PdfPageCanvas({
           canvas.height = height;
           canvas.getContext("2d")?.drawImage(offscreen, 0, 0);
           // Hand the copy's memory back before the next page allocates its
-          // own: these are ~64MB each and the renderer here is 32-bit.
+          // own: this renderer is 32-bit.
           offscreen.width = 0;
           offscreen.height = 0;
         }
-        hasPaintedRef.current = true;
+        canvas.style.left = `${Math.round(region.left)}px`;
+        canvas.style.top = `${Math.round(region.top)}px`;
+        canvas.style.width = `${Math.round(region.width)}px`;
+        canvas.style.height = `${Math.round(region.height)}px`;
+        paintedRef.current = { region, zoom };
       } catch (err) {
         if (err?.name !== "RenderingCancelledException") {
           // Ignore cancelled renders
@@ -109,19 +187,36 @@ export default function PdfPageCanvas({
         } catch {}
       }
     };
-  }, [page.index, page.width, page.height, sourceHandle, zoom, dpr]);
+  }, [page.index, page.width, page.height, sourceHandle, zoom, dpr, canvasWindow]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="document-background-canvas"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        pointerEvents: "none",
-        display: "block",
-      }}
-    />
+    <>
+      {everWindowedRef.current && (
+        <canvas
+          ref={baseRef}
+          className="document-background-canvas"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none",
+            display: "block",
+          }}
+        />
+      )}
+      <canvas
+        ref={canvasRef}
+        className="document-background-canvas"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          display: "block",
+        }}
+      />
+    </>
   );
 }
