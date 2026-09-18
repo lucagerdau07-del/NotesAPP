@@ -690,6 +690,29 @@ body::after {
   pointer-events: none;
 }
 
+/* A flat fill hides the reeded texture the rail gets for free: the rail sits
+   over .liquid-glass-scene and refracts it, while the title/action pills sit
+   over the full-bleed white page and refract nothing but paper. Carry the
+   scene's own reeded image in their scrim instead of a flat black, so all
+   three controls read as the same material. background-attachment: fixed
+   locks it to the viewport, which is where .liquid-glass-scene (inset 0 on a
+   100vw/100vh shell) has it too, so the ribbing lines up across controls. */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-title-pill::after,
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-actions-pill::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-title-pill::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after {
+  background-color: #08080A;
+  background-image:
+    linear-gradient(rgba(8, 8, 12, 0.74), rgba(8, 8, 12, 0.74)),
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    url('../assets/reeded-glass-background.png');
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
 /* The WebGL canvas replaces the CSS glass's own border/shadow as the focus
    affordance (see .liquid-glass-pill:focus-within above), so give every
    enhanced control an explicit focus ring back. */

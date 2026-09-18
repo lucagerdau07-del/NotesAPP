@@ -202,6 +202,7 @@ function Editor({ activeNote, onBack }) {
       )}
       <div
         className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""}`}
+        data-liquid-glass-control="title"
       >
         {onBack && (
           <button
@@ -226,7 +227,7 @@ function Editor({ activeNote, onBack }) {
           {activeNote?.subject ? `${activeNote.subject} · ` : ""}{currentPage}/{pageCount}
         </span>
       </div>
-      <div className="editor-actions-pill">
+      <div className="editor-actions-pill" data-liquid-glass-control="actions">
         <button
           className="rail-btn"
           title="Vollbild"
