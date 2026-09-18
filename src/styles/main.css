@@ -927,6 +927,16 @@ body::after {
   letter-spacing: -.02em;
 }
 
+.editor-title-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  padding: 0;
+  min-width: 0;
+  max-width: 40vw;
+}
+
 .editor-back-btn {
   width: 28px;
   height: 28px;

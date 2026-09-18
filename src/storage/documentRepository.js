@@ -64,6 +64,11 @@ export function createDocumentRepository({ dbName = DOCUMENT_DB_NAME } = {}) {
         throw error;
       }
     },
+    async renameImportedNote(noteId, title) {
+      const db = await database();
+      const note = await db.get("importedNotes", noteId);
+      if (note) await db.put("importedNotes", { ...note, title });
+    },
     async listImportedNotes() {
       const db = await database();
       return (

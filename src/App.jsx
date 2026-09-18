@@ -9,6 +9,7 @@ import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { browserNoteRepository } from "./storage/noteRepository.js";
+import { browserDocumentRepository } from "./storage/documentRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "./documents/exportDocument.js";
 import { isLightBackground } from "./documents/pageStyles.js";
 
@@ -134,7 +135,7 @@ function Editor({ activeNote, onBack }) {
     if (!inkDoc) return;
     setIsExporting(true);
     try {
-      const filenameBase = activeNote?.title || "Notiz";
+      const filenameBase = title || "Notiz";
       if (kind === "pdf") {
         await exportDocumentAsPdf(inkDoc, filenameBase);
       } else {
@@ -145,6 +146,20 @@ function Editor({ activeNote, onBack }) {
       globalThis.alert?.(`Export fehlgeschlagen: ${error.message || error}`);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const [title, setTitle] = useState(activeNote?.title || "Neue Notiz");
+  const [isRenaming, setRenaming] = useState(false);
+  const commitTitle = (value) => {
+    setRenaming(false);
+    const next = value.trim();
+    if (!next || next === title) return;
+    setTitle(next);
+    if (activeNote.kind === "imported") {
+      browserDocumentRepository.renameImportedNote(activeNote.id, next).catch(() => {});
+    } else {
+      browserNoteRepository.saveNote({ id: activeNote.id, title: next });
     }
   };
 
@@ -213,9 +228,28 @@ function Editor({ activeNote, onBack }) {
             <ArrowLeft size={16} />
           </button>
         )}
-        <span className="editor-title">
-          {activeNote?.title || "Neue Notiz"}
-        </span>
+        {isRenaming ? (
+          <input
+            className="editor-title editor-title-input"
+            autoFocus
+            defaultValue={title}
+            size={Math.max(8, title.length)}
+            onFocus={(e) => e.target.select()}
+            onBlur={(e) => commitTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setRenaming(false);
+            }}
+          />
+        ) : (
+          <span
+            className="editor-title"
+            style={{ cursor: "text" }}
+            onClick={() => setRenaming(true)}
+          >
+            {title}
+          </span>
+        )}
         <span
           style={{
             width: 1,
