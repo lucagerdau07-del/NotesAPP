@@ -9,6 +9,7 @@ const setup = (comments = []) => {
     project: (_pageId, x, y) => ({ x, y }),
     onSave: vi.fn(),
     onRemove: vi.fn(),
+    onClose: vi.fn(),
   };
   render(<CommentLayer {...props} />);
   return props;
@@ -23,6 +24,14 @@ describe("CommentLayer", () => {
 
     expect(onSave).toHaveBeenCalledWith({ pageId: "p1", x: 40, y: 50, text: "Nochmal erklären" });
     expect(screen.queryByTestId("comment-popover")).toBeNull();
+  });
+
+  it("beendet mit Abbrechen den Kommentar-Modus", () => {
+    const { onClose, onSave } = setup();
+    fireEvent.click(screen.getByTestId("comment-layer"));
+    fireEvent.click(screen.getByText("Abbrechen"));
+    expect(onClose).toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("speichert keinen leeren Kommentar", () => {

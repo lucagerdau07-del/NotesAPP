@@ -2,11 +2,26 @@ import React, { useRef, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { MAX_COMMENT_LENGTH } from "../../knowledge/commentRepository.js";
 
-const POPOVER_WIDTH = 260;
+const POPOVER_WIDTH = 300;
+const markerStyle = (pos) => ({
+  position: "absolute",
+  left: pos.x,
+  top: pos.y,
+  transform: "translate(-50%, -50%)",
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  border: "1.5px solid rgba(255,255,255,0.9)",
+  background: "#3E7BD8",
+  color: "#fff",
+  display: "grid",
+  placeItems: "center",
+  padding: 0,
+});
 const stop = (event) => event.stopPropagation();
 
 const buttonStyle = (primary) => ({
-  padding: "6px 12px",
+  padding: "6px 10px",
   borderRadius: 8,
   border: "1px solid rgba(255,255,255,0.14)",
   background: primary ? "#3E7BD8" : "transparent",
@@ -21,7 +36,7 @@ const buttonStyle = (primary) => ({
 // unsichtbar, bis der Kommentar-Knopf erneut gedrückt wird.
 // `locate(event)` -> {pageId, x, y} in Seitenkoordinaten, `project(pageId, x, y)`
 // -> {x, y} relativ zur Ebene; beide kennen nur der Editor.
-export default function CommentLayer({ comments, locate, project, onSave, onRemove }) {
+export default function CommentLayer({ comments, locate, project, onSave, onRemove, onClose }) {
   const layerRef = useRef(null);
   const [draft, setDraft] = useState(null);
   const at = draft && project(draft.pageId, draft.x, draft.y);
@@ -61,22 +76,7 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
                 stop(event);
                 setDraft(comment);
               }}
-              style={{
-                position: "absolute",
-                left: pos.x,
-                top: pos.y,
-                transform: "translate(-50%, -50%)",
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                border: "1.5px solid rgba(255,255,255,0.9)",
-                background: "#3E7BD8",
-                color: "#fff",
-                display: "grid",
-                placeItems: "center",
-                padding: 0,
-                cursor: "pointer",
-              }}
+              style={{ ...markerStyle(pos), cursor: "pointer" }}
             >
               <MessageSquare size={14} aria-hidden="true" />
             </button>
@@ -95,6 +95,7 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
             left: Math.min(Math.max(8, at.x - POPOVER_WIDTH / 2), maxLeft),
             top: at.y + 22,
             width: POPOVER_WIDTH,
+            boxSizing: "border-box",
             padding: 10,
             borderRadius: 12,
             background: "rgba(20,20,24,0.96)",
@@ -123,7 +124,7 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
               font: "500 13px Manrope, sans-serif",
             }}
           />
-          <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
             {draft.id && (
               <button
                 type="button"
@@ -136,7 +137,10 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
                 Löschen
               </button>
             )}
-            <button type="button" style={buttonStyle(false)} onClick={() => setDraft(null)}>
+            <button type="button" style={buttonStyle(false)} onClick={() => {
+                setDraft(null);
+                onClose();
+              }}>
               Abbrechen
             </button>
             <button type="button" style={buttonStyle(true)} disabled={!draft.text.trim()} onClick={save}>
@@ -145,6 +149,22 @@ export default function CommentLayer({ comments, locate, project, onSave, onRemo
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Bestätigung nach dem Speichern: der Marker steht 3 s an der Stelle und löst sich
+// dann auf (Keyframes comment-flash in main.css); danach räumt onDone ihn weg.
+export function CommentFlash({ at, onDone }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 900, pointerEvents: "none" }}>
+      <span
+        data-testid="comment-flash"
+        onAnimationEnd={onDone}
+        style={{ ...markerStyle(at), animation: "comment-flash 3s ease-in forwards" }}
+      >
+        <MessageSquare size={14} aria-hidden="true" />
+      </span>
     </div>
   );
 }

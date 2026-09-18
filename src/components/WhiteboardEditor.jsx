@@ -18,7 +18,7 @@ import { removeImageBackground } from "../ink/imageBackground.js";
 import WhiteboardCanvas from "./document/WhiteboardCanvas.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer.jsx";
 import PageObjectLayer from "./document/PageObjectLayer.jsx";
-import CommentLayer from "./document/CommentLayer.jsx";
+import CommentLayer, { CommentFlash } from "./document/CommentLayer.jsx";
 import useComments from "../hooks/useComments.js";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import {
@@ -93,6 +93,7 @@ export default function WhiteboardEditor({
   const textLongPressFired = useRef(false);
   const rootRef = useRef(null);
   const [isCommentMode, setIsCommentMode] = useState(false);
+  const [commentFlash, setCommentFlash] = useState(null);
   const [isLassoMode, setIsLassoMode] = useState(false);
   const [isBucketMode, setIsBucketMode] = useState(false);
   const [lassoDraft, setLassoDraft] = useState(null);
@@ -1449,10 +1450,15 @@ export default function WhiteboardEditor({
             onSave={({ id, text, ...point }) => {
               if (id) editComment(id, text);
               else addComment({ ...point, text });
+              setCommentFlash(point);
               setIsCommentMode(false);
             }}
             onRemove={removeComment}
+            onClose={() => setIsCommentMode(false)}
           />
+        )}
+        {commentFlash && !isCommentMode && (
+          <CommentFlash at={worldToScreen(camera, commentFlash)} onDone={() => setCommentFlash(null)} />
         )}
       </div>
       {railSlot ? createPortal(railContent, railSlot) : railContent}

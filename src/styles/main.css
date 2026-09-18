@@ -1966,9 +1966,13 @@ body::after {
   transition: background-color 0.15s, color 0.15s;
 }
 
-.rail-btn:hover:not(:disabled) {
-  background: rgba(255,255,255,.09);
-  color: #F1EEE7;
+/* Nur mit echtem Hover: auf Touch bleibt :hover nach dem Tippen hängen und
+   sähe wie ein aktiver Modus aus. */
+@media (hover: hover) {
+  .rail-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,.09);
+    color: #F1EEE7;
+  }
 }
 
 .rail-btn.active {
@@ -5121,4 +5125,9 @@ body::after {
 
 .scroll-scrubber.is-idle {
   opacity: 0.35;
+}
+
+@keyframes comment-flash {
+  0%, 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
 }

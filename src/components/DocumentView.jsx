@@ -48,7 +48,7 @@ import { INPUT_MODES } from "../ink/inputPolicy";
 import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
-import CommentLayer from "./document/CommentLayer";
+import CommentLayer, { CommentFlash } from "./document/CommentLayer";
 import useComments from "../hooks/useComments";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
@@ -1238,6 +1238,7 @@ export default function DocumentView({
   const [draftPlacement, setDraftPlacement] = useState(null);
   // Kommentare sind nur im Kommentar-Modus sichtbar (siehe CommentLayer).
   const [isCommentMode, setIsCommentMode] = useState(false);
+  const [commentFlash, setCommentFlash] = useState(null);
   const { comments, addComment, editComment, removeComment } = useComments(inkDocument.documentId);
   // A pen of its own: stays on until another tool is picked, fills whatever
   // ink/shape outlines enclose the next click.
@@ -4001,11 +4002,17 @@ export default function DocumentView({
               onSave={({ id, text, ...point }) => {
                 if (id) editComment(id, text);
                 else addComment({ ...point, text });
+                setCommentFlash(point);
                 setIsCommentMode(false);
               }}
               onRemove={removeComment}
+              onClose={() => setIsCommentMode(false)}
             />
           )}
+          {commentFlash && !isCommentMode && (() => {
+            const at = pagePointToViewport(pageLayout, commentFlash.pageId, commentFlash);
+            return at && <CommentFlash at={at} onDone={() => setCommentFlash(null)} />;
+          })()}
           {draftPlacement && draftPlacementViewport && (
             <div
               data-testid="draft-placement-box"
