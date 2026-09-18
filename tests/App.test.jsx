@@ -12,6 +12,14 @@ vi.mock('@ybouane/liquidglass', () => ({
 
 import App from '../src/App';
 
+// A new note is only listed in the library once edited; renaming counts.
+function renameOpenNote(name) {
+  fireEvent.click(document.querySelector('.editor-title'));
+  const input = document.querySelector('.editor-title-input');
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.blur(input);
+}
+
 describe('App Component', () => {
   it('marks exactly three direct Library controls for WebGL glass', () => {
     render(<App />)
@@ -107,13 +115,19 @@ describe('App Component', () => {
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', documentId);
   });
 
+  it('does not list a new note that was never edited', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('new-note-btn'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+    expect(globalThis.localStorage.getItem('notes.notes.v1') || '').not.toContain('"id"');
+  });
+
   it('reopens an existing note with the same document ID', () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('new-note-btn'));
-    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
-      target: { value: 'Ableitungsregeln' },
-    });
     fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Ableitungsregeln');
     const documentId = screen.getByTestId('document-view').getAttribute('data-document-id');
 
     fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
@@ -200,19 +214,15 @@ describe('App Component', () => {
     // Create a Mathe note
     fireEvent.click(screen.getByTestId('subject-tile-mathe'));
     fireEvent.click(screen.getByTestId('new-note-btn'));
-    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
-      target: { value: 'Ableitungsregeln' },
-    });
     fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Ableitungsregeln');
     fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
 
     // Create a Chemie note
     fireEvent.click(screen.getByTestId('subject-tile-chemie'));
     fireEvent.click(screen.getByTestId('new-note-btn'));
-    fireEvent.change(screen.getByTestId('new-doc-title-input'), {
-      target: { value: 'Titrationskurve' },
-    });
     fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Titrationskurve');
     fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
 
     // Click Mathe subject tile - only the Mathe note should be shown

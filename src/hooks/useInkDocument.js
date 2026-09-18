@@ -299,10 +299,17 @@ export default function useInkDocument({
   const onPersistedRef = useRef(onPersisted);
   onPersistedRef.current = onPersisted;
 
+  // The history as loaded: while it's still that object nothing was edited, so
+  // an untouched new note must not get indexed in the library.
+  const baselineRef = useRef({ id: activeDocumentId, history });
+  if (baselineRef.current.id !== activeDocumentId) {
+    baselineRef.current = { id: activeDocumentId, history };
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => {
       saveSafely(() => repository.saveHistory(activeDocumentId, history));
-      onPersistedRef.current?.(activeDocumentId);
+      if (history !== baselineRef.current.history) onPersistedRef.current?.(activeDocumentId);
     }, saveDelay);
     return () => clearTimeout(timer);
   }, [activeDocumentId, history, repository, saveDelay]);

@@ -159,7 +159,8 @@ function Editor({ activeNote, onBack }) {
     if (activeNote.kind === "imported") {
       browserDocumentRepository.renameImportedNote(activeNote.id, next).catch(() => {});
     } else {
-      browserNoteRepository.saveNote({ id: activeNote.id, title: next });
+      const { subject, pageKind, format, background, ruling } = activeNote;
+      browserNoteRepository.saveNote({ id: activeNote.id, title: next, subject, pageKind, format, background, ruling });
     }
   };
 
@@ -510,13 +511,8 @@ export default function App() {
       note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`,
     );
     const fullNote = { ...note, id };
-    // Imported documents (PDF/image) already have their own record in
-    // documentRepository.js - only notes started from scratch need indexing
-    // here so the library can find and re-open them.
-    if (fullNote.kind !== "imported") {
-      const { title, subject, pageKind, format, background, ruling } = fullNote;
-      browserNoteRepository.saveNote({ id, title, subject, pageKind, format, background, ruling });
-    }
+    // New scratch notes are indexed on their first edit (SplitLayout), so an
+    // untouched blank note never shows up in the library.
     setActiveNote(fullNote);
     setScreen("editor");
   };

@@ -50,7 +50,10 @@ export default function SplitLayout({
     onPersisted:
       note?.kind === "imported"
         ? undefined
-        : () => browserNoteRepository.touchNote(documentId),
+        : () => {
+            const { title, subject, pageKind, format, background, ruling } = note;
+            browserNoteRepository.saveNote({ id: documentId, title, subject, pageKind, format, background, ruling });
+          },
   });
   const [paperStyle, setPaperStyle] = useState(
     () => inkController.document.pages[0]?.ruling || "lined",

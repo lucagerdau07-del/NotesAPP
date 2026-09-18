@@ -38,7 +38,7 @@ export function createNoteRepository(storage, { now = Date.now } = {}) {
       const timestamp = now();
       const saved = {
         ...existing,
-        ...input,
+        ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)),
         id,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
