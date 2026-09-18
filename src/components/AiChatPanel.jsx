@@ -27,11 +27,16 @@ const SUGGESTIONS = [
   "Erkläre mir das",
 ];
 
-// Rounds to the unit Claude Code itself uses in its status line: plain below
-// 1000, "K" from 1000, "M" from 1_000_000.
+// Formats token count: plain below 1000, "k" with one decimal from 1000, "M" from 1_000_000.
 export function formatTokens(n) {
-  if (n >= 1_000_000) return `${Math.round(n / 1_000_000)}M`;
-  if (n >= 1000) return `${Math.round(n / 1000)}K`;
+  if (n >= 1_000_000) {
+    const val = Math.round(n / 100_000) / 10;
+    return `${val}M`;
+  }
+  if (n >= 1000) {
+    const val = Math.round(n / 100) / 10;
+    return `${val}k`;
+  }
   return String(n);
 }
 

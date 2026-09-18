@@ -103,7 +103,7 @@ export async function requestCompletion({
           ...(currentModel ? { model: currentModel } : {}),
           ...(remainingModels.length > 1 ? { models: remainingModels } : {}),
           ...(tools?.length ? { tools } : {}),
-          ...(useStream ? { stream: true } : {}),
+          ...(useStream ? { stream: true, stream_options: { include_usage: true } } : {}),
         }),
       });
     } catch (error) {

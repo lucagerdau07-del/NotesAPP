@@ -288,7 +288,6 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       setElapsedMs(0);
       setStreamText("");
       startTimeRef.current = Date.now();
-      let totalTokens = 0;
       // Only a chat's opening exchange gets a generated title.
       const needsTitle = messages.length === 0;
       const sessionIdAtStart = activeId;
@@ -356,8 +355,14 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             onDelta: setStreamText,
           });
           setStreamText("");
-          totalTokens += usage?.total_tokens ?? 0;
-          setTokens(totalTokens);
+          const stepTokens =
+            usage?.total_tokens ??
+            (usage?.prompt_tokens != null || usage?.completion_tokens != null
+              ? (usage?.prompt_tokens ?? 0) + (usage?.completion_tokens ?? 0)
+              : 0);
+          if (stepTokens > 0) {
+            setTokens(stepTokens);
+          }
           conversation = [...conversation, reply];
 
           const calls = reply.tool_calls || [];
