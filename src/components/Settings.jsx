@@ -21,6 +21,7 @@ import {
   loadUntisCredentials,
   saveUntisCredentials,
 } from "../ink/untisSettings.js";
+import { loadIservCredentials, saveIservCredentials } from "../ink/iservSettings.js";
 import { loadAgentConfig, saveAgentConfig } from "../agent/agentSettings.js";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { createInputState, reducePointerInput } from "../ink/inputPolicy.js";
@@ -169,6 +170,25 @@ export default function Settings({ onBack }) {
       password: untisPassword,
     });
   }, [untisSchool, untisServer, untisUsername, untisPassword]);
+
+  // IServ-Sync-Account (Supabase) — dieselbe Ablage wie die Untis-Zugangsdaten,
+  // nativ verschlüsselt, ohne Cloud-Spiegel.
+  const [iservEmail, setIservEmail] = useState("");
+  const [iservPassword, setIservPassword] = useState("");
+  const iservLoadedRef = useRef(false);
+
+  useEffect(() => {
+    loadIservCredentials().then((stored) => {
+      setIservEmail(stored?.email || "");
+      setIservPassword(stored?.password || "");
+      iservLoadedRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!iservLoadedRef.current) return;
+    saveIservCredentials({ email: iservEmail, password: iservPassword });
+  }, [iservEmail, iservPassword]);
 
   // Modals & Overlays
   const [isCalibrating, setIsCalibrating] = useState(false);
@@ -936,6 +956,41 @@ export default function Settings({ onBack }) {
                   onChange={(e) => setUntisPassword(e.target.value)}
                   autoComplete="current-password"
                   data-testid="untis-password-input"
+                />
+              </div>
+            </div>
+
+            <div className="settings-section-caption" style={{ marginTop: 20 }}>
+              ISERV-SYNC
+            </div>
+            <p className="settings-detail-copy" style={{ marginBottom: 12 }}>
+              Gemeinsamer Account, mit dem das PC-Script die IServ-Aufgaben ablegt und die App sie liest.
+            </p>
+            <div className="settings-group">
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">E-Mail</div>
+                </div>
+                <input
+                  type="email"
+                  className="settings-text-input"
+                  value={iservEmail}
+                  onChange={(e) => setIservEmail(e.target.value)}
+                  autoComplete="username"
+                  data-testid="iserv-email-input"
+                />
+              </div>
+              <div className="settings-control-row">
+                <div>
+                  <div className="settings-control-title">Passwort</div>
+                </div>
+                <input
+                  type="password"
+                  className="settings-text-input"
+                  value={iservPassword}
+                  onChange={(e) => setIservPassword(e.target.value)}
+                  autoComplete="current-password"
+                  data-testid="iserv-password-input"
                 />
               </div>
             </div>
