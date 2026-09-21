@@ -136,10 +136,14 @@ Abhängigkeit)
    (`get_task_by_id`) und baut die Zeile. Die Frist wird per Regex
    `(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})` zu ISO, ein ungültiges Datum wie
    `31.02.` ergibt `null`.
-3. Anhänge mit `file_data` und höchstens `max_attachment_mb` werden nach
+3. Vor dem Hochladen liest es per `GET {url}/rest/v1/iserv_tasks?select=attachments`
+   die Pfade, die schon in der Cloud stehen, und lädt diese nicht erneut hoch
+   (sonst ginge jede PDF bei jedem Lauf noch einmal über die Leitung).
+   Anhänge mit `file_data` und höchstens `max_attachment_mb` werden nach
    `POST {url}/storage/v1/object/notesapp-iserv/<pfad>` hochgeladen, ohne
-   Upsert. Ein 409 („gibt es schon") zählt als Erfolg. Anhänge ohne Daten
-   (Download gescheitert oder zu groß) bekommen `path: null`.
+   Upsert. „Gibt es schon" (HTTP 409, oder je nach Supabase-Version HTTP 400 mit
+   `statusCode: "409"` im Body) zählt als Erfolg. Anhänge ohne Daten (Download
+   gescheitert oder zu groß) bekommen `path: null`.
 4. Alle Zeilen gehen in einem Aufruf an
    `POST {url}/rest/v1/iserv_tasks?on_conflict=user_id,id` mit
    `Content-Profile: notesapp` und
