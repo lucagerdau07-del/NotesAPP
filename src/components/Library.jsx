@@ -2874,7 +2874,11 @@ function untisMinutes(hhmm) {
 
 // Real WebUntis-style grid: time axis on the left, Mo–Fr columns, lessons
 // positioned by minute so overlapping courses (Kurse) can sit side by side.
-function UntisWeekGrid({ lessons, monday }) {
+// Times of the school day, used to draw an empty grid for weeks without data.
+const UNTIS_DEFAULT_STARTS = [800, 920, 1050, 1220, 1340, 1500];
+const UNTIS_DEFAULT_END = 1620;
+
+function UntisWeekGrid({ lessons, monday, note }) {
   const days = Array.from({ length: 5 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
@@ -2888,24 +2892,20 @@ function UntisWeekGrid({ lessons, monday }) {
   });
   const allLessons = lessonsByDay.flat();
 
-  if (allLessons.length === 0) {
-    return (
-      <div className="agent-card" style={{ color: "rgba(255,255,255,.6)", font: "500 12.5px Manrope,sans-serif" }}>
-        Diese Woche keine Stunden.
-      </div>
-    );
-  }
-
-  const minStart = Math.min(...allLessons.map((l) => untisMinutes(l.startTime)));
-  const maxEnd = Math.max(...allLessons.map((l) => untisMinutes(l.endTime)));
+  const startTimes = allLessons.length
+    ? [...new Set(allLessons.map((l) => l.startTime))].sort((a, b) => a - b)
+    : UNTIS_DEFAULT_STARTS;
+  const minStart = allLessons.length ? Math.min(...allLessons.map((l) => untisMinutes(l.startTime))) : untisMinutes(UNTIS_DEFAULT_STARTS[0]);
+  const maxEnd = allLessons.length ? Math.max(...allLessons.map((l) => untisMinutes(l.endTime))) : untisMinutes(UNTIS_DEFAULT_END);
   const total = maxEnd - minStart;
   // Only lesson starts, and never two labels closer than 20 min: end times just
   // repeated the next start a few pixels lower and made the axis unreadable.
   const axisTimes = [];
-  for (const t of [...new Set(allLessons.map((l) => l.startTime))].sort((a, b) => a - b)) {
+  for (const t of startTimes) {
     const last = axisTimes[axisTimes.length - 1];
     if (last === undefined || untisMinutes(t) - untisMinutes(last) >= 20) axisTimes.push(t);
   }
+  if (!note && allLessons.length === 0) note = "Diese Woche keine Stunden.";
 
   // Cluster mutually overlapping lessons per day so parallel courses split the column width.
   const clusteredByDay = lessonsByDay.map((dayLessons) => {
@@ -2928,6 +2928,9 @@ function UntisWeekGrid({ lessons, monday }) {
 
   return (
     <div className="untis-grid">
+      {note && (
+        <div style={{ color: "rgba(255,255,255,.6)", font: "500 12px Manrope,sans-serif", padding: "0 4px 8px" }}>{note}</div>
+      )}
       <div className="untis-grid-head">
         <div className="untis-time-col-head">
           <span>KW {untisISOWeek(monday)}</span>
@@ -2982,7 +2985,10 @@ function UntisWeekGrid({ lessons, monday }) {
                 // Entfall = flagged cancelled, or the teacher/room was struck out ("---")
                 // with no substitute entered (e.g. "eigenverantwortliches Arbeiten").
                 const removed = (list) => list?.length > 0 && list.every((x) => x.id === 0 || x.name === "---");
-                const cancelled = lesson.code === "cancelled" || removed(lesson.te) || removed(lesson.ro);
+                // Untis also enters a cancellation as substText only (code stays unset,
+                // teacher list is empty for students), e.g. Spanisch on 2026-09-21.
+                const selfStudy = /eigenverantwortlich/i.test(lesson.substText || "") && subject !== "Lernzeit";
+                const cancelled = lesson.code === "cancelled" || removed(lesson.te) || removed(lesson.ro) || selfStudy;
                 const irregular = lesson.code === "irregular";
                 const color = cancelled
                   ? { accent: "#ff5a4f", bg: "rgba(255,90,79,.24)" }
@@ -4219,9 +4225,7 @@ export default function Library({
               </div>
             )}
             {untisStatus === "error" && (
-              <div className="agent-card" style={{ color: "rgba(255,69,58,.85)", font: "500 12.5px Manrope,sans-serif" }}>
-                {untisError}
-              </div>
+              <UntisWeekGrid lessons={[]} monday={untisMonday(untisWeekOffset)} note={untisError} />
             )}
             {untisStatus === "ready" && (
               <UntisWeekGrid lessons={untisLessons} monday={untisMonday(untisWeekOffset)} />
