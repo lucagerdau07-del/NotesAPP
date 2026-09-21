@@ -56,6 +56,7 @@ import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import useKnowledge from "../hooks/useKnowledge.js";
+import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserFolderRepository } from "../storage/folderRepository.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
@@ -3304,12 +3305,15 @@ export default function Library({
       (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
   }));
   const untisSubjects = [...new Set(untisLessons.map((lesson) => lesson.subject).filter(Boolean))];
-  const sourceNoteTitles = Object.fromEntries(
-    knowledgeNotes
-      .filter((note) => note.id && note.title)
-      .map((note) => [note.id, note.title]),
-  );
-  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects });
+  const sourceNoteTitles = {
+    ...Object.fromEntries(
+      knowledgeNotes
+        .filter((note) => note.id && note.title)
+        .map((note) => [note.id, note.title]),
+    ),
+    iserv: "IServ",
+  };
+  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects, syncIserv });
   const allNotes = [...importedCards, ...createdCards];
 
   // Filter notes by selected subject and search query

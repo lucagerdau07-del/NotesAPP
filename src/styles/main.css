@@ -5131,3 +5131,64 @@ body::after {
   0%, 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
 }
+
+/* IServ-Aufgaben im Plan-Bildschirm: die Karten erben .plan-term. */
+.iserv-section {
+  margin-bottom: 22px;
+}
+
+.iserv-task {
+  padding: 0;
+}
+
+.iserv-task-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 44px;
+  padding: 11px 13px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.iserv-task-summary::-webkit-details-marker {
+  display: none;
+}
+
+.iserv-task-summary:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: -2px;
+  border-radius: 14px;
+}
+
+.iserv-task-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 13px 12px;
+}
+
+.iserv-task-body {
+  font: 500 12.5px/1.45 "Manrope", sans-serif;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.iserv-task-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.iserv-task-files .plan-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.iserv-task-done {
+  align-self: flex-start;
+}

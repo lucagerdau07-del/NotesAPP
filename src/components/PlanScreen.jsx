@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { isoDate } from "../knowledge/studyPlan.js";
+import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
+import { iservClient } from "../lib/iservClient.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
+import IservTaskList from "./IservTaskList.jsx";
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
@@ -21,11 +24,25 @@ function freeDayLabel(iso) {
 
 export default function PlanScreen({ onBack }) {
   const notes = useMemo(() => browserNoteRepository.listNotes(), []);
-  const knowledge = useKnowledge({ notes, subjects: [] });
+  const knowledge = useKnowledge({ notes, subjects: [], syncIserv });
   const [query, setQuery] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
+  const [attachmentError, setAttachmentError] = useState(false);
 
-  const { plan, refreshPlan, isPlanning, terms } = knowledge;
+  const { plan, refreshPlan, isPlanning, terms, events, setEventDone, iservState } = knowledge;
+
+  const iservEvents = useMemo(
+    () =>
+      events
+        .filter((event) => event.iservId && !event.done)
+        .sort((left, right) => left.due.localeCompare(right.due)),
+    [events],
+  );
+
+  const openAttachment = (attachment) => {
+    setAttachmentError(false);
+    openIservAttachment({ client: iservClient, attachment }).catch(() => setAttachmentError(true));
+  };
 
   // Ein Plan von gestern ist wertlos - beim Öffnen wird er einmal erneuert.
   // Der Ref und nicht das Plandatum ist die Abbruchbedingung: schlägt das
@@ -111,7 +128,24 @@ export default function PlanScreen({ onBack }) {
           ))}
         </section>
 
-        <section className="plan-column" aria-labelledby="plan-glossary-title">
+        <div className="plan-column">
+          {(iservEvents.length > 0 || iservState === "error") && (
+            <section className="iserv-section" aria-labelledby="plan-iserv-title">
+              <h2 className="plan-section-title" id="plan-iserv-title">IServ-Aufgaben</h2>
+              {iservState === "error" && (
+                <div className="plan-hint" role="status">IServ-Sync nicht erreichbar.</div>
+              )}
+              {attachmentError && (
+                <div className="plan-hint" role="status">Anhang konnte nicht geöffnet werden.</div>
+              )}
+              <IservTaskList
+                events={iservEvents}
+                onDone={setEventDone}
+                onOpenAttachment={openAttachment}
+              />
+            </section>
+          )}
+          <section aria-labelledby="plan-glossary-title">
           <h2 className="plan-section-title" id="plan-glossary-title">Glossar</h2>
           <input
             type="search"
@@ -154,7 +188,8 @@ export default function PlanScreen({ onBack }) {
               {term.definition && <div className="plan-term-body">{term.definition}</div>}
             </article>
           ))}
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
