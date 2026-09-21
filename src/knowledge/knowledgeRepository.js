@@ -19,8 +19,12 @@ function normalizeKey(value) {
     .trim();
 }
 
+// IServ-Termine sind über ihre IServ-ID eindeutig: ändert sich Titel oder Frist,
+// wird derselbe Termin aktualisiert statt ein zweiter angelegt.
 const eventKey = (event) =>
-  `${event.kind}|${normalizeKey(event.subject)}|${event.due}|${normalizeKey(event.title)}`;
+  event.iservId
+    ? `iserv|${event.iservId}`
+    : `${event.kind}|${normalizeKey(event.subject)}|${event.due}|${normalizeKey(event.title)}`;
 
 const termKey = (term) => `${normalizeKey(term.subject)}|${normalizeKey(term.term)}`;
 
@@ -99,6 +103,14 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           subject: raw.subject,
           due: raw.due,
           sourceNoteId,
+          ...(raw.iservId
+            ? {
+                iservId: raw.iservId,
+                url: raw.url,
+                description: raw.description,
+                attachments: raw.attachments,
+              }
+            : {}),
           done: false,
           createdAt: timestamp,
           updatedAt: timestamp,
