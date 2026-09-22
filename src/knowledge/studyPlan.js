@@ -22,6 +22,9 @@ export const URGENT_LEAD_DAYS = 2;
 const MORNING_CUTOFF = "12:00";
 
 export const PLAN_DAYS = 7;
+// Hochzählen, wenn sich die Planungsregeln ändern: ein gespeicherter Plan mit
+// älterer Version wird dann sofort neu berechnet statt erst am nächsten Tag.
+export const PLAN_RULES_VERSION = 2;
 
 export function isoDate(value) {
   const date = new Date(value);
@@ -67,6 +70,19 @@ function daysThrough(startIso, endIso) {
 
 const dueDayIsWorkable = (event) => !event.time || event.time >= MORNING_CUTOFF;
 
+// Der letzte Tag, an dem an einer Aufgabe noch gearbeitet werden kann. Einzige
+// Quelle dieser Regel - Budgets, Rückfallplan und Modellprüfung nutzen sie alle.
+// Überfälliges und heute früh Fälliges landet auf heute statt ganz zu verschwinden.
+export function lastWorkDay(event, today) {
+  const due = event.due < today ? today : event.due;
+  if (due === today || (event.kind !== "exam" && dueDayIsWorkable(event))) return due;
+  const previous = dateOf(due);
+  previous.setDate(previous.getDate() - 1);
+  return isoDate(previous);
+}
+
+const isLearnable = (event) => event && !event.done && event.kind !== "appointment";
+
 export function dailyBudgets(events, { today, days = PLAN_DAYS } = {}) {
   const window = daysFrom(today, days);
   const demand = new Map(window.map((iso) => [iso, 0]));
@@ -74,20 +90,14 @@ export function dailyBudgets(events, { today, days = PLAN_DAYS } = {}) {
   // "weit-weg"-Deckel nicht, egal wie viele Aufgaben insgesamt anliegen.
   const urgentDates = new Set();
 
-  const openEvents = (Array.isArray(events) ? events : []).filter(
-    (event) => event && !event.done && event.kind !== "appointment",
-  );
+  const openEvents = (Array.isArray(events) ? events : []).filter(isLearnable);
 
   for (const event of openEvents) {
     const due = event.due < today ? today : event.due;
-    let spread = daysThrough(today, due);
-    if (event.kind === "exam" || !dueDayIsWorkable(event)) {
-      spread = spread.filter((iso) => iso < due);
-    }
+    let spread = daysThrough(today, lastWorkDay(event, today));
     if (event.kind === "exam") {
       spread = spread.slice(-EXAM_LEAD_DAYS);
     }
-    if (spread.length === 0) spread = [today];
 
     const minutes = event.kind === "exam" ? EXAM_MINUTES : HOMEWORK_MINUTES;
     const share = minutes / spread.length;
@@ -115,29 +125,43 @@ const KIND_LABELS = { exam: "Klausur", review: "Wiederholung", appointment: "Ter
 
 const PLAN_SYSTEM_PROMPT = [
   "Du bist der Lernplaner einer Schul-Notizbuch-App. Du antwortest ausschließlich mit JSON, ohne Fließtext davor oder danach.",
-  'Format: {"days":{"YYYY-MM-DD":[{"subject":"","task":"","minutes":0}]}}',
+  'Format: {"days":{"YYYY-MM-DD":[{"ref":"","subject":"","task":"","minutes":0}]}}',
   "Du bekommst für jeden Tag ein festes Minutenbudget. Die Summe der Blockminuten eines Tages darf dieses Budget nicht überschreiten.",
   "Tage mit Budget 0 bekommen keine Blöcke.",
+  'Jede Aufgabe hat eine Kennung wie "A1". Ein Block, der an einer Aufgabe arbeitet, trägt deren Kennung in "ref"; ein Wiederholungsblock hat "ref":"".',
+  "Eine Aufgabe darfst du nur an den Tagen einplanen, bei denen sie unter \"möglich\" steht - nie danach, auch nicht am Abgabetag, wenn er dort fehlt.",
   "Plane vorrangig, was fällig ist: nahe Hausaufgaben zuerst, Klausurstoff verteilt über die Tage davor.",
-  "Eine Abgabe mit Uhrzeit vor 12:00 ist am Abgabetag selbst nicht mehr zu schaffen - dafür keinen Block mehr an diesem Tag einplanen, nur an den Tagen davor.",
   "Ist Budget übrig, plane Wiederholung mit den genannten Begriffen und Fächern.",
   "Jede Aufgabe ist ein kurzer, konkreter deutscher Satz, kein Schlagwort.",
 ].join("\n");
 
-function planRequest({ events, terms, subjects, budgets, today }) {
-  const open = events.filter((event) => !event.done);
+// Kennung je lernbarer Aufgabe, damit sich jeder Modellblock eindeutig prüfen lässt.
+const refsOf = (events) => new Map(events.filter(isLearnable).map((event, index) => [`A${index + 1}`, event]));
+
+function planRequest({ events, terms, subjects, budgets, today, refs }) {
+  const appointments = events.filter((event) => !event.done && event.kind === "appointment");
+  const workableOn = (date) =>
+    [...refs].filter(([, event]) => date <= lastWorkDay(event, today)).map(([ref]) => ref);
   return [
     `Heutiges Datum: ${today}.`,
     "",
-    "Budgets (Minuten je Tag, unveränderlich):",
-    ...budgets.map((day) => `- ${day.date}: ${day.budgetMinutes}`),
+    "Budgets (Minuten je Tag, unveränderlich) und an dem Tag mögliche Aufgaben:",
+    ...budgets.map((day) => {
+      const possible = workableOn(day.date);
+      return `- ${day.date}: ${day.budgetMinutes} Min · möglich: ${possible.length ? possible.join(", ") : "nur Wiederholung"}`;
+    }),
     "",
-    "Offene Termine:",
-    ...(open.length
-      ? open.map(
-          (event) =>
-            `- ${event.due}${event.time ? ` ${event.time}` : ""} · ${KIND_LABELS[event.kind] || "Hausaufgabe"} · ${event.subject || "ohne Fach"} · ${event.title}`,
+    "Offene Aufgaben:",
+    ...(refs.size
+      ? [...refs].map(
+          ([ref, event]) =>
+            `- ${ref} · fällig ${event.due}${event.time ? ` ${event.time}` : ""} · ${KIND_LABELS[event.kind] || "Hausaufgabe"} · ${event.subject || "ohne Fach"} · ${event.title}`,
         )
+      : ["- keine"]),
+    "",
+    "Termine (keine Lernaufgaben, nur zur Orientierung):",
+    ...(appointments.length
+      ? appointments.map((event) => `- ${event.due}${event.time ? ` ${event.time}` : ""} · ${event.title}`)
       : ["- keine"]),
     "",
     `Fächer im Stundenplan: ${subjects.length ? subjects.join(", ") : "unbekannt"}.`,
@@ -182,12 +206,10 @@ function mostLoadedSubject(events) {
 // ein Block, der Rest Wiederholung im am stärksten belasteten Fach.
 function fallbackBlocks(date, events, budgetMinutes, today) {
   if (budgetMinutes <= 0) return [];
-  const open = events.filter((event) => !event.done && event.kind !== "appointment");
-  const dueOn = (event) => (event.due < today ? today : event.due);
-  // Am Fälligkeitstag selbst nur noch einplanen, wenn die Abgabe nicht schon vormittags ist.
+  const open = events.filter(isLearnable);
   const dueFromDate = open
-    .filter((event) => date < dueOn(event) || (date === dueOn(event) && dueDayIsWorkable(event)))
-    .sort((left, right) => dueOn(left).localeCompare(dueOn(right)));
+    .filter((event) => date <= lastWorkDay(event, today))
+    .sort((left, right) => lastWorkDay(left, today).localeCompare(lastWorkDay(right, today)));
   const blocks = dueFromDate.slice(0, 3).map((event) => ({
     subject: event.subject,
     task: event.kind === "exam" ? `Vorbereitung: ${event.title}` : event.title,
@@ -204,15 +226,31 @@ function fallbackBlocks(date, events, budgetMinutes, today) {
   return blocks;
 }
 
+// Harte Regel gegen das Modell: kein Block für eine Aufgabe nach ihrem letzten
+// Arbeitstag - per Kennung, und ohne Kennung über den Aufgabentitel im Text.
+function allowedOn(date, today, refs) {
+  const expired = [...refs.values()]
+    .filter((event) => date > lastWorkDay(event, today))
+    .map((event) => String(event.title ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  return (block) => {
+    const event = refs.get(String(block?.ref ?? "").trim());
+    if (event) return date <= lastWorkDay(event, today);
+    const text = String(block?.task ?? "").toLowerCase();
+    return !expired.some((title) => text.includes(title));
+  };
+}
+
 export async function buildPlan({ events = [], terms = [], subjects = [], today, complete }) {
   const budgets = dailyBudgets(events, { today });
+  const refs = refsOf(events);
 
   let blocksByDate = null;
   try {
     const message = await complete({
       messages: [
         { role: "system", content: PLAN_SYSTEM_PROMPT },
-        { role: "user", content: planRequest({ events, terms, subjects, budgets, today }) },
+        { role: "user", content: planRequest({ events, terms, subjects, budgets, today, refs }) },
       ],
     });
     const parsed = extractJson(message?.content);
@@ -224,11 +262,14 @@ export async function buildPlan({ events = [], terms = [], subjects = [], today,
 
   return {
     generatedFor: today,
+    rules: PLAN_RULES_VERSION,
     days: budgets.map(({ date, budgetMinutes }) => ({
       date,
       budgetMinutes,
       blocks: fitBlocks(
-        blocksByDate?.[date] ?? fallbackBlocks(date, events, budgetMinutes, today),
+        Array.isArray(blocksByDate?.[date])
+          ? blocksByDate[date].filter(allowedOn(date, today, refs))
+          : fallbackBlocks(date, events, budgetMinutes, today),
         budgetMinutes,
       ),
     })),

@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import useKnowledge from "../hooks/useKnowledge.js";
-import { isoDate } from "../knowledge/studyPlan.js";
+import { isoDate, PLAN_RULES_VERSION } from "../knowledge/studyPlan.js";
 import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
 import {
   ENTRY_TYPES,
@@ -266,10 +266,10 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
   const planRequestedRef = useRef(false);
   useEffect(() => {
     if (planRequestedRef.current) return;
-    if (plan?.generatedFor === today) return;
+    if (plan?.generatedFor === today && plan?.rules === PLAN_RULES_VERSION) return;
     planRequestedRef.current = true;
     void refreshPlan();
-  }, [plan?.generatedFor, refreshPlan, today]);
+  }, [plan?.generatedFor, plan?.rules, refreshPlan, today]);
 
   const lessons = useMemo(
     () => mondaysOfMonth(month.year, month.month).flatMap((monday) => loadArchivedWeek(monday) || []),

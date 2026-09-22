@@ -14,7 +14,7 @@ import CalendarScreen from "../src/components/CalendarScreen.jsx";
 import { requestCompletion } from "../src/agent/agentClient.js";
 import { openIservAttachment, syncIserv } from "../src/knowledge/iservSync.js";
 import { KNOWLEDGE_STORAGE_KEY } from "../src/knowledge/knowledgeRepository.js";
-import { isoDate } from "../src/knowledge/studyPlan.js";
+import { isoDate, PLAN_RULES_VERSION } from "../src/knowledge/studyPlan.js";
 
 const today = isoDate(Date.now());
 const available = { filename: "Blatt 3.pdf", path: "u/h/Blatt_3.pdf", size_bytes: 3 };
@@ -40,7 +40,7 @@ function seed({ events = [iservEvent], plan } = {}) {
       events,
       terms: [],
       // Ein Plan von heute: der Bildschirm soll ihn nicht neu berechnen.
-      plan: plan === undefined ? { generatedFor: today, days: [] } : plan,
+      plan: plan === undefined ? { generatedFor: today, rules: PLAN_RULES_VERSION, days: [] } : plan,
       settings: { autoScan: false },
     }),
   );
@@ -65,7 +65,7 @@ describe("CalendarScreen", () => {
   it("zeigt Lernplan-Blöcke als Einträge", () => {
     seed({
       events: [],
-      plan: { generatedFor: today, days: [{ date: today, budgetMinutes: 70, blocks: [{ subject: "Mathe", task: "Aufgabe 4", minutes: 70 }] }] },
+      plan: { generatedFor: today, rules: PLAN_RULES_VERSION, days: [{ date: today, budgetMinutes: 70, blocks: [{ subject: "Mathe", task: "Aufgabe 4", minutes: 70 }] }] },
     });
     render(<CalendarScreen onBack={() => {}} />);
     expect(screen.getAllByText("Aufgabe 4").length).toBeGreaterThan(0);
@@ -154,5 +154,18 @@ describe("CalendarScreen", () => {
     } finally {
       storageWrite.mockRestore();
     }
+  });
+
+  it("berechnet einen heutigen Plan nach älteren Regeln sofort neu", async () => {
+    seed({ events: [], plan: { generatedFor: today, rules: PLAN_RULES_VERSION - 1, days: [] } });
+    render(<CalendarScreen onBack={() => {}} />);
+    await waitFor(() => expect(stored().plan.rules).toBe(PLAN_RULES_VERSION));
+    expect(requestCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("lässt einen heutigen Plan nach aktuellen Regeln stehen", () => {
+    seed({ events: [] });
+    render(<CalendarScreen onBack={() => {}} />);
+    expect(requestCompletion).not.toHaveBeenCalled();
   });
 });

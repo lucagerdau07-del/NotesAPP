@@ -6,6 +6,7 @@ import {
   FAR_CAP_MINUTES,
   HOME_BASE_MINUTES,
   isoDate,
+  lastWorkDay,
 } from "../src/knowledge/studyPlan.js";
 
 // 2026-09-07 is a Monday (Lernzeit-Tag), 2026-09-09 a Wednesday (kein Lernzeit-Tag).
@@ -271,5 +272,94 @@ describe("buildPlan", () => {
     const wednesday = plan.days.find((day) => day.date === WEDNESDAY_DATE);
     expect(wednesday.blocks[0].subject).toBe("Mathe");
     expect(wednesday.blocks.at(-1).subject).toBe("Bio");
+  });
+});
+
+describe("lastWorkDay", () => {
+  const homework = (due, time) => ({ kind: "homework", title: "x", due, ...(time ? { time } : {}) });
+
+  it("ends the day before a morning or midnight deadline", () => {
+    expect(lastWorkDay(homework("2026-09-10", "00:00"), MONDAY)).toBe(WEDNESDAY_DATE);
+    expect(lastWorkDay(homework("2026-09-10", "07:45"), MONDAY)).toBe(WEDNESDAY_DATE);
+  });
+
+  it("keeps the due day for an afternoon deadline or none at all", () => {
+    expect(lastWorkDay(homework("2026-09-10", "18:00"), MONDAY)).toBe("2026-09-10");
+    expect(lastWorkDay(homework("2026-09-10"), MONDAY)).toBe("2026-09-10");
+  });
+
+  it("never plans exam preparation on the exam day", () => {
+    expect(lastWorkDay({ kind: "exam", title: "x", due: "2026-09-10" }, MONDAY)).toBe(WEDNESDAY_DATE);
+  });
+
+  it("puts overdue and due-this-morning work on today", () => {
+    expect(lastWorkDay(homework("2026-09-01"), MONDAY)).toBe(MONDAY);
+    expect(lastWorkDay(homework(MONDAY, "07:45"), MONDAY)).toBe(MONDAY);
+  });
+});
+
+describe("buildPlan hält Abgabefristen hart ein", () => {
+  // Wie die Philo-Lernzeit: Abgabe Donnerstag 00:00, also nur bis Mittwoch machbar.
+  const THURSDAY = "2026-09-10";
+  const FRIDAY = "2026-09-11";
+  const philo = { kind: "homework", title: "Lernzeit Philosophie", subject: "Philosophie", due: THURSDAY, time: "00:00", done: false };
+  const answerFor = (blocksByDate) => ({ content: JSON.stringify({ days: blocksByDate }) });
+  const dayOf = (plan, date) => plan.days.find((day) => day.date === date);
+
+  it("verwirft Modellblöcke mit Kennung am oder nach dem Abgabetag", async () => {
+    const block = { ref: "A1", subject: "Philosophie", task: "Philo bearbeiten", minutes: 20 };
+    const plan = await buildPlan({
+      events: [philo],
+      today: MONDAY,
+      complete: async () => answerFor({ [WEDNESDAY_DATE]: [block], [THURSDAY]: [block], [FRIDAY]: [block] }),
+    });
+
+    expect(dayOf(plan, WEDNESDAY_DATE).blocks).toHaveLength(1);
+    expect(dayOf(plan, THURSDAY).blocks).toEqual([]);
+    expect(dayOf(plan, FRIDAY).blocks).toEqual([]);
+  });
+
+  it("verwirft Blöcke ohne Kennung, die eine abgelaufene Aufgabe beim Namen nennen", async () => {
+    const plan = await buildPlan({
+      events: [philo],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({
+          [THURSDAY]: [
+            { subject: "Philosophie", task: "Lernzeit Philosophie fertig machen", minutes: 20 },
+            { ref: "", subject: "Philosophie", task: "Begriffe wiederholen", minutes: 10 },
+          ],
+        }),
+    });
+
+    expect(dayOf(plan, THURSDAY).blocks.map((block) => block.task)).toEqual(["Begriffe wiederholen"]);
+  });
+
+  it("plant die Aufgabe im Rückfallplan nicht am Abgabetag ein", async () => {
+    const plan = await buildPlan({
+      events: [philo],
+      today: MONDAY,
+      complete: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    expect(dayOf(plan, WEDNESDAY_DATE).blocks[0].task).toBe("Lernzeit Philosophie");
+    expect(dayOf(plan, THURSDAY).blocks.some((block) => block.task === "Lernzeit Philosophie")).toBe(false);
+  });
+
+  it("sagt dem Modell je Tag, welche Aufgaben noch möglich sind", async () => {
+    let request = "";
+    await buildPlan({
+      events: [philo],
+      today: MONDAY,
+      complete: async ({ messages }) => {
+        request = messages[1].content;
+        return answerFor({});
+      },
+    });
+
+    expect(request).toContain(`${WEDNESDAY_DATE}: ${BASE_MINUTES + 10} Min · möglich: A1`);
+    expect(request).toMatch(new RegExp(`${THURSDAY}: \\d+ Min · möglich: nur Wiederholung`));
   });
 });
