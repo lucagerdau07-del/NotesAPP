@@ -142,16 +142,8 @@ export default function useKnowledge({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    if (syncIservRef.current) {
-      // Ein Plan von vor dem Pull kennt die neuen Aufgaben nicht. Er ist abgeleitet
-      // und wird verworfen, der Plan-Bildschirm baut ihn beim Öffnen neu.
-      void pullIserv().then((added) => {
-        if (added > 0) {
-          repository.savePlan(null);
-          setState(repository.read());
-        }
-      });
-    }
+    // Neue oder geänderte Aufgaben machen den Plan über planInputsKey veraltet.
+    if (syncIservRef.current) void pullIserv();
     if (!repository.read().settings.autoScan) return;
     scanNow();
   }, [repository, scanNow, pullIserv]);

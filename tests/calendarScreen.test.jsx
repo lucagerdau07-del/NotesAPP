@@ -14,7 +14,7 @@ import CalendarScreen from "../src/components/CalendarScreen.jsx";
 import { requestCompletion } from "../src/agent/agentClient.js";
 import { openIservAttachment, syncIserv } from "../src/knowledge/iservSync.js";
 import { KNOWLEDGE_STORAGE_KEY } from "../src/knowledge/knowledgeRepository.js";
-import { isoDate, PLAN_RULES_VERSION } from "../src/knowledge/studyPlan.js";
+import { isoDate, PLAN_RULES_VERSION, planInputsKey } from "../src/knowledge/studyPlan.js";
 
 const today = isoDate(Date.now());
 const available = { filename: "Blatt 3.pdf", path: "u/h/Blatt_3.pdf", size_bytes: 3 };
@@ -32,6 +32,14 @@ const iservEvent = {
   attachments: [available, missing],
 };
 
+// Ein Plan von heute zu genau diesen Aufgaben: der Bildschirm soll ihn nicht neu berechnen.
+const currentPlan = (events, days = []) => ({
+  generatedFor: today,
+  rules: PLAN_RULES_VERSION,
+  inputs: planInputsKey(events),
+  days,
+});
+
 function seed({ events = [iservEvent], plan } = {}) {
   globalThis.localStorage.setItem(
     KNOWLEDGE_STORAGE_KEY,
@@ -39,8 +47,7 @@ function seed({ events = [iservEvent], plan } = {}) {
       version: 1,
       events,
       terms: [],
-      // Ein Plan von heute: der Bildschirm soll ihn nicht neu berechnen.
-      plan: plan === undefined ? { generatedFor: today, rules: PLAN_RULES_VERSION, days: [] } : plan,
+      plan: plan === undefined ? currentPlan(events) : plan,
       settings: { autoScan: false },
     }),
   );
@@ -65,7 +72,7 @@ describe("CalendarScreen", () => {
   it("zeigt Lernplan-Blöcke als Einträge", () => {
     seed({
       events: [],
-      plan: { generatedFor: today, rules: PLAN_RULES_VERSION, days: [{ date: today, budgetMinutes: 70, blocks: [{ subject: "Mathe", task: "Aufgabe 4", minutes: 70 }] }] },
+      plan: currentPlan([], [{ date: today, budgetMinutes: 70, blocks: [{ subject: "Mathe", task: "Aufgabe 4", minutes: 70 }] }]),
     });
     render(<CalendarScreen onBack={() => {}} />);
     expect(screen.getAllByText("Aufgabe 4").length).toBeGreaterThan(0);
@@ -157,15 +164,24 @@ describe("CalendarScreen", () => {
   });
 
   it("berechnet einen heutigen Plan nach älteren Regeln sofort neu", async () => {
-    seed({ events: [], plan: { generatedFor: today, rules: PLAN_RULES_VERSION - 1, days: [] } });
+    seed({ events: [], plan: { ...currentPlan([]), rules: PLAN_RULES_VERSION - 1 } });
     render(<CalendarScreen onBack={() => {}} />);
     await waitFor(() => expect(stored().plan.rules).toBe(PLAN_RULES_VERSION));
     expect(requestCompletion).toHaveBeenCalledTimes(1);
   });
 
-  it("lässt einen heutigen Plan nach aktuellen Regeln stehen", () => {
-    seed({ events: [] });
+  it("berechnet den Plan neu, wenn sich eine Frist geändert hat", async () => {
+    const withTime = { ...iservEvent, time: "07:45" };
+    seed({ events: [withTime], plan: currentPlan([iservEvent]) });
     render(<CalendarScreen onBack={() => {}} />);
+    await waitFor(() => expect(stored().plan.inputs).toBe(planInputsKey([withTime])));
+    expect(requestCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("lässt einen aktuellen Plan stehen, fragt aber IServ nach Neuem", async () => {
+    seed();
+    render(<CalendarScreen onBack={() => {}} />);
+    await waitFor(() => expect(syncIserv).toHaveBeenCalledTimes(1));
     expect(requestCompletion).not.toHaveBeenCalled();
   });
 });

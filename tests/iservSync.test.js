@@ -74,6 +74,17 @@ describe("rowToEvent", () => {
     expect(rowToEvent(row({ due_time: null })).time).toBeUndefined();
     expect(rowToEvent(row({ due_time: "irgendwann" })).time).toBeUndefined();
   });
+
+  it("liest die Uhrzeit aus deadline_raw, wenn due_time fehlt", () => {
+    const philo = row({ due: "2026-09-28", due_time: null, deadline_raw: "2026-09-28T00:00:00+02:00" });
+    expect(rowToEvent(philo).time).toBe("00:00");
+  });
+
+  it("bevorzugt due_time und ignoriert ein deadline_raw mit anderem Datum", () => {
+    expect(rowToEvent(row({ due_time: "07:45", deadline_raw: "2026-09-24T18:00:00+02:00" })).time).toBe("07:45");
+    expect(rowToEvent(row({ deadline_raw: "2026-09-23T18:00:00+02:00" })).time).toBeUndefined();
+    expect(rowToEvent(row({ deadline_raw: "Do, 24.09.2026" })).time).toBeUndefined();
+  });
 });
 
 describe("pullIservEvents", () => {

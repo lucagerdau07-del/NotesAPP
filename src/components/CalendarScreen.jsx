@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import useKnowledge from "../hooks/useKnowledge.js";
-import { isoDate, PLAN_RULES_VERSION } from "../knowledge/studyPlan.js";
+import { isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
 import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
 import {
   ENTRY_TYPES,
@@ -260,16 +260,17 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
   const [attachmentError, setAttachmentError] = useState(false);
   const listRef = useRef(null);
 
-  // Ein Plan von gestern ist wertlos - beim Öffnen wird er einmal erneuert.
-  // Der Ref ist die Abbruchbedingung, damit ein fehlschlagendes Speichern
-  // den Aufruf nicht endlos wiederholt.
-  const planRequestedRef = useRef(false);
+  // Der Plan wird neu berechnet, sobald er nicht mehr zu heute, den Regeln oder
+  // den offenen Aufgaben passt. Der Ref merkt sich, für welchen Stand schon
+  // angefragt wurde, damit ein fehlschlagendes Speichern nicht endlos wiederholt.
+  const planCurrent = isPlanCurrent(plan, events, today);
+  const wantedPlan = `${today}|${planInputsKey(events)}`;
+  const planRequestedRef = useRef(null);
   useEffect(() => {
-    if (planRequestedRef.current) return;
-    if (plan?.generatedFor === today && plan?.rules === PLAN_RULES_VERSION) return;
-    planRequestedRef.current = true;
+    if (planCurrent || planRequestedRef.current === wantedPlan) return;
+    planRequestedRef.current = wantedPlan;
     void refreshPlan();
-  }, [plan?.generatedFor, plan?.rules, refreshPlan, today]);
+  }, [planCurrent, wantedPlan, refreshPlan]);
 
   const lessons = useMemo(
     () => mondaysOfMonth(month.year, month.month).flatMap((monday) => loadArchivedWeek(monday) || []),

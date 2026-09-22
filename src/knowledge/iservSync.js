@@ -6,6 +6,16 @@ export const ISERV_BUCKET = "notesapp-iserv";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIME = /^\d{2}:\d{2}$/;
+const RAW_ISO_DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
+
+// due_time fehlt bei Zeilen, die ein älterer Scraper geschrieben hat - die
+// Uhrzeit steckt dann trotzdem in deadline_raw (IServs data-date, ISO 8601).
+function timeOf(row, due) {
+  const time = String(row?.due_time ?? "");
+  if (ISO_TIME.test(time)) return time;
+  const raw = String(row?.deadline_raw ?? "").match(RAW_ISO_DATETIME);
+  return raw && raw[1] === due ? raw[2] : "";
+}
 
 // Eine Zeile aus notesapp.iserv_tasks als Termin der Terminplanung. Ohne Titel
 // oder lesbare Frist lässt sich nichts einplanen.
@@ -13,14 +23,14 @@ export function rowToEvent(row) {
   const title = String(row?.title ?? "").trim();
   const due = String(row?.due ?? "");
   if (!row?.id || !title || !ISO_DATE.test(due)) return null;
-  const time = String(row?.due_time ?? "");
+  const time = timeOf(row, due);
   return {
     kind: "homework",
     title,
     subject: String(row.subject ?? "").trim(),
     due,
     // Ohne Uhrzeit nimmt der Lernplan 23:59 an (siehe studyPlan.js).
-    ...(ISO_TIME.test(time) ? { time } : {}),
+    ...(time ? { time } : {}),
     iservId: String(row.id),
     url: String(row.url ?? ""),
     description: String(row.description ?? ""),

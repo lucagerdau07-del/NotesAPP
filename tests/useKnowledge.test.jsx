@@ -14,6 +14,7 @@ import useKnowledge from "../src/hooks/useKnowledge.js";
 import { requestCompletion } from "../src/agent/agentClient.js";
 import { KNOWLEDGE_STORAGE_KEY } from "../src/knowledge/knowledgeRepository.js";
 import { browserCommentRepository } from "../src/knowledge/commentRepository.js";
+import { isoDate, isPlanCurrent, planInputsKey, PLAN_RULES_VERSION } from "../src/knowledge/studyPlan.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -189,18 +190,20 @@ describe("useKnowledge", () => {
         JSON.stringify({ version: 1, events: [], terms: [], settings: { autoScan: false }, ...extra }),
       );
 
-    it("holt IServ-Termine beim Einhängen und verwirft einen älteren Plan", async () => {
-      seed({ plan: { generatedFor: "2026-01-01", days: [] } });
+    it("holt IServ-Termine beim Einhängen, wodurch ein heutiger Plan veraltet", async () => {
+      const today = isoDate(Date.now());
+      seed({ plan: { generatedFor: today, rules: PLAN_RULES_VERSION, inputs: planInputsKey([]), days: [] } });
       const syncIserv = vi.fn(
         async ({ repository }) =>
           repository.mergeFindings({ events: [iservEvent], sourceNoteId: "iserv" }).addedEvents,
       );
 
       const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+      expect(isPlanCurrent(result.current.plan, result.current.events, today)).toBe(true);
 
       await waitFor(() => expect(result.current.iservState).toBe("ok"));
       expect(result.current.events).toHaveLength(1);
-      expect(result.current.plan).toBeNull();
+      expect(isPlanCurrent(result.current.plan, result.current.events, today)).toBe(false);
     });
 
     it("behält den Plan, wenn der Pull nichts Neues bringt", async () => {

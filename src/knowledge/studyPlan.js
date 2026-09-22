@@ -83,6 +83,20 @@ export function lastWorkDay(event, today) {
 
 const isLearnable = (event) => event && !event.done && event.kind !== "appointment";
 
+// Alles, wovon der Plan abhängt. Weicht es vom gespeicherten Plan ab (neue
+// Aufgabe, andere Frist, erledigt), ist der Plan veraltet - nicht erst morgen.
+export function planInputsKey(events) {
+  return JSON.stringify(
+    (Array.isArray(events) ? events : [])
+      .filter(isLearnable)
+      .map((event) => [event.kind, event.title, event.subject || "", event.due, event.time || ""])
+      .sort(),
+  );
+}
+
+export const isPlanCurrent = (plan, events, today) =>
+  plan?.generatedFor === today && plan?.rules === PLAN_RULES_VERSION && plan?.inputs === planInputsKey(events);
+
 export function dailyBudgets(events, { today, days = PLAN_DAYS } = {}) {
   const window = daysFrom(today, days);
   const demand = new Map(window.map((iso) => [iso, 0]));
@@ -263,6 +277,7 @@ export async function buildPlan({ events = [], terms = [], subjects = [], today,
   return {
     generatedFor: today,
     rules: PLAN_RULES_VERSION,
+    inputs: planInputsKey(events),
     days: budgets.map(({ date, budgetMinutes }) => ({
       date,
       budgetMinutes,
