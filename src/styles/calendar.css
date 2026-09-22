@@ -387,7 +387,9 @@
 .cal .cal-detail {
   position: relative;
   min-width: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 36px 40px 40px;
 }
 
@@ -396,8 +398,32 @@
 }
 
 .cal-detail-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   max-width: 620px;
   animation: cal-detail-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cal-detail-inner > * {
+  flex: 0 0 auto;
+}
+
+/* Nur der Textblock (Aufgabenbeschreibung etc.) darf wachsen und scrollen -
+   der Rest des Fensters soll immer ohne Scrollen reinpassen. */
+.cal-detail-section:has(> .cal-detail-body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cal-detail-section:has(> .cal-detail-body) .cal-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 @keyframes cal-detail-in {
@@ -723,7 +749,7 @@
   }
 
   .cal[data-detail-open="true"] .cal-detail {
-    display: block;
+    display: flex;
   }
 
   .cal .cal-detail-close {
