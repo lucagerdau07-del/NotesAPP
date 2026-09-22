@@ -295,21 +295,51 @@ export function cullCaptureToGlass(instance) {
 
   capture._captureWithHtmlToImage = async function (element, w, h, cssW, cssH) {
     if (cssW <= 0 || cssH <= 0 || w <= 0 || h <= 0) return;
+    // Captures asked for in the same frame (every wrapper, right after the
+    // library mounts) would otherwise run their microtask chains back to back as
+    // one uninterruptible task. A task boundary in front of each lets a tap or a
+    // paint in between.
+    await new Promise((resolve) => setTimeout(resolve));
     const viewport = viewportMatrix(element);
+    // A fully transparent wrapper (the closed assistant panel: ~110 nodes of chat)
+    // clones to nothing anyway, since its opacity is copied along. A 1px stand-in
+    // keeps the render loop from asking again every frame; opening the panel
+    // rewrites its attributes and the change observer re-captures it for real.
+    if (getComputedStyle(element).opacity === "0") {
+      const blank = document.createElement("canvas");
+      blank.width = blank.height = 1;
+      this.cache.set(element, { canvas: blank, w, h, viewport });
+      return;
+    }
     const glassRects = [...instance.glassSet].map((glass) => glass.getBoundingClientRect());
     // A whole imported page counts as one: at fit-width no page reaches the
     // rail or the pills, and cloning it drags its canvases and link layer
     // through every capture (measured on a Galaxy Tab A7: ~750ms freeze after
     // each pause in scrolling, style copy and toDataURL over pages nobody sees
-    // through glass).
-    const offGlass = [...element.querySelectorAll("[data-object-id], .document-page")].filter((object) => {
-      const box = object.getBoundingClientRect();
+    // through glass). The same goes for the library: ~11 nodes per note card and
+    // ~3 per timetable lesson, and with a few dozen notes that clone was a ~4s
+    // freeze right after returning from a document.
+    const clearOfGlass = (node) => {
+      const box = node.getBoundingClientRect();
       return !glassRects.some((glass) => intersects(box, glass, CULL_MARGIN_PX));
+    };
+    const offGlass = [
+      ...element.querySelectorAll("[data-object-id], .document-page, .untis-lesson"),
+    ].filter(clearOfGlass);
+    // Cards and rows sit in CSS columns / a flex column, so dropping one would
+    // reflow its neighbours in the clone. Keep the box (its computed size is
+    // copied inline) and drop only what is inside it - or, when no card of the
+    // grid is near glass, everything inside the grid's own box.
+    const hollowed = [...element.querySelectorAll(".lib-masonry-grid, .lib-list-view")].flatMap((grid) => {
+      const cards = [...grid.children];
+      return cards.every(clearOfGlass)
+        ? cards
+        : cards.filter(clearOfGlass).flatMap((card) => [...card.children]);
     });
     const restoreFullSizeClones = thumbnailCanvasClones(element);
     let canvas;
     try {
-      canvas = await this.captureToCanvas(element, cssW, cssH, offGlass);
+      canvas = await this.captureToCanvas(element, cssW, cssH, [...offGlass, ...hollowed]);
     } finally {
       restoreFullSizeClones();
     }

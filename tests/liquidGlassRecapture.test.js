@@ -292,6 +292,76 @@ describe("cullCaptureToGlass pages", () => {
   });
 });
 
+describe("cullCaptureToGlass library", () => {
+  const cull = (body) => {
+    const capture = {
+      cache: new Map(),
+      onCacheUpdate: vi.fn(),
+      captureToCanvas: vi.fn().mockResolvedValue({ width: 1, height: 1 }),
+      drawCachedElement: vi.fn(),
+      _captureWithHtmlToImage: vi.fn(),
+    };
+    cullCaptureToGlass({ capture, glassSet: new Set([boxed(785, 20, 137, 52)]) });
+    return capture._captureWithHtmlToImage(body, 760, 4400, 760, 4400).then(() => capture);
+  };
+  const cardWith = (rect, className) => {
+    const card = boxed(...rect);
+    card.className = className;
+    const inside = boxed(...rect);
+    card.append(inside);
+    return { card, inside };
+  };
+
+  it("empties only the library cards clear of every glass panel, keeping their box", async () => {
+    const body = boxed(570, 82, 760, 4400);
+    const grid = boxed(570, 82, 760, 4400);
+    grid.className = "lib-masonry-grid";
+    const behindPill = cardWith([780, 60, 200, 150], "lib-card");
+    const clearCard = cardWith([570, 400, 200, 150], "lib-card");
+    grid.append(behindPill.card, clearCard.card);
+    body.append(grid);
+
+    const capture = await cull(body);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, [clearCard.inside]);
+  });
+
+  it("empties a whole grid or list when none of its cards is near glass", async () => {
+    const body = boxed(570, 82, 760, 4400);
+    const list = boxed(570, 82, 760, 4400);
+    list.className = "lib-list-view";
+    const rows = [cardWith([570, 400, 760, 40], "lib-list-row"), cardWith([570, 450, 760, 40], "lib-list-row")];
+    list.append(...rows.map((row) => row.card));
+    body.append(list);
+
+    const capture = await cull(body);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, rows.map((row) => row.card));
+  });
+
+  it("does not clone a fully transparent wrapper, and caches a blank stand-in instead", async () => {
+    const closedPanel = boxed(106, 20, 440, 655);
+    closedPanel.style.opacity = "0";
+    closedPanel.append(boxed(107, 95, 438, 100));
+
+    const capture = await cull(closedPanel);
+
+    expect(capture.captureToCanvas).not.toHaveBeenCalled();
+    expect(capture.cache.get(closedPanel)).toMatchObject({ w: 760, h: 4400 });
+  });
+
+  it("leaves timetable lessons clear of every glass panel out of the capture", async () => {
+    const grid = boxed(106, 345, 440, 400);
+    const lesson = boxed(200, 400, 100, 60);
+    lesson.className = "untis-lesson";
+    grid.append(lesson);
+
+    const capture = await cull(grid);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(grid, 760, 4400, [lesson]);
+  });
+});
+
 describe("recaptureBackgroundOnChange pages", () => {
   const box = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
   const pageAt = (body, rect) => {
