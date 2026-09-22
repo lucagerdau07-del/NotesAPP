@@ -8,6 +8,7 @@ import CasioScreen from '../calculator/CasioScreen.jsx';
 
 export default function CalculatorPanel({
   active = false,
+  isActive = true,
   onClose,
   onInsertToDocument,
 }) {
@@ -119,7 +120,7 @@ export default function CalculatorPanel({
 
   // Keyboard shortcut listener when calculator is active
   useEffect(() => {
-    if (!active) return undefined;
+    if (!active || !isActive) return undefined;
 
     const handleKeyDown = (event) => {
       // Don't intercept if user is typing in an input, textarea or contenteditable element
@@ -171,7 +172,7 @@ export default function CalculatorPanel({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [active, pressKey]);
+  }, [active, isActive, pressKey]);
 
   return (
     <section

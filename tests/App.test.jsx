@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 
@@ -233,5 +233,70 @@ describe('App Component', () => {
     // Reset via the folder back button
     fireEvent.click(screen.getByTitle('Zurück zur Übersicht'));
     expect(screen.getByText('Titrationskurve')).toBeInTheDocument();
+  });
+
+  it('opens up to three documents side by side in split view and enforces the limit', async () => {
+    render(<App />);
+
+    // Two notes created and persisted ahead of time so the split picker has
+    // something to offer once we're inside the workspace (going back to the
+    // library would close the whole workspace, so this has to happen first).
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz A');
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz C');
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz B');
+
+    // A single pane has no close button, only the option to split.
+    expect(screen.queryByTestId('split-close-pane-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '1');
+
+    fireEvent.click(screen.getByTestId('split-add-btn'));
+    fireEvent.click(await screen.findByText('Notiz A'));
+
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '2');
+    expect(screen.getAllByTestId('document-view')).toHaveLength(2);
+    expect(screen.getAllByTestId('split-close-pane-btn')).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByTestId('split-add-btn')[0]);
+    fireEvent.click(await screen.findByText('Notiz C'));
+
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '3');
+    expect(screen.getAllByTestId('document-view')).toHaveLength(3);
+    // A fourth document can't be added - the limit is three panes.
+    for (const btn of screen.getAllByTestId('split-add-btn')) expect(btn).toBeDisabled();
+
+    fireEvent.click(screen.getAllByTestId('split-close-pane-btn')[0]);
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '2');
+
+    fireEvent.click(screen.getAllByTestId('split-close-pane-btn')[0]);
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '1');
+    expect(screen.queryByTestId('split-close-pane-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
+
+  it('does not offer an already-open document as a split-screen option', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz B');
+
+    fireEvent.click(screen.getByTestId('split-add-btn'));
+    const picker = await screen.findByTestId('split-picker');
+    // Notiz B is already open in the only pane, so it must not be offered
+    // again - the picker only excludes it if the workspace tells it what's
+    // already open.
+    expect(within(picker).queryByText('Notiz B')).not.toBeInTheDocument();
   });
 });

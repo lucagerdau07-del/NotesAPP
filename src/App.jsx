@@ -1,8 +1,9 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2 } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns3, X } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
+import SplitPicker from "./components/SplitPicker";
 import { createBrowserBridge } from "./browser/browserBridge";
 import { createBrowserRepository } from "./browser/browserRepository";
 import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
@@ -24,9 +25,15 @@ const CalculatorPanel = lazy(() => import("./components/CalculatorPanel"));
 
 const RAIL_WIDTH_STORAGE_KEY = "notes.editor.rail-width";
 const RAIL_LEFT_INSET = 8;
+// Split-screen: up to this many documents side by side, like iPad Split View.
+const MAX_PANES = 3;
 
-function constrainedRailWidth(value) {
-  const viewportLimit = Math.max(360, (globalThis.innerWidth || 1024) - 100);
+function constrainedRailWidth(value, containerWidth) {
+  // containerWidth is the editor pane's own width. In split view that pane
+  // is narrower than the window, so clamping against the full viewport
+  // (as a single full-screen editor always was) would let the rail grow
+  // wider than the pane itself.
+  const viewportLimit = Math.max(360, (containerWidth || globalThis.innerWidth || 1024) - 100);
   return Math.round(Math.min(800, viewportLimit, Math.max(360, value)));
 }
 
@@ -35,7 +42,7 @@ function savedRailWidth() {
   return Number.isFinite(stored) ? constrainedRailWidth(stored) : null;
 }
 
-function Editor({ activeNote, onBack }) {
+function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, onClosePane }) {
   const glassRootRef = useRef(null);
   // The rail is rendered here so it is a direct child of the glass root (the
   // library only picks up ":scope > [data-liquid-glass-control]"); DocumentView
@@ -62,6 +69,13 @@ function Editor({ activeNote, onBack }) {
   // An imported note's pages are fixed by its source file.
   const canOpenPdf = activeNote?.kind !== "imported";
   const inkControllerRef = useRef(null);
+  // A pane's keyboard/paste shortcuts must only act while it is the focused
+  // one - otherwise e.g. Ctrl+O would try to open a file dialog in every
+  // open pane at once. Kept as a ref (rather than an effect dependency) so
+  // the listener below doesn't need to be torn down and rebuilt on focus
+  // changes.
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const browserBridge = useMemo(() => createBrowserBridge(), []);
   const browserRepository = useMemo(
     () => createBrowserRepository(globalThis.localStorage),
@@ -131,6 +145,7 @@ function Editor({ activeNote, onBack }) {
   useEffect(() => {
     if (!canOpenPdf) return undefined;
     const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
       if (event.key.toLowerCase() !== "o") return;
       event.preventDefault();
@@ -194,7 +209,14 @@ function Editor({ activeNote, onBack }) {
     if (!isRailResizing) return undefined;
     const move = (event) => {
       if (event.pointerId !== resizePointerRef.current) return;
-      const nextWidth = constrainedRailWidth(event.clientX - RAIL_LEFT_INSET);
+      // In split view this editor's shell doesn't start at the window's
+      // left edge, so the rail's own left inset has to be measured from the
+      // pane, not from clientX directly.
+      const paneLeft = glassRootRef.current?.getBoundingClientRect().left || 0;
+      const nextWidth = constrainedRailWidth(
+        event.clientX - paneLeft - RAIL_LEFT_INSET,
+        glassRootRef.current?.clientWidth,
+      );
       railWidthRef.current = nextWidth;
       setRailWidth(nextWidth);
     };
@@ -301,6 +323,31 @@ function Editor({ activeNote, onBack }) {
         >
           <Maximize2 size={16} />
         </button>
+        {onSplit && (
+          <button
+            className="rail-btn"
+            title={
+              paneCount >= MAX_PANES
+                ? `Maximal ${MAX_PANES} Dokumente im Split-Screen`
+                : "Weiteres Dokument im Split-Screen öffnen"
+            }
+            disabled={paneCount >= MAX_PANES}
+            onClick={onSplit}
+            data-testid="split-add-btn"
+          >
+            <Columns3 size={16} />
+          </button>
+        )}
+        {paneCount > 1 && (
+          <button
+            className="rail-btn"
+            title="Dieses Dokument schließen"
+            onClick={onClosePane}
+            data-testid="split-close-pane-btn"
+          >
+            <X size={16} />
+          </button>
+        )}
         <div style={{ position: "relative" }} ref={exportMenuRef}>
           <button
             className={`rail-btn ${isExportMenuOpen ? "active" : ""}`}
@@ -510,6 +557,7 @@ function Editor({ activeNote, onBack }) {
           <Suspense fallback={null}>
             <CalculatorPanel
               active={panelMode === "calculator"}
+              isActive={isActive}
               onClose={() => setPanelMode(null)}
               onInsertToDocument={({ dataUrl }) => {
                 setImageDropRequest({
@@ -542,6 +590,7 @@ function Editor({ activeNote, onBack }) {
           activeTab="smartCanvas"
           note={activeNote}
           documentId={activeNote.id}
+          isActive={isActive}
           onBack={onBack}
           railSlot={railSlot}
           panelSlot={panelSlot}
@@ -577,19 +626,155 @@ function Editor({ activeNote, onBack }) {
   );
 }
 
+function equalPaneWidths(count) {
+  return Array.from({ length: count }, () => 1 / count);
+}
+
+// iPad-style Split View: up to MAX_PANES documents open side by side, each
+// its own fully independent Editor (own rail, own toolbars, own ink
+// document), separated by draggable dividers.
+function Workspace({ notes, widths, onWidthsChange, activePaneId, onFocusPane, onBack, onClosePane, onAddPane }) {
+  const containerRef = useRef(null);
+  const dragRef = useRef(null);
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    if (!isResizing) return undefined;
+    const MIN_FRACTION = 0.22;
+    const move = (event) => {
+      const drag = dragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const containerWidth = containerRef.current?.getBoundingClientRect().width || 1;
+      const deltaFraction = (event.clientX - drag.startX) / containerWidth;
+      const next = [...drag.startWidths];
+      let a = drag.startWidths[drag.index] + deltaFraction;
+      let b = drag.startWidths[drag.index + 1] - deltaFraction;
+      if (a < MIN_FRACTION) {
+        b -= MIN_FRACTION - a;
+        a = MIN_FRACTION;
+      } else if (b < MIN_FRACTION) {
+        a -= MIN_FRACTION - b;
+        b = MIN_FRACTION;
+      }
+      next[drag.index] = a;
+      next[drag.index + 1] = b;
+      onWidthsChange(next);
+    };
+    const finish = (event) => {
+      if (dragRef.current?.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setIsResizing(false);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", finish);
+    document.addEventListener("pointercancel", finish);
+    return () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", finish);
+      document.removeEventListener("pointercancel", finish);
+    };
+  }, [isResizing, onWidthsChange]);
+
+  const startResize = (index) => (event) => {
+    event.preventDefault();
+    dragRef.current = { index, startX: event.clientX, startWidths: [...widths], pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsResizing(true);
+  };
+
+  return (
+    <div className="workspace" ref={containerRef} data-testid="workspace" data-pane-count={notes.length}>
+      {notes.map((note, index) => (
+        <React.Fragment key={note.id}>
+          <div
+            className="workspace-pane"
+            data-testid={`workspace-pane-${note.id}`}
+            style={{ flexGrow: widths[index] ?? 1 / notes.length, flexBasis: 0 }}
+            onPointerDownCapture={() => onFocusPane(note.id)}
+          >
+            <Editor
+              activeNote={note}
+              onBack={onBack}
+              isActive={notes.length === 1 || activePaneId === note.id}
+              paneCount={notes.length}
+              onSplit={onAddPane}
+              onClosePane={notes.length > 1 ? () => onClosePane(note.id) : undefined}
+            />
+          </div>
+          {index < notes.length - 1 && (
+            <div
+              className={`workspace-divider ${isResizing && dragRef.current?.index === index ? "is-resizing" : ""}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Bereichsbreite ändern"
+              onPointerDown={startResize(index)}
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState("library");
-  const [activeNote, setActiveNote] = useState(null);
+  // Up to MAX_PANES notes open side by side in the split-screen workspace.
+  const [openNotes, setOpenNotes] = useState([]);
+  const [paneWidths, setPaneWidths] = useState([]);
+  const [activePaneId, setActivePaneId] = useState(null);
+  const [isPickerOpen, setPickerOpen] = useState(false);
 
-  const openNote = (note) => {
+  const normalizeNote = (note) => {
     const id = String(
       note?.id ?? globalThis.crypto?.randomUUID?.() ?? `note-${Date.now()}`,
     );
-    const fullNote = { ...note, id };
+    return { ...note, id };
+  };
+
+  // Opens a note full-screen, replacing whatever workspace was open before -
+  // the ordinary way in from the library.
+  const openNote = (note) => {
+    const fullNote = normalizeNote(note);
     // New scratch notes are indexed on their first edit (SplitLayout), so an
     // untouched blank note never shows up in the library.
-    setActiveNote(fullNote);
+    setOpenNotes([fullNote]);
+    setPaneWidths([1]);
+    setActivePaneId(fullNote.id);
     setScreen("editor");
+  };
+
+  // Adds a note as a new split-screen pane alongside whatever is already
+  // open, up to MAX_PANES. Picking a note that's already open just brings
+  // its pane into focus instead of opening a duplicate.
+  const addPane = (note) => {
+    const fullNote = normalizeNote(note);
+    setPickerOpen(false);
+    if (openNotes.some((n) => n.id === fullNote.id)) {
+      setActivePaneId(fullNote.id);
+      return;
+    }
+    if (openNotes.length >= MAX_PANES) return;
+    const nextNotes = [...openNotes, fullNote];
+    setOpenNotes(nextNotes);
+    setPaneWidths(equalPaneWidths(nextNotes.length));
+    setActivePaneId(fullNote.id);
+  };
+
+  const closePane = (id) => {
+    const nextNotes = openNotes.filter((n) => n.id !== id);
+    if (nextNotes.length === 0) {
+      setOpenNotes([]);
+      setScreen("library");
+      return;
+    }
+    setOpenNotes(nextNotes);
+    setPaneWidths(equalPaneWidths(nextNotes.length));
+    if (activePaneId === id) setActivePaneId(nextNotes[nextNotes.length - 1].id);
+  };
+
+  const closeWorkspace = () => {
+    setOpenNotes([]);
+    setScreen("library");
   };
 
   if (screen === "settings") {
@@ -618,5 +803,25 @@ export default function App() {
     );
   }
 
-  return <Editor activeNote={activeNote} onBack={() => setScreen("library")} />;
+  return (
+    <>
+      <Workspace
+        notes={openNotes}
+        widths={paneWidths}
+        onWidthsChange={setPaneWidths}
+        activePaneId={activePaneId}
+        onFocusPane={setActivePaneId}
+        onBack={closeWorkspace}
+        onClosePane={closePane}
+        onAddPane={() => setPickerOpen(true)}
+      />
+      {isPickerOpen && (
+        <SplitPicker
+          excludeIds={openNotes.map((n) => n.id)}
+          onPick={addPane}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </>
+  );
 }

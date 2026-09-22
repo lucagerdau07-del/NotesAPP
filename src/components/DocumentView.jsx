@@ -1121,8 +1121,15 @@ export default function DocumentView({
   onNavigatePageHandled,
   openRequest,
   onOpenHandled,
+  isActive = true,
 }) {
   const openLink = useBrowserLink();
+  // In split-screen a pane's own keyboard/paste shortcuts must stay silent
+  // while another pane is focused - see the effects further down that read
+  // this instead of taking isActive as a dependency (so they don't need to
+  // be torn down and rebuilt on every focus change).
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
     return (
       <WhiteboardEditor
@@ -1135,6 +1142,7 @@ export default function DocumentView({
         setPanelMode={setPanelMode}
         openRequest={openRequest}
         onOpenHandled={onOpenHandled}
+        isActive={isActive}
       />
     );
   }
@@ -1618,6 +1626,7 @@ export default function DocumentView({
       }
     };
     const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
       if (editingObjectId) return;
       const target = event.target;
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable)
@@ -1699,6 +1708,7 @@ export default function DocumentView({
     const isEditingTarget = (target) =>
       target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
     const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
       if (event.code !== "Space" || isEditingTarget(event.target)) return;
       event.preventDefault();
       setIsSpaceDown(true);
@@ -1856,6 +1866,7 @@ export default function DocumentView({
   // System clipboard image paste listener
   useEffect(() => {
     const handlePaste = async (event) => {
+      if (!isActiveRef.current) return;
       const target = event.target;
       if (
         target?.tagName === "INPUT" ||

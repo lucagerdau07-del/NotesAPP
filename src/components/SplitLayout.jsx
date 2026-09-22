@@ -30,6 +30,7 @@ export default function SplitLayout({
   onArmCircleSearchHandled,
   openRequest,
   onOpenHandled,
+  isActive = true,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -125,6 +126,7 @@ export default function SplitLayout({
           toolState={toolState}
           focusBoxState={focusBoxState}
           toolbarState={toolState}
+          isActive={isActive}
           onBack={onBack}
           railSlot={railSlot}
           panelSlot={panelSlot}

@@ -62,8 +62,14 @@ export default function WhiteboardEditor({
   setPanelMode,
   openRequest,
   onOpenHandled,
+  isActive = true,
 }) {
   const containerRef = useRef(null);
+  // See DocumentView.jsx for why this is a ref rather than an effect
+  // dependency: it keeps a pane's shortcuts silent while unfocused in
+  // split-screen without tearing the listener down on every focus change.
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const canvasControllerRef = useRef(null);
   const objectLayerRef = useRef(null);
   const belowLayerRef = useRef(null);
@@ -549,6 +555,7 @@ export default function WhiteboardEditor({
     const isEditingTarget = (target) =>
       target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
     const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
       if (event.code !== "Space" || isEditingTarget(event.target)) return;
       event.preventDefault();
       setIsSpaceDown(true);
@@ -643,6 +650,7 @@ export default function WhiteboardEditor({
       }
     };
     const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
       const target = event.target;
       // isContentEditable catches a text/table object mid-edit — those are
       // plain divs, not INPUT/TEXTAREA, so the tag check alone misses them.
