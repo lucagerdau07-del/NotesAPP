@@ -119,6 +119,7 @@ const PLAN_SYSTEM_PROMPT = [
   "Du bekommst für jeden Tag ein festes Minutenbudget. Die Summe der Blockminuten eines Tages darf dieses Budget nicht überschreiten.",
   "Tage mit Budget 0 bekommen keine Blöcke.",
   "Plane vorrangig, was fällig ist: nahe Hausaufgaben zuerst, Klausurstoff verteilt über die Tage davor.",
+  "Eine Abgabe mit Uhrzeit vor 12:00 ist am Abgabetag selbst nicht mehr zu schaffen - dafür keinen Block mehr an diesem Tag einplanen, nur an den Tagen davor.",
   "Ist Budget übrig, plane Wiederholung mit den genannten Begriffen und Fächern.",
   "Jede Aufgabe ist ein kurzer, konkreter deutscher Satz, kein Schlagwort.",
 ].join("\n");
@@ -183,8 +184,9 @@ function fallbackBlocks(date, events, budgetMinutes, today) {
   if (budgetMinutes <= 0) return [];
   const open = events.filter((event) => !event.done && event.kind !== "appointment");
   const dueOn = (event) => (event.due < today ? today : event.due);
+  // Am Fälligkeitstag selbst nur noch einplanen, wenn die Abgabe nicht schon vormittags ist.
   const dueFromDate = open
-    .filter((event) => dueOn(event) >= date)
+    .filter((event) => date < dueOn(event) || (date === dueOn(event) && dueDayIsWorkable(event)))
     .sort((left, right) => dueOn(left).localeCompare(dueOn(right)));
   const blocks = dueFromDate.slice(0, 3).map((event) => ({
     subject: event.subject,
