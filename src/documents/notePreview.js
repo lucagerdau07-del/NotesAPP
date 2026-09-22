@@ -59,8 +59,28 @@ function getCachedPreviewImage(src) {
 // background tiles at a fixed pixel size regardless of that scale, so the
 // two would drift out of alignment with each other.
 export function notePageStyleOf(documentId) {
-  const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
-  return { background: inkDoc?.pages?.[0]?.background || "#0e0e12" };
+  return memoByRaw("style", documentId, () => {
+    const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
+    return { background: inkDoc?.pages?.[0]?.background || "#0e0e12" };
+  });
+}
+
+// Library asks for a page style, a preview text and a thumbnail per card on
+// every render - and it re-renders on every state change (timetable weeks
+// arriving, typing in the search box). Each of those parsed the note's whole
+// stored blob: ~130ms per render across 67 notes on a Galaxy Tab A7, repeated
+// half a dozen times right after opening the library. A note only changes via
+// saveHistory, so what is derived from it is remembered against the raw blob.
+const derivedCache = new Map();
+function memoByRaw(kind, documentId, compute) {
+  const id = String(documentId);
+  const key = `${kind}:${id}`;
+  const raw = browserInkRepository.loadHistoryRaw(id);
+  const hit = derivedCache.get(key);
+  if (hit && hit.raw === raw) return hit.value;
+  const value = compute();
+  derivedCache.set(key, { raw, value });
+  return value;
 }
 
 // Mirrors DocumentView's getStaticBackgroundStyles() - same spacing and
@@ -149,16 +169,18 @@ export function contentBoundsOf(inkDoc, pageId) {
 // generic label. Freehand ink strokes aren't OCR'd, so a note with drawing
 // but no text box falls back to the caller's default.
 export function previewTextOf(documentId) {
-  const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
-  const pageId = firstPageOf(inkDoc);
-  if (!pageId) return "";
-  const topText = pageObjectsOf(inkDoc)
-    .filter(
-      (object) =>
-        object.type === "text" && object.pageId === pageId && object.text.trim(),
-    )
-    .sort((a, b) => a.y - b.y)[0];
-  return topText?.text.trim().slice(0, 200) || "";
+  return memoByRaw("text", documentId, () => {
+    const inkDoc = browserInkRepository.loadHistory(documentId)?.present;
+    const pageId = firstPageOf(inkDoc);
+    if (!pageId) return "";
+    const topText = pageObjectsOf(inkDoc)
+      .filter(
+        (object) =>
+          object.type === "text" && object.pageId === pageId && object.text.trim(),
+      )
+      .sort((a, b) => a.y - b.y)[0];
+    return topText?.text.trim().slice(0, 200) || "";
+  });
 }
 
 // Page backgrounds are CSS strings and are usually gradients, which a canvas
