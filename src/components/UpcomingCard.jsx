@@ -10,10 +10,11 @@ export function formatDue(due) {
 }
 
 function kindLabelOf(kind) {
-  return { exam: "Klausur", review: "Wiederholung" }[kind] || "Hausaufgabe";
+  return { exam: "Klausur", review: "Wiederholung", appointment: "Termin" }[kind] || "Hausaufgabe";
 }
 
 function sourceTitleOf(sourceNoteId, sourceNoteTitles) {
+  if (sourceNoteId === "manual") return "Kalender";
   return sourceNoteTitles[sourceNoteId] || sourceNoteId || "Unbekannte Notiz";
 }
 

@@ -214,3 +214,29 @@ describe("knowledge repository — IServ-Termine", () => {
     expect(repository.read().events).toHaveLength(2);
   });
 });
+
+describe("Abgabeuhrzeit", () => {
+  it("übernimmt die Uhrzeit eines Fundes", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [{ ...hausaufgabe, time: "07:45" }], terms: [], sourceNoteId: "note-1" });
+    expect(repository.read().events[0].time).toBe("07:45");
+  });
+
+  it("lässt die Uhrzeit weg, wenn der Fund keine hat", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [hausaufgabe], terms: [], sourceNoteId: "note-1" });
+    expect(repository.read().events[0].time).toBeUndefined();
+  });
+});
+
+describe("eigene Kalendereinträge", () => {
+  it("legt einen Termin an und entfernt ihn wieder", () => {
+    const repository = repo();
+    const event = repository.addEvent({ title: " Zahnarzt ", due: "2026-09-24", time: "14:30" });
+    expect(repository.read().events).toEqual([
+      expect.objectContaining({ kind: "appointment", title: "Zahnarzt", time: "14:30", sourceNoteId: "manual", done: false }),
+    ]);
+    repository.removeEvent(event.id);
+    expect(repository.read().events).toEqual([]);
+  });
+});

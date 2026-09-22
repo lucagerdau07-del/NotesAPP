@@ -16,7 +16,8 @@ import { isLightBackground } from "./documents/pageStyles.js";
 // These screens/panels are not needed on initial load (library or a plain
 // note), so they're split into their own chunks and fetched on demand.
 const Settings = lazy(() => import("./components/Settings"));
-const PlanScreen = lazy(() => import("./components/PlanScreen"));
+const CalendarScreen = lazy(() => import("./components/CalendarScreen"));
+const GlossaryScreen = lazy(() => import("./components/GlossaryScreen"));
 const AiChatPanel = lazy(() => import("./components/AiChatPanel"));
 const BrowserPanel = lazy(() => import("./components/BrowserPanel"));
 const PagesPanel = lazy(() => import("./components/PagesPanel"));
@@ -600,10 +601,18 @@ export default function App() {
     );
   }
 
-  if (screen === "plan") {
+  if (screen === "calendar") {
     return (
       <Suspense fallback={null}>
-        <PlanScreen onBack={() => setScreen("library")} />
+        <CalendarScreen onBack={() => setScreen("library")} onOpenNote={openNote} />
+      </Suspense>
+    );
+  }
+
+  if (screen === "glossary") {
+    return (
+      <Suspense fallback={null}>
+        <GlossaryScreen onBack={() => setScreen("library")} />
       </Suspense>
     );
   }
@@ -613,7 +622,8 @@ export default function App() {
       <Library
         onOpenNote={openNote}
         onOpenSettings={() => setScreen("settings")}
-        onOpenPlan={() => setScreen("plan")}
+        onOpenCalendar={() => setScreen("calendar")}
+        onOpenGlossary={() => setScreen("glossary")}
       />
     );
   }

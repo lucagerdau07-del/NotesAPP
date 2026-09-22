@@ -112,6 +112,23 @@ export default function useKnowledge({
     [repository],
   );
 
+  const addEvent = useCallback(
+    (input) => {
+      const event = repository.addEvent(input);
+      setState(repository.read());
+      return event;
+    },
+    [repository],
+  );
+
+  const removeEvent = useCallback(
+    (id) => {
+      repository.removeEvent(id);
+      setState(repository.read());
+    },
+    [repository],
+  );
+
   const setAutoScan = useCallback(
     (enabled) => {
       repository.setAutoScan(enabled);
@@ -152,6 +169,8 @@ export default function useKnowledge({
     scanNow,
     refreshPlan,
     setEventDone,
+    addEvent,
+    removeEvent,
     setAutoScan,
   };
 }

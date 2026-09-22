@@ -65,6 +65,15 @@ describe("rowToEvent", () => {
   it("verträgt fehlende Anhänge", () => {
     expect(rowToEvent(row({ attachments: null })).attachments).toEqual([]);
   });
+
+  it("übernimmt eine gültige Abgabeuhrzeit", () => {
+    expect(rowToEvent(row({ due_time: "07:45" })).time).toBe("07:45");
+  });
+
+  it("lässt die Uhrzeit weg, wenn keine gesetzt oder ungültig ist", () => {
+    expect(rowToEvent(row({ due_time: null })).time).toBeUndefined();
+    expect(rowToEvent(row({ due_time: "irgendwann" })).time).toBeUndefined();
+  });
 });
 
 describe("pullIservEvents", () => {

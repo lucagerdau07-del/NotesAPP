@@ -5,6 +5,7 @@ export const ISERV_SOURCE_ID = "iserv";
 export const ISERV_BUCKET = "notesapp-iserv";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIME = /^\d{2}:\d{2}$/;
 
 // Eine Zeile aus notesapp.iserv_tasks als Termin der Terminplanung. Ohne Titel
 // oder lesbare Frist lässt sich nichts einplanen.
@@ -12,11 +13,14 @@ export function rowToEvent(row) {
   const title = String(row?.title ?? "").trim();
   const due = String(row?.due ?? "");
   if (!row?.id || !title || !ISO_DATE.test(due)) return null;
+  const time = String(row?.due_time ?? "");
   return {
     kind: "homework",
     title,
     subject: String(row.subject ?? "").trim(),
     due,
+    // Ohne Uhrzeit nimmt der Lernplan 23:59 an (siehe studyPlan.js).
+    ...(ISO_TIME.test(time) ? { time } : {}),
     iservId: String(row.id),
     url: String(row.url ?? ""),
     description: String(row.description ?? ""),

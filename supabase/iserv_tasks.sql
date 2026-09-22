@@ -8,6 +8,7 @@ create table if not exists notesapp.iserv_tasks (
   title text not null,
   subject text not null default '',
   due date,                                -- null, wenn die Frist nicht lesbar war
+  due_time text,                           -- 'HH:MM', null wenn IServ keine Uhrzeit nannte
   deadline_raw text not null default '',
   url text not null default '',
   description text not null default '',    -- Originaltext, nicht zensiert
@@ -26,6 +27,10 @@ create policy "own iserv tasks"
   with check (auth.uid() = user_id);
 
 grant all on notesapp.iserv_tasks to authenticated;
+
+-- Nachgezogen 2026-09: bestehende Tabellen bekommen die Spalte per ALTER,
+-- create table if not exists legt sie bei einer neuen Tabelle nicht mit an.
+alter table notesapp.iserv_tasks add column if not exists due_time text;
 
 -- Privater Bucket für die Anhänge, Ordner = user_id.
 insert into storage.buckets (id, name, public)

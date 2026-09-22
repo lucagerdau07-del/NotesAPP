@@ -171,13 +171,23 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
-  it('opens the plan screen from the library and returns', async () => {
+  it('opens the calendar from the library and returns', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByTestId('open-plan-btn'));
-    // Plan screen is lazy-loaded on first open.
-    expect(await screen.findByTestId('plan-screen')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('open-calendar-btn'));
+    // Calendar is lazy-loaded on first open.
+    expect(await screen.findByTestId('calendar-screen')).toBeInTheDocument();
     expect(screen.queryByText('Bibliothek')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zurück zur Bibliothek' }));
+    expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
+
+  it('opens the glossary from the library and returns', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByTestId('open-glossary-btn'));
+    expect(await screen.findByTestId('glossary-screen')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Zurück zur Bibliothek' }));
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
