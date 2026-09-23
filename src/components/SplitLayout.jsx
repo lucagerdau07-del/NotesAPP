@@ -50,7 +50,7 @@ export default function SplitLayout({
     initialPageStyle,
     initialColor: initialInkColor,
     onPersisted:
-      note?.kind === "imported"
+      !note || note.kind === "imported"
         ? undefined
         : () => {
             const { title, subject, pageKind, format, background, ruling } = note;

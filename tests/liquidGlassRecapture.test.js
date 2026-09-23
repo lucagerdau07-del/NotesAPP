@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   cullCaptureToGlass,
+  NO_RECAPTURE_ATTR,
   recaptureBackgroundOnChange,
   samplesEachOther,
   SNAPSHOT_MAX_EDGE,
@@ -362,45 +363,52 @@ describe("cullCaptureToGlass library", () => {
   });
 });
 
-describe("recaptureBackgroundOnChange pages", () => {
-  const box = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
-  const pageAt = (body, rect) => {
-    const page = document.createElement("div");
-    page.className = "document-page";
-    page.getBoundingClientRect = () => rect;
-    body.append(page);
-    return page;
+describe("recaptureBackgroundOnChange no-recapture subtrees", () => {
+  // DocumentView's scrolled page content: html-to-image would render it from
+  // the top whatever its scroll offset, so a re-capture could only show the
+  // same misplaced page again, for ~800ms of frozen main thread on the tablet.
+  const noRecapture = (parent) => {
+    const node = document.createElement("div");
+    node.setAttribute(NO_RECAPTURE_ATTR, "");
+    parent.append(node);
+    return node;
   };
 
-  it("does not re-capture for a page mounting canvases clear of every glass panel", async () => {
+  it("only repaints for changes inside the page content, a pinch and a page mount alike", async () => {
     vi.useFakeTimers();
-    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
-    const page = pageAt(body, box(700, 0, 500, 1100));
+    const { body, captureElement, markChanged, stop } = setup();
+    const content = noRecapture(body);
     await settle();
     captureElement.mockClear();
+    markChanged.mockClear();
 
-    page.append(document.createElement("canvas"));
+    content.style.transform = "translate(0px, -120px) scale(1)";
+    content.append(document.createElement("canvas"));
+    content.firstChild.setAttribute("width", "1600");
     await settle();
     vi.advanceTimersByTime(2000);
-    expect(captureElement).not.toHaveBeenCalled();
 
+    expect(captureElement).not.toHaveBeenCalled();
+    expect(markChanged).toHaveBeenCalledWith(body);
     stop();
     vi.useRealTimers();
   });
 
-  it("re-captures a page behind glass, but only once the view settles", async () => {
+  it("does not re-capture for a marked node coming or going, but still does for its siblings", async () => {
     vi.useFakeTimers();
-    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
-    const page = pageAt(body, box(60, 0, 800, 1100));
+    const { body, captureElement, stop } = setup();
     await settle();
-    captureElement.mockClear();
 
-    page.append(document.createElement("canvas"));
+    const toast = noRecapture(body);
     await settle();
+    toast.remove();
+    await settle();
+    vi.advanceTimersByTime(2000);
     expect(captureElement).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1500);
-    expect(captureElement).toHaveBeenCalledWith(body, true);
 
+    body.append(document.createElement("span"));
+    await settle();
+    expect(captureElement).toHaveBeenCalledWith(body, true);
     stop();
     vi.useRealTimers();
   });

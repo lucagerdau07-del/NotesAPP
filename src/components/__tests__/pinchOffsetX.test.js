@@ -3,6 +3,7 @@ import {
   clampDocOffsetX,
   pageLeftEdgeX,
   pinchAnchorX,
+  pinchZoomRatio,
 } from "../DocumentView.jsx";
 
 const VIEWPORT = 800;
@@ -103,5 +104,21 @@ describe("pinchAnchorX", () => {
       screenX({ local: local * scale, pageWidth: args.pageWidth, offsetX }),
       6,
     );
+  });
+});
+
+describe("pinchZoomRatio", () => {
+  it("keeps a two-finger pan at its zoom, follows a real pinch exactly, and never jumps", () => {
+    // Finger drift while panning: no zoom, so nothing has to be re-laid out.
+    expect(pinchZoomRatio(1.05)).toBe(1);
+    expect(pinchZoomRatio(1 / 1.05)).toBe(1);
+    // A real pinch lands exactly where the fingers put it.
+    expect(pinchZoomRatio(2)).toBe(2);
+    expect(pinchZoomRatio(0.5)).toBe(0.5);
+    // Continuous across both edges of the catch-up band.
+    const edge = 1.08;
+    expect(pinchZoomRatio(edge * 1.0001)).toBeCloseTo(1, 3);
+    expect(pinchZoomRatio(edge * edge * 0.9999)).toBeCloseTo(edge * edge, 3);
+    expect(pinchZoomRatio(1 / (edge * edge * 0.9999))).toBeCloseTo(1 / (edge * edge), 3);
   });
 });

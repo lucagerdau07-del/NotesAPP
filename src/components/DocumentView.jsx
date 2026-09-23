@@ -40,7 +40,7 @@ import useLongPress from "../hooks/useLongPress";
 import useInkPointer from "../hooks/useInkPointer";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
-import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
+import { changedInkRegion, renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import useScrollbarGrip, { useLeftHandScrubber } from "./document/useScrollbarGrip.js";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
@@ -1003,6 +1003,24 @@ const maxPages = 20;
 // sight. Below this distance from center a release springs back instead.
 const DOC_EDGE_SLACK_RATIO = 0.25;
 const DOC_SNAP_THRESHOLD_X = 24;
+// ponytail: how far (as a share of their start distance) two fingers may drift
+// apart or together and still count as a pan. Calibration knob: raise it if
+// scrolling still zooms, lower it if a small deliberate pinch feels sticky.
+const PINCH_DEAD_ZONE = Math.log(1.08);
+
+// Two fingers never keep their distance exactly while they pan, and
+// committing that drift on release re-lays-out the document, reallocates the
+// ink canvas and redraws every stroke — after every scroll. So the zoom stays
+// put inside the dead zone, catches up across the next dead zone's width, and
+// follows the fingers exactly beyond that: no jump anywhere, and a real pinch
+// lands where it always did.
+export function pinchZoomRatio(distanceRatio) {
+  const stretch = Math.log(distanceRatio);
+  const size = Math.abs(stretch);
+  if (size < PINCH_DEAD_ZONE) return 1;
+  if (size >= 2 * PINCH_DEAD_ZONE) return distanceRatio;
+  return Math.exp(Math.sign(stretch) * 2 * (size - PINCH_DEAD_ZONE));
+}
 // Same clearance split mode reserves with a static margin (see the scroll
 // container's own margin below) — the floating title/action pills at the top
 // of the screen are that tall. Full mode instead runs the page edge-to-edge
@@ -1497,7 +1515,15 @@ export default function DocumentView({
       scaleX: zoom,
       scaleY: zoom,
     });
+    paintedDraftsRef.current.add(draft);
   };
+  // Drafts drawn straight onto the canvas since the last redraw: it has to
+  // repair their pixels whether they commit, get erased as a palm or become a
+  // shape.
+  const paintedDraftsRef = useRef(new Set());
+  // What the canvas shows now, so a redraw repaints only what changed since —
+  // a stroke commit redraws a word, not the whole note (see changedInkRegion).
+  const paintedInkRef = useRef(null);
 
   // Contact geometry is reported in CSS px, so the palm threshold is panel
   // specific; the settings profile is the calibration knob for it. Settings
@@ -2050,12 +2076,21 @@ export default function DocumentView({
         ),
       };
     }
-    renderInkDocument(context, previewDocument, {
-      ...pageLayout,
-      cssWidth,
-      cssHeight,
-      dpr,
-    });
+    const layout = { ...pageLayout, cssWidth, cssHeight, dpr };
+    // Only a canvas of the same size with the pages where they were still
+    // holds the last redraw's pixels; anything else starts over.
+    const key = [canvas.width, canvas.height, cssWidth, cssHeight, zoom]
+      .concat(pageLayout.pageLayouts.map((page) => `${page.id}:${page.top}`))
+      .join();
+    const last = paintedInkRef.current;
+    const region =
+      last?.key === key
+        ? changedInkRegion(last.strokes, previewDocument.strokes, previewDocument, layout, paintedDraftsRef.current)
+        : undefined;
+    paintedDraftsRef.current.clear();
+    paintedInkRef.current = { key, strokes: previewDocument.strokes };
+    if (region === null) return;
+    renderInkDocument(context, previewDocument, layout, region);
   };
 
   useLayoutEffect(() => {
@@ -2079,7 +2114,17 @@ export default function DocumentView({
     if (!canvas) return undefined;
     const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
     observer.observe(canvas);
-    return () => observer.disconnect();
+    // A lost GPU context comes back blank, so the pixels a partial redraw
+    // builds on are gone.
+    const restored = () => {
+      paintedInkRef.current = null;
+      redrawInkCanvasRef.current?.();
+    };
+    canvas.addEventListener("contextrestored", restored);
+    return () => {
+      observer.disconnect();
+      canvas.removeEventListener("contextrestored", restored);
+    };
   }, []);
 
   useEffect(() => {
@@ -2760,7 +2805,7 @@ export default function DocumentView({
 
         const newZoom = Math.max(
           0.5,
-          Math.min(3, startZoom * (currentDistance / startDist)),
+          Math.min(3, startZoom * pinchZoomRatio(currentDistance / startDist)),
         );
         const zoomRatio = newZoom / startZoom;
 
@@ -3662,13 +3707,16 @@ export default function DocumentView({
         />
       )}
       {zoomToast !== null && (
-        <div className="zoom-toast" data-testid="zoom-toast">
+        <div className="zoom-toast" data-testid="zoom-toast" data-glass-no-recapture="">
           <span>{zoomToast}%</span>
         </div>
       )}
 
+      {/* Scrolled content: glass repaints it live, never re-shoots it (see
+          NO_RECAPTURE_ATTR in useLiquidGlass). */}
       <div
         ref={scrollRef}
+        data-glass-no-recapture=""
         style={{
           flex: 1,
           overflowY: "auto",

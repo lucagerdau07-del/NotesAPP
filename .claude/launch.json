@@ -15,6 +15,49 @@
       "port": 5180
     },
     {
+      "name": "notes-dev-5181",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181
+    },
+    {
+      "name": "notes-prod-base",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--",
+        "--outDir",
+        "C:/Users/lucag/AppData/Local/Temp/claude/C--Antigravity-NotesAPP/0d06fd24-6242-4e5b-900a-519bfc4c9249/scratchpad/dist-base",
+        "--port",
+        "5182",
+        "--strictPort"
+      ],
+      "port": 5182
+    },
+    {
+      "name": "notes-prod-new",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--",
+        "--outDir",
+        "C:/Users/lucag/AppData/Local/Temp/claude/C--Antigravity-NotesAPP/0d06fd24-6242-4e5b-900a-519bfc4c9249/scratchpad/dist-new",
+        "--port",
+        "5183",
+        "--strictPort"
+      ],
+      "port": 5183
+    },
+    {
       "name": "app-backend",
       "runtimeExecutable": "node",
       "runtimeArgs": [

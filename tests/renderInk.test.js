@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  changedInkRegion,
   renderInkDocument,
   renderInkStroke,
   resizeInkCanvas,
@@ -189,5 +190,46 @@ describe('deterministic complete-path ink renderer', () => {
     expect(canvas.width).toBeLessThanOrEqual(4096);
     expect(canvas.height).toBeLessThanOrEqual(4096);
     expect(canvas.width * canvas.height).toBeLessThanOrEqual(16_000_000);
+  });
+});
+
+describe('partial ink redraw', () => {
+  const stroke = (id, x, y) => ({
+    id, pageId: 'p1', tool: 'pen', color: '#fff', width: 4, opacity: 1,
+    points: [{ x, y }, { x: x + 10, y: y + 10 }],
+  });
+  const layout = {
+    pageIds: ['p1'], pageLayouts: [{ id: 'p1', top: 0 }], zoom: 2, cssWidth: 1600, cssHeight: 2262,
+  };
+
+  it('finds only what changed, and redraws just the strokes touching it', () => {
+    const near = stroke('near', 100, 100);
+    const far = stroke('far', 600, 900);
+    const before = [near, far];
+    const added = stroke('added', 104, 104);
+    const after = [...before, added];
+    const document = { pages: [{ id: 'p1' }], strokes: after };
+
+    expect(changedInkRegion(before, before, document, layout)).toBeNull();
+    // A draft painted live but never committed still has to be repaired.
+    expect(changedInkRegion(before, before, document, layout, [stroke('palm', 300, 300)])).toMatchObject({ minX: 594, maxX: 626 });
+
+    const region = changedInkRegion(before, after, document, layout);
+    // Page units x zoom 2, padded by half the width (4 x 2 / 2) plus 2px of
+    // anti-aliasing: 104 * 2 - 6 ... 114 * 2 + 6.
+    expect(region).toEqual({ minX: 202, minY: 202, maxX: 234, maxY: 234 });
+
+    const context = createContextDouble();
+    context.canvas = { width: 2400, height: 3393 };
+    context.rect = vi.fn();
+    context.clip = vi.fn();
+    renderInkDocument(context, document, layout, region);
+
+    // Snapped out to whole device pixels (canvas px per CSS px = 1.5).
+    expect(context.rect).toHaveBeenCalledWith(303, 303, 48, 48);
+    expect(context.clearRect).toHaveBeenCalledWith(303, 303, 48, 48);
+    expect(context.clearRect).toHaveBeenCalledTimes(1);
+    // near and added overlap the region, far does not.
+    expect(context.stroke).toHaveBeenCalledTimes(2);
   });
 });
