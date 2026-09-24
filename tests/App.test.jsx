@@ -265,6 +265,12 @@ describe('App Component', () => {
     expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '2');
     expect(screen.getAllByTestId('document-view')).toHaveLength(2);
     expect(screen.getAllByTestId('split-close-pane-btn')).toHaveLength(2);
+    // Only the newly added (now focused) pane shows a tool rail - the other
+    // pane's rail, colors and side panels stay hidden instead of being
+    // duplicated.
+    expect(
+      screen.getAllByTestId('editor-sidebar').filter((el) => el.dataset.railVisible === 'true'),
+    ).toHaveLength(1);
 
     fireEvent.click(screen.getAllByTestId('split-add-btn')[0]);
     fireEvent.click(await screen.findByText('Notiz C'));
@@ -273,6 +279,9 @@ describe('App Component', () => {
     expect(screen.getAllByTestId('document-view')).toHaveLength(3);
     // A fourth document can't be added - the limit is three panes.
     for (const btn of screen.getAllByTestId('split-add-btn')) expect(btn).toBeDisabled();
+    expect(
+      screen.getAllByTestId('editor-sidebar').filter((el) => el.dataset.railVisible === 'true'),
+    ).toHaveLength(1);
 
     fireEvent.click(screen.getAllByTestId('split-close-pane-btn')[0]);
     expect(screen.getByTestId('workspace')).toHaveAttribute('data-pane-count', '2');
@@ -283,6 +292,35 @@ describe('App Component', () => {
 
     fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
+  });
+
+  it('moves the single tool rail to whichever pane is clicked into', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz A');
+    fireEvent.click(screen.getByTitle('Zurück zur Bibliothek'));
+
+    fireEvent.click(screen.getByText('Neue Notiz'));
+    fireEvent.click(screen.getByTestId('new-doc-submit'));
+    renameOpenNote('Notiz B');
+
+    fireEvent.click(screen.getByTestId('split-add-btn'));
+    fireEvent.click(await screen.findByText('Notiz A'));
+
+    const panes = screen.getAllByTestId(/^workspace-pane-/);
+    expect(panes).toHaveLength(2);
+    const sidebars = () => screen.getAllByTestId('editor-sidebar');
+
+    // Notiz A was just added, so its pane is focused and shows the rail.
+    expect(sidebars()[0]).toHaveAttribute('data-rail-visible', 'false');
+    expect(sidebars()[1]).toHaveAttribute('data-rail-visible', 'true');
+
+    // Clicking into the first pane (Notiz B) moves the rail there instead.
+    fireEvent.pointerDown(panes[0]);
+    expect(sidebars()[0]).toHaveAttribute('data-rail-visible', 'true');
+    expect(sidebars()[1]).toHaveAttribute('data-rail-visible', 'false');
   });
 
   it('does not offer an already-open document as a split-screen option', async () => {

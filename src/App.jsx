@@ -260,7 +260,7 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
         </button>
       )}
       <div
-        className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""}`}
+        className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""} ${paneCount > 1 && !isActive ? "no-rail" : ""}`}
         data-liquid-glass-control="title"
       >
         {onBack && (
@@ -425,8 +425,9 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
           control on the page and shows as a page-wide flash) triggers that
           redraw for the rail alone. */}
       <div
-        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""}`}
+        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""} ${paneCount > 1 && !isActive ? "rail-hidden" : ""}`}
         data-testid="editor-sidebar"
+        data-rail-visible={!(paneCount > 1 && !isActive)}
         data-mode={panelMode || "closed"}
         data-liquid-glass-control="rail"
         // The glass shader bevels to its own cornerRadius (default 65px,

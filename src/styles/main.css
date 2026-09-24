@@ -1172,6 +1172,20 @@ body::after {
   z-index: 300;
 }
 
+/* Split-screen shows one tool rail at a time - only the focused pane's, so
+   drawing tools, color swatches and the agent/browser/pages/calculator
+   panels aren't duplicated in every open document. Kept mounted (not
+   unmounted) so its portal target for the document's own toolbar stays
+   valid; unfocused panes just fall back to their title pill sitting where
+   the rail would have been. */
+.editor-sidebar.rail-hidden {
+  display: none;
+}
+
+.editor-title-pill.no-rail {
+  left: 24px;
+}
+
 .editor-body {
   position: absolute;
   inset: 0;
