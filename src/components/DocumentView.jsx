@@ -1492,6 +1492,9 @@ export default function DocumentView({
       const cssHeight = parseFloat(canvas.style.height) || 0;
       const perCssX = cssWidth > 0 ? canvas.width / cssWidth : 1;
       const perCssY = cssHeight > 0 ? canvas.height / cssHeight : 1;
+      if (!paintedPageDraftsRef.current.has(draft)) {
+        paintedPageDraftsRef.current.set(draft, strokesByPage.get(draft.pageId));
+      }
       renderInkStroke(context, segment, {
         offsetX: -(parseFloat(canvas.style.left) || 0) * perCssX,
         offsetY: -(parseFloat(canvas.style.top) || 0) * perCssY,
@@ -1521,6 +1524,13 @@ export default function DocumentView({
   // repair their pixels whether they commit, get erased as a palm or become a
   // shape.
   const paintedDraftsRef = useRef(new Set());
+  // Same for an imported note's per-page canvases, which only repaint when
+  // their page's strokes change: draft -> that page's strokes when it was
+  // painted. A draft that ends without changing them (turned into a shape,
+  // palm-cancelled) would otherwise stay on screen as ghost ink until the
+  // next stroke on that page.
+  const paintedPageDraftsRef = useRef(new Map());
+  const [pageRepaintKeys, setPageRepaintKeys] = useState({});
   // What the canvas shows now, so a redraw repaints only what changed since —
   // a stroke commit redraws a word, not the whole note (see changedInkRegion).
   const paintedInkRef = useRef(null);
@@ -2039,6 +2049,7 @@ export default function DocumentView({
     document: inkDocument,
     commitStroke: inkController?.inkLayerLocked ? () => {} : inkController?.commitStroke,
     removeStrokes: inkController?.inkLayerLocked ? () => {} : inkController?.removeStrokes,
+    removeObjects: inkController?.inkLayerLocked ? () => {} : inkController?.removeObjects,
     addObject: inkController?.inkLayerLocked ? undefined : inkController?.addObject,
     onHoldWithoutShape: inkController?.inkLayerLocked
       ? undefined
@@ -2094,6 +2105,19 @@ export default function DocumentView({
   };
 
   useLayoutEffect(() => {
+    const stale = [];
+    for (const [draft, strokes] of paintedPageDraftsRef.current) {
+      if (draft === inkPointer.draftStroke) continue;
+      paintedPageDraftsRef.current.delete(draft);
+      if (strokesByPage.get(draft.pageId) === strokes) stale.push(draft.pageId);
+    }
+    if (stale.length > 0) {
+      setPageRepaintKeys((keys) => {
+        const next = { ...keys };
+        for (const pageId of stale) next[pageId] = (next[pageId] || 0) + 1;
+        return next;
+      });
+    }
     if (!inkCanvasRef.current) return;
     redrawInkCanvasRef.current?.();
   }, [
@@ -2604,31 +2628,9 @@ export default function DocumentView({
       gutterPanData.current = startPan(event);
     }
 
-    if (activePointers.current.size === 2 && !needsPinchConfirmation()) {
-      // Outside passive-stylus mode every touch is already a deliberate
-      // finger (see needsPinchConfirmation), so there is no resting-hand
-      // ambiguity to wait out — arm immediately, same as before.
-      commitPinchArm(event);
-    }
-  };
-
-  // In passive-stylus mode a lone touch stands in for the pen (see
-  // useInkPointer), so a second one touching down is exactly as ambiguous as
-  // a hand landing beside the writing finger — shouldBlockTouch says as much.
-  // Every other mode has no such stand-in: two touches are always two fingers.
-  const needsPinchConfirmation = () => inputMode === "stylus" && palmGuard.passiveStylus;
-
-  // A freshly landed pair is armed once both contacts have actually travelled,
-  // not the instant a second one touches down. At touchdown a resting hand
-  // beside the writing finger and a real second finger look identical — only
-  // motion tells them apart, and a parked hand never contributes any. Below
-  // the threshold nothing is armed yet, so the moving contact just keeps
-  // drawing until this promotes it.
-  const armPinch = (event) => {
-    for (const p of activePointers.current.values()) {
-      if (Math.hypot(p.x - p.downX, p.y - p.downY) < palmGuard.restingPx) return;
-    }
-    commitPinchArm(event);
+    // Two touches are two fingers in every mode (see inputPolicy), so arm at
+    // touchdown: waiting for the pair to move is what let one of them draw.
+    if (activePointers.current.size === 2) commitPinchArm(event);
   };
 
   // The preview below moves every page's rendered box without touching the
@@ -2740,13 +2742,10 @@ export default function DocumentView({
     }
     if (e.pointerType !== "touch") return;
 
-    // A pending or armed pair is judged by armPinch's own movement check below,
-    // not by this — the classifier's palm election runs per contact and, on a
-    // panel that reports no contact geometry at all, decisively brands whichever
-    // finger hasn't moved *yet* the instant the other one does, which is simply
-    // the second finger of a pinch that has not started moving this frame. Once
-    // a pointer has already left the pair (or a third arrives), the normal
-    // per-touch guard below still applies.
+    // A pair keeps its fingers even if the guard turns on one mid-gesture (a
+    // pen coming into hover range, a thumb flattening to palm size) — dropping
+    // it would end the pinch under the user's hand. Once a pointer has left the
+    // pair (or a third arrives), the normal per-touch guard applies.
     if (inkPointer.shouldBlockTouch(e) && activePointers.current.size !== 2) {
       if (activePointers.current.has(e.pointerId)) {
         handleGestureEnd(e);
@@ -2764,8 +2763,9 @@ export default function DocumentView({
       return;
     }
 
+    // Down to a pair again after a third finger left: pinch with those two.
     if (activePointers.current.size === 2 && !pinchInitialData.current) {
-      armPinch(e);
+      commitPinchArm(e);
     }
 
     if (pinchInitialData.current) {
@@ -3861,6 +3861,7 @@ export default function DocumentView({
                   sourceType={note.source?.type}
                   sourceHandle={sourceHandle}
                   strokes={strokesByPage.get(pageLayout.id) || EMPTY_STROKES}
+                  repaintKey={pageRepaintKeys[pageLayout.id]}
                   zoom={zoom}
                   dpr={globalThis.devicePixelRatio || 1}
                 />

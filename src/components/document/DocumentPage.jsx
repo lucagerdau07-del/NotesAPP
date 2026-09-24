@@ -19,6 +19,7 @@ function DocumentPage({
   strokes = [],
   zoom = 1,
   dpr = 1,
+  repaintKey,
   children,
 }) {
   const openLink = useBrowserLink();
@@ -204,6 +205,7 @@ function DocumentPage({
             zoom={zoom}
             dpr={dpr}
             canvasWindow={canvasWindow}
+            repaintKey={repaintKey}
           />
         </>
       )}

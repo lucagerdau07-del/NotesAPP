@@ -114,8 +114,54 @@ describe('recognizeShape', () => {
     expect(result).toEqual({ type: 'arrow', x: 0, y: 0, width: 100, height: 0, endArrowhead: 'arrow' });
   });
 
+  it('recognizes a one-stroke arrow with a full V head (out, back to tip, out)', () => {
+    const points = [
+      ...linePoints(0, 0, 120, 0),
+      ...linePoints(120, 0, 95, 18).slice(1),
+      ...linePoints(95, 18, 120, 0).slice(1),
+      ...linePoints(120, 0, 95, -18).slice(1),
+    ];
+    expect(recognizeShape(jitter(points, 1.5))).toMatchObject({ type: 'arrow', endArrowhead: 'arrow' });
+  });
+
+  it('recognizes a shaft plus a V head drawn as one separate stroke', () => {
+    const points = [...linePoints(0, 0, 100, 40), ...linePoints(78, 48, 100, 40), ...linePoints(100, 40, 88, 20)];
+    const result = recognizeShape(points);
+    expect(result).toMatchObject({ type: 'arrow', x: 0, y: 0 });
+    expect(result.width).toBeCloseTo(100, -1);
+    expect(result.height).toBeCloseTo(40, -1);
+  });
+
+  it('points the arrow at the head even when the head was drawn first', () => {
+    const points = [...linePoints(82, 14, 100, 0), ...linePoints(100, 0, 82, -14), ...linePoints(0, 0, 100, 0)];
+    expect(recognizeShape(points)).toEqual({ type: 'arrow', x: 0, y: 0, width: 100, height: 0, endArrowhead: 'arrow' });
+  });
+
+  it('keeps a line a line when the held tip jitters at the end', () => {
+    const tail = Array.from({ length: 30 }, (_, i) => ({ x: 150 + Math.sin(i * 3) * 2, y: 10 + Math.cos(i * 5) * 2 }));
+    expect(recognizeShape([...linePoints(0, 0, 150, 10), ...tail])).toMatchObject({ type: 'line', x: 0, y: 0 });
+  });
+
+  it('keeps a gently bowed line a line, not an arrow', () => {
+    const points = Array.from({ length: 50 }, (_, i) => ({ x: i * 4, y: 4 * 12 * (i / 49) * (1 - i / 49) }));
+    expect(recognizeShape(points)).toMatchObject({ type: 'line' });
+  });
+
+  it('recognizes a double-headed arrow', () => {
+    const points = [
+      ...linePoints(18, 14, 0, 0), ...linePoints(0, 0, 18, -14),
+      ...linePoints(0, 0, 120, 0),
+      ...linePoints(102, 14, 120, 0), ...linePoints(120, 0, 102, -14),
+    ];
+    expect(recognizeShape(points)).toMatchObject({ type: 'arrow', startArrowhead: 'arrow', endArrowhead: 'arrow' });
+  });
+
   it('returns null for handwriting-shaped scribbles', () => {
     expect(recognizeShape(zigzagPoints())).toBeNull();
+  });
+
+  it('returns null for a short headless stroke - word-sized, not a deliberate line', () => {
+    expect(recognizeShape(linePoints(0, 0, 25, 3))).toBeNull();
   });
 
   it('returns null for a tiny tap-and-hold cluster', () => {

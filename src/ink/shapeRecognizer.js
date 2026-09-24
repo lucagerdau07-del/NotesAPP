@@ -6,9 +6,9 @@
 // accidental tap-and-hold never mutates it.
 //
 // ponytail: naive heuristic - only axis-aligned rect/ellipse (no rotation or
-// diamonds), and an arrowhead is "path reaches a far point, then draws a
-// short flare back toward the start" (covers both a single hooked stroke and
-// a separate head stroke). Upgrade to a real corner classifier if users draw
+// diamonds), and an arrowhead is "ink flaring off the shaft near one end"
+// (covers a single hooked stroke, a V head, and separate barb strokes; no
+// curved arrows). Upgrade to a real corner classifier if users draw
 // rotated/curved shapes often.
 
 function dist(a, b) {
@@ -26,18 +26,22 @@ function dedupe(points) {
 // Light moving-average smoothing before corner detection: a real hand (or
 // digitizer sensor noise) wobbles point-to-point, and that wobble alone can
 // look like extra corners to RDP. Only used for finding corners - area,
-// bbox and circularity still read the actual drawn points.
+// bbox and circularity still read the actual drawn points. Wraps around, since
+// it only ever sees closed loops: a truncated window at the seam would round
+// off whichever corner the stroke started on, and whether that corner then
+// still counted depended on exactly where the pen stopped.
 function smooth(points, window = 5) {
   if (points.length <= window) return points;
   const half = Math.floor(window / 2);
+  const n = points.length;
   return points.map((_, i) => {
-    let sx = 0, sy = 0, n = 0;
-    for (let k = Math.max(0, i - half); k <= Math.min(points.length - 1, i + half); k += 1) {
-      sx += points[k].x;
-      sy += points[k].y;
-      n += 1;
+    let sx = 0, sy = 0;
+    for (let k = i - half; k <= i + half; k += 1) {
+      const p = points[(k + n) % n];
+      sx += p.x;
+      sy += p.y;
     }
-    return { x: sx / n, y: sy / n };
+    return { x: sx / window, y: sy / window };
   });
 }
 
@@ -110,12 +114,24 @@ function recognizeClosed(raw) {
   const box = bboxOf(raw);
   const diag = Math.hypot(box.width, box.height);
   const corners = simplifyRDP(smooth(raw), Math.max(4, diag * 0.035));
-  // A closing duplicate corner (RDP keeps the seam point) throws off the
-  // corner count - drop it when it lands right next to the true start.
-  const distinct =
-    corners.length > 1 && dist(corners[0], corners[corners.length - 1]) < Math.max(20, diag * 0.15)
-      ? corners.slice(0, -1)
-      : corners;
+  // RDP tends to chamfer a rounded corner into two close points, and keeps
+  // the seam point at both ends of the loop - either throws off the corner
+  // count. Fold any edge that is short next to the shape's own short side
+  // into one corner; a circle's RDP edges are all a sizeable arc, so it never
+  // folds down into a square.
+  const foldBelow = Math.min(box.width, box.height) * 0.25;
+  const distinct = [...corners];
+  while (distinct.length > 3) {
+    const n = distinct.length;
+    const edge = (i) => dist(distinct[i], distinct[(i + 1) % n]);
+    let shortest = 0;
+    for (let i = 1; i < n; i += 1) if (edge(i) < edge(shortest)) shortest = i;
+    if (edge(shortest) >= foldBelow) break;
+    const p = distinct[shortest];
+    const q = distinct[(shortest + 1) % n];
+    distinct.splice(shortest, 1, { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+    distinct.splice(shortest === n - 1 ? 0 : shortest + 1, 1);
+  }
 
   if (distinct.length >= 3 && distinct.length <= 8) {
     const angles = distinct.map((c, i) =>
@@ -139,49 +155,90 @@ function recognizeClosed(raw) {
   return null;
 }
 
-function recognizeOpen(raw) {
-  const start = raw[0];
-
-  // The point farthest from the start is the shaft's tip - true whether the
-  // whole thing is one continuous hooked stroke or a shaft stroke followed
-  // by separate arrowhead strokes drawn back toward it.
-  let farIndex = 0;
-  let farDist = 0;
-  for (let i = 1; i < raw.length; i += 1) {
-    const d = dist(start, raw[i]);
-    if (d > farDist) {
-      farDist = d;
-      farIndex = i;
+function farthestFrom(points, from) {
+  let best = points[0];
+  let bestDist = -1;
+  for (const p of points) {
+    const d = dist(from, p);
+    if (d > bestDist) {
+      bestDist = d;
+      best = p;
     }
   }
-  const tip = raw[farIndex];
-  const shaftLen = pathLength(raw.slice(0, farIndex + 1));
-  const shaftStraightness = shaftLen > 0 ? farDist / shaftLen : 0;
-  if (shaftStraightness < 0.75) return null;
+  return best;
+}
 
-  const flareLen = pathLength(raw.slice(farIndex));
-  const hasFlare = farIndex < raw.length - 1 && flareLen > 0 && flareLen < shaftLen * 0.8;
-  if (hasFlare) {
-    return { type: "arrow", x: start.x, y: start.y, width: tip.x - start.x, height: tip.y - start.y, endArrowhead: "arrow" };
-  }
+// Purely positional, never path-based: stroke order, pen-lift jumps between
+// merged strokes, and the jitter of a pen held still at the end (the hold
+// gesture itself) all leave the point cloud's shape unchanged.
+function recognizeOpen(raw) {
+  // The two ends of the shaft are the cloud's two farthest-apart points
+  // (two-pass approximation). Arrowhead barbs sweep back toward the tail, so
+  // they never outreach the tip.
+  const a = farthestFrom(raw, raw[0]);
+  const b = farthestFrom(raw, a);
+  const len = dist(a, b);
+  const ux = (b.x - a.x) / len;
+  const uy = (b.y - a.y) / len;
 
-  // No flare after the tip: the tip has to actually be (close to) where the
-  // drawing ends, or this is just a wobble that happened to bulge outward.
-  if (farIndex >= raw.length - 3) {
-    return { type: "line", x: start.x, y: start.y, width: tip.x - start.x, height: tip.y - start.y };
+  const HEAD_ZONE = 0.35; // outer share of the shaft that may hold a head
+  let spreadA = 0;
+  let spreadB = 0;
+  let bodySpread = 0;
+  for (const p of raw) {
+    const t = ((p.x - a.x) * ux + (p.y - a.y) * uy) / len;
+    const perp = Math.abs((p.x - a.x) * uy - (p.y - a.y) * ux);
+    if (t < HEAD_ZONE) spreadA = Math.max(spreadA, perp);
+    else if (t > 1 - HEAD_ZONE) spreadB = Math.max(spreadB, perp);
+    else bodySpread = Math.max(bodySpread, perp);
   }
-  return null;
+  if (bodySpread > Math.max(8, len * 0.1)) return null; // bowed or zigzag middle
+  if (spreadA > len * 0.6 || spreadB > len * 0.6) return null; // L/V shapes, not heads
+
+  // A head flares well past the shaft's own wobble; a gently bowed line is
+  // widest in the middle, so its ends never pass this.
+  const headMin = Math.max(6, len * 0.07, bodySpread * 2);
+  const headA = spreadA >= headMin;
+  const headB = spreadB >= headMin;
+  // Tail = the end without a head; for a plain line or a double arrow, the
+  // end the drawing started at.
+  const tail = headA && !headB ? b : headB && !headA ? a : dist(raw[0], a) <= dist(raw[0], b) ? a : b;
+  const tip = tail === a ? b : a;
+  const segment = { x: tail.x, y: tail.y, width: tip.x - tail.x, height: tip.y - tail.y };
+  if (headA && headB) return { type: "arrow", ...segment, startArrowhead: "arrow", endArrowhead: "arrow" };
+  if (headA || headB) return { type: "arrow", ...segment, endArrowhead: "arrow" };
+  // No head is the weakest evidence of intent - just "mostly straight" - and
+  // a held pause mid-handwriting is exactly that shape at word-sized scale.
+  // An arrowhead's own flare already proves someone meant a shape, so only
+  // the bare line needs this extra floor.
+  if (len < 40) return null;
+  return { type: "line", ...segment };
+}
+
+// The hold gesture itself leaves a knot of jitter where the pen rested; at a
+// rect's closing corner that knot reads as extra corners. Cut it back to one
+// point.
+function trimHoldTail(points, radius = 6) {
+  const end = points[points.length - 1];
+  let i = points.length - 1;
+  while (i > 0 && dist(points[i - 1], end) <= radius) i -= 1;
+  return [...points.slice(0, i), end];
 }
 
 export function recognizeShape(points) {
   if (!Array.isArray(points) || points.length < 6) return null;
-  const raw = dedupe(points);
+  const raw = trimHoldTail(dedupe(points));
   if (raw.length < 6) return null;
 
   const box = bboxOf(raw);
   const diag = Math.hypot(box.width, box.height);
   if (diag < 12) return null;
 
+  // Open first: its straight-shaft test rejects every rect/ellipse, while the
+  // start/end "closed" test misfires on multi-stroke arrows whose first and
+  // last strokes both touch the tip.
+  const open = recognizeOpen(raw);
+  if (open) return open;
   const closed = dist(raw[0], raw[raw.length - 1]) <= Math.max(28, diag * 0.3);
-  return closed ? recognizeClosed(raw) : recognizeOpen(raw);
+  return closed ? recognizeClosed(raw) : null;
 }

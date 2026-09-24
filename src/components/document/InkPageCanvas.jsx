@@ -8,6 +8,10 @@ function InkPageCanvas({
   zoom = 1,
   dpr = 1,
   canvasWindow = null,
+  // Bumped by DocumentView when a live draft painted onto this canvas went
+  // away without changing `strokes` (became a shape, palm-cancelled), so its
+  // pixels get cleared.
+  repaintKey,
 }) {
   const canvasRef = useRef(null);
 
@@ -54,7 +58,7 @@ function InkPageCanvas({
     for (const stroke of strokes) {
       if (stroke.pageId === page.id) renderInkStroke(ctx, stroke, transform);
     }
-  }, [page.id, page.width, page.height, strokes, zoom, dpr, canvasWindow]);
+  }, [page.id, page.width, page.height, strokes, zoom, dpr, canvasWindow, repaintKey]);
 
   return (
     <canvas

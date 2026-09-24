@@ -1,6 +1,7 @@
 import {
   createPageObject,
   isPageObject,
+  objectBounds,
   pageObjectsOf,
 } from "./pageObjects.js";
 
@@ -553,4 +554,32 @@ export function findIntersectingStrokeIds(document, pageId, points, radius) {
         strokeIntersectsPoints(stroke, samples, radius),
     )
     .map((stroke) => stroke.id);
+}
+
+// The stroke eraser swipes away a hand-drawn scribble it touches; a shape
+// born from that same swipe (hold-to-convert) has to go the same way, or
+// "erasing" a rect/arrow silently does nothing and it just sits there.
+function objectIntersectsPoints(object, points, radius) {
+  const box = objectBounds(object);
+  return points.some(
+    (point) =>
+      point.x >= box.x - radius &&
+      point.x <= box.x + box.width + radius &&
+      point.y >= box.y - radius &&
+      point.y <= box.y + box.height + radius,
+  );
+}
+
+export function findIntersectingObjectIds(document, pageId, points, radius) {
+  if (!document || !Array.isArray(points) || !Number.isFinite(radius) || radius < 0) {
+    return [];
+  }
+  const samples = points.filter(isPoint);
+  if (samples.length === 0) return [];
+  return pageObjectsOf(document)
+    .filter(
+      (object) =>
+        object.pageId === pageId && objectIntersectsPoints(object, samples, radius),
+    )
+    .map((object) => object.id);
 }
