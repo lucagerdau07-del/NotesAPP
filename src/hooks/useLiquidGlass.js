@@ -98,11 +98,12 @@ function keepGlassPaintedWhileResizing() {
     const resized = checkSizes.call(this);
     // A panel that just finished growing now covers page objects the last
     // capture culled (see cullCaptureToGlass), and nothing in the DOM behind
-    // it changed to trigger a re-capture on its own.
+    // it changed to trigger a re-capture on its own. Only captures that did
+    // leave something out: the static scene backdrop is a ~1s re-capture on a
+    // Galaxy Tab A7 and was re-shot on every open and close of the panel.
     if (this.__glassResizing && !resized)
       for (const child of this.root?.children ?? [])
-        if (!this.glassSet.has(child) && !["CANVAS", "IMG", "VIDEO"].includes(child.tagName))
-          this.capture?.captureElement(child, true);
+        if (this.capture?.cache?.get(child)?.culled) this.capture.captureElement(child, true);
     this.__glassResizing = resized;
     if (resized) this._globalDirty = true;
     return resized;
@@ -344,7 +345,8 @@ export function cullCaptureToGlass(instance) {
       restoreFullSizeClones();
     }
     if (!canvas) return;
-    this.cache.set(element, { canvas, w, h, viewport });
+    const culled = offGlass.length + hollowed.length > 0;
+    this.cache.set(element, { canvas, w, h, viewport, culled });
     this.onCacheUpdate?.(element);
   };
 

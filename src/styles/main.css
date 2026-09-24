@@ -1043,7 +1043,10 @@ body::after {
   flex-direction: row;
   align-items: stretch;
   overflow: hidden;
-  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  /* No width transition: every frame of it re-renders the rail's WebGL glass
+     (~200ms each on a Galaxy Tab A7, so the "animation" showed ~4 frames), and
+     while shrinking it still overlapped the title pill, which triggered a
+     ~1s html-to-image capture of the whole rail on every close. */
   /* Sibling of .editor-body in the shell, so it needs the same stacking level
      as the pills to stay clickable above the full-bleed editor body. */
   z-index: 200;
@@ -1054,7 +1057,6 @@ body::after {
 .editor-sidebar.panel-open {
   width: min(clamp(520px, 42vw, 800px), calc(100vw - 24px));
   border-radius: 30px;
-  transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .editor-sidebar.browser-fullscreen {
@@ -1062,7 +1064,6 @@ body::after {
 }
 
 .editor-sidebar.is-resizing {
-  transition: none;
   user-select: none;
 }
 
@@ -3687,11 +3688,15 @@ body::after {
 }
 
 .pages-panel-thumb {
+  position: relative;
   width: 100%;
   overflow: hidden;
 }
 
+/* Imported file page underneath, ink render on top - both fill the page box. */
 .pages-panel-thumb img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -3706,6 +3711,9 @@ body::after {
 }
 
 .pages-panel-card-footer {
+  /* Touch drags start here; without this the list scroll claims the gesture
+     and the browser cancels the pointer after a few pixels. */
+  touch-action: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4190,7 +4198,9 @@ body::after {
 .browser-viewport {
   position: absolute;
   inset: 0;
-  background: #fff;
+  /* No fill: on Android the native WebView sits on top of this box with its
+     bottom-right corner rounded, and a fill here shows through that corner.
+     The iframe fallback paints its own white. */
 }
 
 .browser-viewport[hidden] {

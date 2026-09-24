@@ -370,14 +370,8 @@ function Editor({ activeNote, onBack }) {
         </div>
       </div>
       {/* One glass control: the library re-measures each control's own
-          offsetWidth/Height every frame and keeps the canvas content in
-          step with the CSS width transition below — but its per-frame path
-          only marks *content* dirty on a size change, not the shader render
-          itself, so the panel sits blank until something marks it dirty.
-          Calling markChanged() on just this element (rather than dispatching
-          a global "resize", which forces a full re-capture of every glass
-          control on the page and shows as a page-wide flash) triggers that
-          redraw for the rail alone. */}
+          offsetWidth/Height every frame, and keepGlassPaintedWhileResizing
+          (useLiquidGlass) repaints it on the frame its width changes. */}
       <div
         className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""}`}
         data-testid="editor-sidebar"
@@ -389,10 +383,6 @@ function Editor({ activeNote, onBack }) {
         // arcs like a pill even though the CSS corner is tight.
         data-config={isPanelOpen ? '{"cornerRadius":30}' : undefined}
         style={isPanelOpen && !isBrowserFullscreen && railWidth ? { width: `${railWidth}px` } : undefined}
-        onTransitionEnd={(event) => {
-          if (event.propertyName === "width")
-            glassInstanceRef.current?.markChanged(event.currentTarget);
-        }}
       >
         <div className="rail-tools" ref={setRailSlot}>
           <div style={{ order: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
