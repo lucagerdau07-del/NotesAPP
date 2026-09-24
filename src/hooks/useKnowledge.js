@@ -27,15 +27,19 @@ export default function useKnowledge({
   subjects = [],
   repository = browserKnowledgeRepository,
   commentRepository = browserCommentRepository,
+  syncIserv = null,
 } = {}) {
   const [state, setState] = useState(() => repository.read());
   const [isScanning, setScanning] = useState(false);
   const [isPlanning, setPlanning] = useState(false);
+  const [iservState, setIservState] = useState("off");
   const busyRef = useRef(false);
   const notesRef = useRef(notes);
   const subjectsRef = useRef(subjects);
+  const syncIservRef = useRef(syncIserv);
   notesRef.current = notes;
   subjectsRef.current = subjects;
+  syncIservRef.current = syncIserv;
 
   const scanNow = useCallback(
     async () => {
@@ -62,8 +66,27 @@ export default function useKnowledge({
     [repository, commentRepository],
   );
 
+  // Holt die IServ-Termine. Wirft nie: ein Netzwerkfehler darf Scan und Plan nicht aufhalten.
+  // ponytail: kein Timeout, ergänzen, falls der Pull auf dem Tablet je hängt.
+  const pullIserv = useCallback(async () => {
+    const sync = syncIservRef.current;
+    if (!sync) return 0;
+    try {
+      const added = await sync({ repository });
+      setIservState(added === null ? "off" : "ok");
+      return added || 0;
+    } catch {
+      setIservState("error");
+      return 0;
+    } finally {
+      setState(repository.read());
+    }
+  }, [repository]);
+
   const refreshPlan = useCallback(async () => {
     setPlanning(true);
+    // Nur awaiten, wenn es etwas zu holen gibt: ohne syncIserv läuft buildPlan synchron an.
+    if (syncIservRef.current) await pullIserv();
     const today = isoDate(Date.now());
     const current = repository.read();
     try {
@@ -79,11 +102,28 @@ export default function useKnowledge({
       setPlanning(false);
       setState(repository.read());
     }
-  }, [repository]);
+  }, [repository, pullIserv]);
 
   const setEventDone = useCallback(
     (id, done) => {
       repository.setEventDone(id, done);
+      setState(repository.read());
+    },
+    [repository],
+  );
+
+  const addEvent = useCallback(
+    (input) => {
+      const event = repository.addEvent(input);
+      setState(repository.read());
+      return event;
+    },
+    [repository],
+  );
+
+  const removeEvent = useCallback(
+    (id) => {
+      repository.removeEvent(id);
       setState(repository.read());
     },
     [repository],
@@ -102,9 +142,11 @@ export default function useKnowledge({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
+    // Neue oder geänderte Aufgaben machen den Plan über planInputsKey veraltet.
+    if (syncIservRef.current) void pullIserv();
     if (!repository.read().settings.autoScan) return;
     scanNow();
-  }, [repository, scanNow]);
+  }, [repository, scanNow, pullIserv]);
 
   return {
     events: state.events,
@@ -115,9 +157,12 @@ export default function useKnowledge({
     autoScan: state.settings.autoScan,
     isScanning,
     isPlanning,
+    iservState,
     scanNow,
     refreshPlan,
     setEventDone,
+    addEvent,
+    removeEvent,
     setAutoScan,
   };
 }

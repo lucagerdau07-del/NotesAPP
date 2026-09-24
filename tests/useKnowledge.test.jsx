@@ -14,6 +14,7 @@ import useKnowledge from "../src/hooks/useKnowledge.js";
 import { requestCompletion } from "../src/agent/agentClient.js";
 import { KNOWLEDGE_STORAGE_KEY } from "../src/knowledge/knowledgeRepository.js";
 import { browserCommentRepository } from "../src/knowledge/commentRepository.js";
+import { isoDate, isPlanCurrent, planInputsKey, PLAN_RULES_VERSION } from "../src/knowledge/studyPlan.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -173,5 +174,99 @@ describe("useKnowledge", () => {
       result.current.setEventDone("a", true);
     });
     await waitFor(() => expect(result.current.events[0].done).toBe(true));
+  });
+
+  describe("IServ", () => {
+    const iservEvent = {
+      kind: "homework",
+      title: "Blatt 3",
+      subject: "Mathe",
+      due: "2099-01-01",
+      iservId: "https://iserv/ex/1",
+    };
+    const seed = (extra = {}) =>
+      globalThis.localStorage.setItem(
+        KNOWLEDGE_STORAGE_KEY,
+        JSON.stringify({ version: 1, events: [], terms: [], settings: { autoScan: false }, ...extra }),
+      );
+
+    it("holt IServ-Termine beim Einhängen, wodurch ein heutiger Plan veraltet", async () => {
+      const today = isoDate(Date.now());
+      seed({ plan: { generatedFor: today, rules: PLAN_RULES_VERSION, inputs: planInputsKey([]), days: [] } });
+      const syncIserv = vi.fn(
+        async ({ repository }) =>
+          repository.mergeFindings({ events: [iservEvent], sourceNoteId: "iserv" }).addedEvents,
+      );
+
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+      expect(isPlanCurrent(result.current.plan, result.current.events, today)).toBe(true);
+
+      await waitFor(() => expect(result.current.iservState).toBe("ok"));
+      expect(result.current.events).toHaveLength(1);
+      expect(isPlanCurrent(result.current.plan, result.current.events, today)).toBe(false);
+    });
+
+    it("behält den Plan, wenn der Pull nichts Neues bringt", async () => {
+      seed({ plan: { generatedFor: "2026-01-01", days: [] } });
+      const syncIserv = vi.fn(async () => 0);
+
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+
+      await waitFor(() => expect(result.current.iservState).toBe("ok"));
+      expect(result.current.plan).toEqual({ generatedFor: "2026-01-01", days: [] });
+    });
+
+    it("meldet 'off', wenn nichts eingerichtet ist", async () => {
+      seed();
+      const syncIserv = vi.fn(async () => null);
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+      await waitFor(() => expect(syncIserv).toHaveBeenCalled());
+      expect(result.current.iservState).toBe("off");
+    });
+
+    it("meldet 'error' bei einem Fehler und plant trotzdem", async () => {
+      seed();
+      const syncIserv = vi.fn(async () => {
+        throw new Error("offline");
+      });
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+      await waitFor(() => expect(result.current.iservState).toBe("error"));
+
+      await act(async () => {
+        await result.current.refreshPlan();
+      });
+
+      expect(requestCompletion).toHaveBeenCalled();
+      expect(result.current.plan).toEqual(expect.objectContaining({ days: expect.any(Array) }));
+    });
+
+    it("holt IServ-Termine vor dem Berechnen des Plans", async () => {
+      seed();
+      const order = [];
+      const syncIserv = vi.fn(async () => {
+        order.push("sync");
+        return 0;
+      });
+      requestCompletion.mockImplementationOnce(async () => {
+        order.push("plan");
+        return { content: '{"days":{}}' };
+      });
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [], syncIserv }));
+      await waitFor(() => expect(syncIserv).toHaveBeenCalledTimes(1));
+      order.length = 0;
+
+      await act(async () => {
+        await result.current.refreshPlan();
+      });
+
+      expect(order).toEqual(["sync", "plan"]);
+    });
+
+    it("bleibt 'off' und ruft nichts auf, wenn kein syncIserv übergeben wird", async () => {
+      seed();
+      const { result } = renderHook(() => useKnowledge({ notes: [], subjects: [] }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(result.current.iservState).toBe("off");
+    });
   });
 });

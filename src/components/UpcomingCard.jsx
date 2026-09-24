@@ -3,17 +3,18 @@ import { GraduationCap, NotebookPen } from "lucide-react";
 
 const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
-function formatDue(due) {
+export function formatDue(due) {
   const date = new Date(`${due}T00:00:00`);
   if (Number.isNaN(date.getTime())) return due;
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}.`;
 }
 
 function kindLabelOf(kind) {
-  return { exam: "Klausur", review: "Wiederholung" }[kind] || "Hausaufgabe";
+  return { exam: "Klausur", review: "Wiederholung", appointment: "Termin" }[kind] || "Hausaufgabe";
 }
 
 function sourceTitleOf(sourceNoteId, sourceNoteTitles) {
+  if (sourceNoteId === "manual") return "Kalender";
   return sourceNoteTitles[sourceNoteId] || sourceNoteId || "Unbekannte Notiz";
 }
 

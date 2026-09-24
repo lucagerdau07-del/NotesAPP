@@ -157,6 +157,7 @@ function createCanvasContext() {
     scale: vi.fn(),
     setTransform: vi.fn(),
     rect: vi.fn(),
+    clip: vi.fn(),
     roundRect: vi.fn(),
     ellipse: vi.fn(),
     fill: vi.fn(),

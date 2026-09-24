@@ -19,8 +19,12 @@ function normalizeKey(value) {
     .trim();
 }
 
+// IServ-Termine sind über ihre IServ-ID eindeutig: ändert sich Titel oder Frist,
+// wird derselbe Termin aktualisiert statt ein zweiter angelegt.
 const eventKey = (event) =>
-  `${event.kind}|${normalizeKey(event.subject)}|${event.due}|${normalizeKey(event.title)}`;
+  event.iservId
+    ? `iserv|${event.iservId}`
+    : `${event.kind}|${normalizeKey(event.subject)}|${event.due}|${normalizeKey(event.title)}`;
 
 const termKey = (term) => `${normalizeKey(term.subject)}|${normalizeKey(term.term)}`;
 
@@ -98,7 +102,16 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           title: raw.title,
           subject: raw.subject,
           due: raw.due,
+          ...(raw.time ? { time: raw.time } : {}),
           sourceNoteId,
+          ...(raw.iservId
+            ? {
+                iservId: raw.iservId,
+                url: raw.url,
+                description: raw.description,
+                attachments: raw.attachments,
+              }
+            : {}),
           done: false,
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -117,6 +130,31 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
         return { ...state, events: merged.list, terms: mergedTerms.list };
       });
       return { addedEvents, addedTerms };
+    },
+
+    // Selbst angelegte Einträge aus dem Kalender. Kein Merge: zwei gleichnamige
+    // Termine am selben Tag sind hier gewollt, nicht doppelt gefunden.
+    addEvent({ kind = "appointment", title, subject = "", due, time = "", description = "" }) {
+      const timestamp = now();
+      const event = {
+        id: nextId("event"),
+        kind,
+        title: String(title).trim(),
+        subject: String(subject).trim(),
+        due,
+        ...(time ? { time } : {}),
+        ...(description.trim() ? { description: description.trim() } : {}),
+        sourceNoteId: "manual",
+        done: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      update((state) => ({ ...state, events: [...state.events, event] }));
+      return event;
+    },
+
+    removeEvent(id) {
+      update((state) => ({ ...state, events: state.events.filter((event) => event.id !== id) }));
     },
 
     setEventDone(id, done) {

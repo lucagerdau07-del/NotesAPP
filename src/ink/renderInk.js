@@ -117,7 +117,28 @@ export function renderInkStroke(context, stroke, transform) {
   context.restore();
 }
 
-export function renderInkDocument(context, document, layout) {
+// Committed strokes are never mutated, and the live draft only ever grows by
+// push (see useInkPointer), so a measured box holds while the count does.
+const strokeBoundsCache = new WeakMap();
+
+function strokeBounds(stroke) {
+  const points = stroke.points || [];
+  let box = strokeBoundsCache.get(stroke);
+  if (box?.count === points.length) return box;
+  box = { count: points.length, minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const point of points) {
+    if (point.x < box.minX) box.minX = point.x;
+    if (point.x > box.maxX) box.maxX = point.x;
+    if (point.y < box.minY) box.minY = point.y;
+    if (point.y > box.maxY) box.maxY = point.y;
+  }
+  box.pad = finiteOr(stroke.width, 0) / 2;
+  strokeBoundsCache.set(stroke, box);
+  return box;
+}
+
+// The same scale and page offset renderInkDocument draws a stroke with.
+function inkPlacement(document, layout) {
   const scale = finiteOr(layout?.scale, finiteOr(layout?.zoom, 1));
   const scaleX = finiteOr(layout?.scaleX, scale);
   const scaleY = finiteOr(layout?.scaleY, scale);
@@ -128,6 +149,78 @@ export function renderInkDocument(context, document, layout) {
       : [];
   const pageHeight = finiteOr(layout?.pageHeight, 0);
   const pageGap = layout?.showPageBreaks ? finiteOr(layout?.pageGap, 0) : 0;
+  const pageLayouts = Array.isArray(layout?.pageLayouts)
+    ? layout.pageLayouts
+    : null;
+  // Index once instead of Array.find()/indexOf() per stroke - identical
+  // results, but O(pages) instead of O(strokes * pages) for the whole draw.
+  const pageLayoutsById = pageLayouts
+    ? new Map(pageLayouts.map((page) => [page.id, page]))
+    : null;
+  const pageIndexById = pageLayouts
+    ? null
+    : new Map(pageIds.map((id, index) => [id, index]));
+  const offsetYOf = (stroke) => {
+    if (pageLayoutsById) {
+      const page = pageLayoutsById.get(stroke.pageId);
+      return page ? page.top * scaleY : undefined;
+    }
+    const pageIndex = pageIndexById.get(stroke.pageId);
+    return pageIndex === undefined ? undefined : pageIndex * (pageHeight * scaleY + pageGap);
+  };
+  return { scaleX, scaleY, offsetYOf };
+}
+
+// A stroke's footprint on the canvas in CSS px, anti-aliased fringe included.
+function cssBounds(stroke, offsetY, scaleX, scaleY) {
+  const box = strokeBounds(stroke);
+  const pad = box.pad * scaleX + 2;
+  return {
+    minX: box.minX * scaleX - pad,
+    minY: offsetY + box.minY * scaleY - pad,
+    maxX: box.maxX * scaleX + pad,
+    maxY: offsetY + box.maxY * scaleY + pad,
+  };
+}
+
+const union = (a, b) =>
+  a
+    ? {
+        minX: Math.min(a.minX, b.minX),
+        minY: Math.min(a.minY, b.minY),
+        maxX: Math.max(a.maxX, b.maxX),
+        maxY: Math.max(a.maxY, b.maxY),
+      }
+    : b;
+
+// The part of the canvas (CSS px) whose pixels differ between rendering
+// `before` and `after`, both with the same layout: the strokes that came or
+// went, plus `painted`, strokes drawn onto the canvas outside a render since
+// (DocumentView's live draft segments), committed or not. Everything a changed
+// stroke overlaps lies inside its box, so redrawing every stroke that touches
+// the region, in order, gives the same pixels as a full redraw. null when
+// nothing changed.
+export function changedInkRegion(before, after, document, layout, painted = []) {
+  const { scaleX, scaleY, offsetYOf } = inkPlacement(document, layout);
+  let region = null;
+  const add = (stroke) => {
+    const offsetY = offsetYOf(stroke);
+    if (offsetY !== undefined) region = union(region, cssBounds(stroke, offsetY, scaleX, scaleY));
+  };
+  if (before !== after) {
+    const had = new Set(before);
+    const has = new Set(after);
+    for (const stroke of after) if (!had.has(stroke)) add(stroke);
+    for (const stroke of before) if (!has.has(stroke)) add(stroke);
+  }
+  for (const stroke of painted) add(stroke);
+  return region;
+}
+
+// `region` (CSS px, from changedInkRegion) limits the clear and the redraw to
+// that part of the canvas; without it the whole canvas is redrawn.
+export function renderInkDocument(context, document, layout, region = null) {
+  const { scaleX, scaleY, offsetYOf } = inkPlacement(document, layout);
   const cssWidth = finiteOr(layout?.cssWidth, finiteOr(layout?.width, 0));
   const cssHeight = finiteOr(layout?.cssHeight, finiteOr(layout?.height, 0));
   const dpr = layout?.dpr > 0 && Number.isFinite(layout.dpr) ? layout.dpr : 1;
@@ -142,30 +235,35 @@ export function renderInkDocument(context, document, layout) {
       : dpr;
 
   context.save();
+  if (region) {
+    // Snapped out to whole device pixels: a clip edge through the middle of a
+    // pixel is anti-aliased, and that half-cleared, half-redrawn pixel row
+    // would show as a faint seam around every patch.
+    const x = Math.max(0, Math.floor(region.minX * transformScaleX));
+    const y = Math.max(0, Math.floor(region.minY * transformScaleY));
+    const right = Math.min(canvas?.width ?? Infinity, Math.ceil(region.maxX * transformScaleX));
+    const bottom = Math.min(canvas?.height ?? Infinity, Math.ceil(region.maxY * transformScaleY));
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.beginPath();
+    context.rect(x, y, right - x, bottom - y);
+    context.clip();
+    context.clearRect(x, y, right - x, bottom - y);
+  }
   context.setTransform(transformScaleX, 0, 0, transformScaleY, 0, 0);
-  context.clearRect(0, 0, cssWidth, cssHeight);
+  if (!region) context.clearRect(0, 0, cssWidth, cssHeight);
 
-  const pageLayouts = Array.isArray(layout?.pageLayouts)
-    ? layout.pageLayouts
-    : null;
-  // Index once instead of Array.find()/indexOf() per stroke - identical
-  // results, but O(pages) instead of O(strokes * pages) for the whole draw.
-  const pageLayoutsById = pageLayouts
-    ? new Map(pageLayouts.map((page) => [page.id, page]))
-    : null;
-  const pageIndexById = pageLayouts
-    ? null
-    : new Map(pageIds.map((id, index) => [id, index]));
   (document?.strokes || []).forEach((stroke) => {
-    let offsetY = 0;
-    if (pageLayoutsById) {
-      const page = pageLayoutsById.get(stroke.pageId);
-      if (!page) return;
-      offsetY = page.top * scaleY;
-    } else {
-      const pageIndex = pageIndexById.get(stroke.pageId);
-      if (pageIndex === undefined) return;
-      offsetY = pageIndex * (pageHeight * scaleY + pageGap);
+    const offsetY = offsetYOf(stroke);
+    if (offsetY === undefined) return;
+    if (region) {
+      const box = cssBounds(stroke, offsetY, scaleX, scaleY);
+      if (
+        box.maxX < region.minX ||
+        box.minX > region.maxX ||
+        box.maxY < region.minY ||
+        box.minY > region.maxY
+      )
+        return;
     }
     renderInkStroke(context, stroke, {
       offsetX: 0,

@@ -3,6 +3,61 @@ import { FileText, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { renderPagesFromDocument, subscribeToPreviewImages } from "../documents/notePreview.js";
 
 const DRAG_START_PX = 5;
+const THUMB_MAX_DIMENSION = 500;
+
+// An imported PDF/image page is the file itself, not ink, so its thumbnail
+// backdrop is rendered from the open source handle - once per handle and page.
+const sourceThumbs = new WeakMap();
+function sourceThumbOf(handle, type, sourceIndex) {
+  let perHandle = sourceThumbs.get(handle);
+  if (!perHandle) sourceThumbs.set(handle, (perHandle = new Map()));
+  if (!perHandle.has(sourceIndex))
+    perHandle.set(sourceIndex, renderSourceThumb(handle, type, sourceIndex).catch(() => ""));
+  return perHandle.get(sourceIndex);
+}
+
+async function renderSourceThumb(handle, type, sourceIndex) {
+  const canvas = document.createElement("canvas");
+  const fit = (width, height) => {
+    const scale = THUMB_MAX_DIMENSION / Math.max(width, height);
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext("2d");
+    // JPEG has no alpha and pdf.js leaves the paper transparent.
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return { context, scale };
+  };
+  if (type === "pdf") {
+    const pdfPage = await handle.document.getPage(sourceIndex + 1);
+    const natural = pdfPage.getViewport({ scale: 1 });
+    const { context, scale } = fit(natural.width, natural.height);
+    await pdfPage.render({ canvasContext: context, viewport: pdfPage.getViewport({ scale }) }).promise;
+    pdfPage.cleanup?.();
+  } else {
+    const image = handle.image;
+    const width = image?.naturalWidth || image?.width;
+    const height = image?.naturalHeight || image?.height;
+    if (!width || !height) return "";
+    fit(width, height).context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  }
+  return canvas.toDataURL("image/jpeg", 0.8);
+}
+
+// Ink pages of an imported document carry no size (it comes from the file),
+// so without this they'd render cropped to their strokes, dark and misaligned
+// with the page underneath. Pages added later take the first page's size.
+function withSourcePageSizes(doc, sourcePages) {
+  if (!sourcePages?.length) return doc;
+  const byId = new Map(sourcePages.map((page) => [page.id, page]));
+  return {
+    ...doc,
+    pages: doc.pages.map((page) => {
+      const source = byId.get(page.id) || sourcePages[0];
+      return { ...page, width: source.width, height: source.height, background: page.background || "#fff" };
+    }),
+  };
+}
 
 export default function PagesPanel({
   active = false,
@@ -22,13 +77,14 @@ export default function PagesPanel({
   // same renderer the library uses for note previews - not a hand-rolled
   // re-draw that would drift from what the page actually looks like.
   const [renderedPages, setRenderedPages] = useState([]);
+  const [sourceThumbs, setSourceThumbs] = useState({});
   const draggingRef = useRef(null);
   const orderRef = useRef(pages);
   const confirmTimerRef = useRef(null);
   const listRef = useRef(null);
   const suppressClickRef = useRef(false);
   const cardRefs = useRef(new Map());
-  const prevRectsRef = useRef(new Map());
+  const prevTopsRef = useRef(new Map());
 
   // Play a transform-only transition then hand the element back to its CSS
   // class - an inline `transition` left in place would otherwise override
@@ -37,8 +93,9 @@ export default function PagesPanel({
     el.style.transition = "none";
     el.style.transform = fromTransform;
     requestAnimationFrame(() => {
-      // Overshoot easing - snaps past rest then settles, instead of a smooth glide.
-      el.style.transition = "transform 160ms cubic-bezier(.34,1.56,.64,1)";
+      // Plain ease-out: an overshoot here read as the card jumping past its
+      // slot and back when it snapped in.
+      el.style.transition = "transform 200ms cubic-bezier(.2,.8,.2,1)";
       el.style.transform = "";
       el.addEventListener(
         "transitionend",
@@ -60,28 +117,38 @@ export default function PagesPanel({
   // FLIP: whenever the order changes, the cards that shifted teleport to
   // their new slot instantly (browser reflow). Play that jump back as a
   // transform animation instead - skip the card being actively dragged,
-  // which is already following the pointer directly.
+  // which is already following the pointer directly. Slots are compared by
+  // offsetTop (layout, unaffected by scroll and transforms); a card still
+  // mid-settle keeps whatever offset it is currently shown at on top of that,
+  // so a quick second reorder continues from where it is instead of jumping.
   useLayoutEffect(() => {
-    const nextRects = new Map();
+    const list = listRef.current;
+    const nextTops = new Map();
     order.forEach((id) => {
       const el = cardRefs.current.get(id);
-      if (el) nextRects.set(id, el.getBoundingClientRect());
+      if (!el) return;
+      nextTops.set(id, el.offsetTop);
+      if (id === dragId || !list) return;
+      const prevTop = prevTopsRef.current.get(id);
+      if (prevTop === undefined || prevTop === el.offsetTop) return;
+      const shown =
+        el.getBoundingClientRect().top - (list.getBoundingClientRect().top - list.scrollTop + el.offsetTop);
+      animateSettle(el, `translateY(${prevTop - el.offsetTop + shown}px)`);
     });
-    nextRects.forEach((rect, id) => {
-      if (id === dragId) return;
-      const el = cardRefs.current.get(id);
-      const prevRect = prevRectsRef.current.get(id);
-      if (!el || !prevRect) return;
-      const dy = prevRect.top - rect.top;
-      if (Math.abs(dy) < 1) return;
-      animateSettle(el, `translateY(${dy}px)`);
-    });
-    prevRectsRef.current = nextRects;
+    prevTopsRef.current = nextTops;
+    // The reorder just moved the dragged card's own slot; re-pin it to the
+    // pointer before paint, or it shows one frame in the wrong place.
+    draggingRef.current?.follow?.();
   }, [order, dragId]);
 
   const refreshRenderedPages = () => {
-    const doc = inkControllerRef?.current?.document;
-    if (doc) setRenderedPages(renderPagesFromDocument(doc, { maxDimension: 500 }));
+    const controller = inkControllerRef?.current;
+    if (!controller?.document) return;
+    setRenderedPages(
+      renderPagesFromDocument(withSourcePageSizes(controller.document, controller.sourcePages), {
+        maxDimension: THUMB_MAX_DIMENSION,
+      }),
+    );
   };
 
   // Pulled from the imperative controller ref (not reactive props) so drawing
@@ -90,6 +157,22 @@ export default function PagesPanel({
   useEffect(() => {
     if (!active) return;
     refreshRenderedPages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, pages]);
+
+  useEffect(() => {
+    const controller = inkControllerRef?.current;
+    const handle = controller?.sourceHandle;
+    if (!active || !handle || !controller.sourcePages) return undefined;
+    let cancelled = false;
+    controller.sourcePages.forEach((page) =>
+      sourceThumbOf(handle, controller.sourceType, page.index).then((src) => {
+        if (!cancelled && src) setSourceThumbs((current) => ({ ...current, [page.id]: src }));
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, pages]);
 
@@ -110,14 +193,11 @@ export default function PagesPanel({
     const startX = event.clientX;
     const startY = event.clientY;
     let armed = false;
-    let lastY = event.clientY;
-    let tilt = 0;
     let grabOffset = 0;
-    let appliedDY = 0;
 
     const arm = () => {
       armed = true;
-      draggingRef.current = { id };
+      draggingRef.current = { id, follow: () => followPointer(pointerY) };
       setDragId(id);
       const el = cardRefs.current.get(id);
       if (el) {
@@ -141,15 +221,16 @@ export default function PagesPanel({
     // a one-time offset from drag start - auto-scroll and live reordering
     // both keep moving the card's natural slot underneath the transform, and
     // a fixed offset drifts away from the pointer the moment either happens.
+    // Natural top comes from layout (offsetTop), not the card's rect: the rect
+    // includes the scale applied here, so reading it back fed that into the
+    // next frame and the card trembled. No tilt either - a velocity-driven
+    // rotation from a noisy pen/finger is jitter by definition.
     const followPointer = (clientY) => {
       const el = cardRefs.current.get(id);
-      if (!el) return;
-      const naturalTop = el.getBoundingClientRect().top - appliedDY;
-      const velocity = clientY - lastY;
-      lastY = clientY;
-      tilt = Math.max(-8, Math.min(8, tilt * 0.6 + velocity * 0.5));
-      appliedDY = clientY - grabOffset - naturalTop;
-      el.style.transform = `translateY(${appliedDY}px) scale(1.03) rotate(${tilt}deg)`;
+      const list = listRef.current;
+      if (!el || !list) return;
+      const naturalTop = list.getBoundingClientRect().top - list.scrollTop + el.offsetTop;
+      el.style.transform = `translateY(${clientY - grabOffset - naturalTop}px) scale(0.94)`;
     };
 
     // Insert where the pointer actually is, measured against the other cards'
@@ -293,6 +374,7 @@ export default function PagesPanel({
                   background: rendered?.background || "#141418",
                 }}
               >
+                {sourceThumbs[id] && <img src={sourceThumbs[id]} alt="" draggable={false} />}
                 {rendered?.src && (
                   <img src={rendered.src} alt="" draggable={false} />
                 )}

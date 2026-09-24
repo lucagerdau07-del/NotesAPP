@@ -60,6 +60,14 @@ function loadPreferences(repository, documentId, initialColor) {
   }
 }
 
+// Saving serializes the whole note, ~20ms on a Galaxy Tab A7 for a 400-stroke
+// page, so the default delay waits for a real pause instead of landing in the
+// gap before the next stroke. Writing that never pauses still saves this often,
+// which bounds what a crash can take with it.
+// ponytail: both numbers are knobs.
+const SAVE_DELAY_MS = 600;
+const SAVE_MAX_WAIT_MS = 5000;
+
 function saveSafely(save) {
   try {
     save();
@@ -74,7 +82,7 @@ export default function useInkDocument({
   initialPageStyle,
   initialColor,
   repository = browserInkRepository,
-  saveDelay = 120,
+  saveDelay = SAVE_DELAY_MS,
   onPersisted,
 }) {
   const activeDocumentId = String(documentId);
@@ -306,11 +314,16 @@ export default function useInkDocument({
     baselineRef.current = { id: activeDocumentId, history };
   }
 
+  // When the oldest change not on disk yet was made; null once saved.
+  const unsavedSinceRef = useRef(null);
   useEffect(() => {
+    const now = Date.now();
+    unsavedSinceRef.current ??= now;
     const timer = setTimeout(() => {
+      unsavedSinceRef.current = null;
       saveSafely(() => repository.saveHistory(activeDocumentId, history));
       if (history !== baselineRef.current.history) onPersistedRef.current?.(activeDocumentId);
-    }, saveDelay);
+    }, Math.min(saveDelay, unsavedSinceRef.current + SAVE_MAX_WAIT_MS - now));
     return () => clearTimeout(timer);
   }, [activeDocumentId, history, repository, saveDelay]);
 
@@ -321,6 +334,11 @@ export default function useInkDocument({
   // everything since the last natural pause.
   const flushPendingSave = useCallback(() => {
     saveSafely(() => repositoryRef.current.saveHistory(documentIdRef.current, historyRef.current));
+    // The save this stands in for would also have listed a new note in the
+    // library; leaving within the delay must not orphan its first strokes.
+    if (unsavedSinceRef.current !== null && historyRef.current !== baselineRef.current.history)
+      onPersistedRef.current?.(documentIdRef.current);
+    unsavedSinceRef.current = null;
   }, []);
 
   // Empty deps: this only runs on true unmount, never on a same-instance

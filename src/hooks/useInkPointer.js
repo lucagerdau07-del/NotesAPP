@@ -5,7 +5,7 @@ import {
   reducePointerInput,
   shouldBlockTouch as policyBlocksTouch,
 } from "../ink/inputPolicy.js";
-import { findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
+import { findIntersectingObjectIds, findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
 import { loadPalmProfile, markPenSeen } from "../ink/palmSettings.js";
 import { recognizeShape } from "../ink/shapeRecognizer.js";
 import { createPageObject } from "../ink/pageObjects.js";
@@ -14,13 +14,22 @@ import { createPageObject } from "../ink/pageObjects.js";
 // static content, this one is a drawing pause mid-stroke and has to feel
 // immediate or it reads as lag, not a gesture.
 const HOLD_MS = 350;
+// How far (screen px) the tip may drift and still count as held still. A tip
+// resting on the glass never goes quiet: digitizer jitter and pressure
+// changes keep firing pointermove, and re-arming on every one of those meant
+// the hold only fired when the panel happened to fall silent.
+const HOLD_SLOP_PX = 6;
 // How long a just-committed stroke stays eligible to be pulled into a held
 // shape guess - covers drawing a rect's four sides, or a shaft plus a
-// separate arrowhead, as one continuous doodle with brief pen lifts.
+// separate arrowhead, as one continuous doodle with brief pen lifts. Four
+// separate sides take a couple of seconds by hand; MERGE_MARGIN is what keeps
+// nearby unrelated handwriting out.
 const MERGE_WINDOW_MS = 4000;
 // How close two strokes' bounding boxes have to be (page/world units, camera
-// zoom already divided out by mapPoint) to count as the same doodle.
-const MERGE_MARGIN = 50;
+// zoom already divided out by mapPoint) to count as the same doodle. Same
+// reasoning as MERGE_WINDOW_MS: a rect's sides or an arrow's barbs sit right
+// against each other, ordinary handwriting a line or word away does not.
+const MERGE_MARGIN = 24;
 
 function bboxOf(points) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -147,6 +156,8 @@ export default function useInkPointer(options) {
   // after it commits as ordinary ink.
   const heldWithoutShapeRef = useRef(false);
   const holdTimerRef = useRef(null);
+  // Client position the hold timer was last armed at, for HOLD_SLOP_PX.
+  const holdAnchorRef = useRef(null);
   // Non-eraser strokes committed in the last MERGE_WINDOW_MS, for the hold
   // gesture to pull nearby ones into a multi-stroke shape guess.
   const recentShapeStrokesRef = useRef([]);
@@ -191,6 +202,13 @@ export default function useInkPointer(options) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+  }, []);
+
+  const movedPastHoldSlop = useCallback((event) => {
+    const anchor = holdAnchorRef.current;
+    if (anchor && Math.hypot(event.clientX - anchor.x, event.clientY - anchor.y) <= HOLD_SLOP_PX) return false;
+    holdAnchorRef.current = { x: event.clientX, y: event.clientY };
+    return true;
   }, []);
 
   const discardDraft = useCallback(() => {
@@ -308,7 +326,7 @@ export default function useInkPointer(options) {
         width: event.width,
         height: event.height,
         // The contact classifier needs real coordinates to tell a resting
-        // hand from a travelling tip and to measure pinch separation.
+        // hand from a travelling tip.
         clientX: event.clientX,
         clientY: event.clientY,
         phase,
@@ -376,6 +394,16 @@ export default function useInkPointer(options) {
         draft.width / 2,
       );
       if (strokeIds.length > 0) current.removeStrokes?.(strokeIds);
+      // A shape born from hold-to-convert is drawn ink turned object, not
+      // ink any more - the stroke eraser has to reach it too, or "erasing"
+      // an unwanted rect/arrow silently does nothing.
+      const objectIds = findIntersectingObjectIds(
+        current.document,
+        draft.pageId,
+        draft.points,
+        draft.width / 2,
+      );
+      if (objectIds.length > 0) current.removeObjects?.(objectIds);
       return;
     }
     current.commitStroke?.(draft);
@@ -424,6 +452,7 @@ export default function useInkPointer(options) {
       event.currentTarget.setPointerCapture(event.pointerId);
       captureRef.current = { target: event.currentTarget, pointerId: event.pointerId };
     }
+    holdAnchorRef.current = { x: event.clientX, y: event.clientY };
     armHoldTimer();
     return true;
   }, [armHoldTimer]);
@@ -479,9 +508,9 @@ export default function useInkPointer(options) {
         draft.points.push(inkPoint(point));
       }
       current.onDraftAppend?.(draft, appendedFrom);
-      armHoldTimer();
+      if (movedPastHoldSlop(event)) armHoldTimer();
     },
-    [abortDraft, discardDraft, finalizeDraft, route, armHoldTimer],
+    [abortDraft, discardDraft, finalizeDraft, route, armHoldTimer, movedPastHoldSlop],
   );
 
   const onPointerUp = useCallback(

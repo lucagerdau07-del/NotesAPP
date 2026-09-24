@@ -72,6 +72,17 @@ function saveWeek(monday, lessons) {
   }
 }
 
+// Entfall = flagged cancelled, or the teacher/room was struck out ("---")
+// with no substitute entered (e.g. "eigenverantwortliches Arbeiten").
+// Untis also enters a cancellation as substText only (code stays unset,
+// teacher list is empty for students), e.g. Spanisch on 2026-09-21.
+export function isLessonCancelled(lesson) {
+  const removed = (list) => list?.length > 0 && list.every((x) => x.id === 0 || x.name === "---");
+  const isLernzeit = (lesson.su || []).some((s) => s.name === "Lernzeit" || s.longname === "Lernzeit");
+  const selfStudy = /eigenverantwortlich/i.test(lesson.substText || "") && !isLernzeit;
+  return lesson.code === "cancelled" || removed(lesson.te) || removed(lesson.ro) || selfStudy;
+}
+
 // Fetches one week from Untis and archives it. Throws Untis' own message when
 // it refuses (past or too-far-future weeks).
 export async function fetchUntisWeek(creds, monday) {

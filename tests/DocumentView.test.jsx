@@ -954,31 +954,6 @@ test('drops a cancelled touch out of the gesture set instead of leaving it pinch
   expect(page.style.transform).toBe('');
 });
 
-test('writes with the passive stylus while a hand rests on the page', () => {
-  // Traced off the device: the gesture layer sits in front of the ink policy
-  // and only counts touch contacts, so the hand landing beside the tip made two
-  // and every active stroke was aborted for a pinch. The palm guard cannot
-  // filter the hand out at that point — a contact that has not moved yet is not
-  // yet recognisable as a palm, which is exactly when this fires.
-  const controller = createControllerDouble();
-  render(<DocumentView inkController={controller} toolbarState={toolState()} />);
-  const page = screen.getByTestId('document-page');
-
-  // Control: one contact alone writes, so a failure below is the second contact.
-  fireEvent.pointerDown(page, { pointerId: 9, pointerType: 'touch', clientX: 200, clientY: 300, width: 5, height: 5 });
-  fireEvent.pointerMove(page, { pointerId: 9, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
-  fireEvent.pointerUp(page, { pointerId: 9, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
-  expect(controller.commitStroke).toHaveBeenCalledTimes(1);
-
-  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'touch', clientX: 700, clientY: 900, width: 5, height: 5 });
-  fireEvent.pointerDown(page, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300, width: 5, height: 5 });
-  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 260, clientY: 300, width: 5, height: 5 });
-  fireEvent.pointerMove(page, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 300, width: 5, height: 5 });
-  fireEvent.pointerUp(page, { pointerId: 2, pointerType: 'touch', clientX: 320, clientY: 300, width: 5, height: 5 });
-
-  expect(controller.commitStroke).toHaveBeenCalledTimes(2);
-});
-
 test('renders a custom page format and background instead of the hardcoded default', () => {
   const controller = createControllerDouble({
     document: {

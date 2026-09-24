@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   cullCaptureToGlass,
+  NO_RECAPTURE_ATTR,
   recaptureBackgroundOnChange,
   samplesEachOther,
   SNAPSHOT_MAX_EDGE,
@@ -292,45 +293,122 @@ describe("cullCaptureToGlass pages", () => {
   });
 });
 
-describe("recaptureBackgroundOnChange pages", () => {
-  const box = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
-  const pageAt = (body, rect) => {
-    const page = document.createElement("div");
-    page.className = "document-page";
-    page.getBoundingClientRect = () => rect;
-    body.append(page);
-    return page;
+describe("cullCaptureToGlass library", () => {
+  const cull = (body) => {
+    const capture = {
+      cache: new Map(),
+      onCacheUpdate: vi.fn(),
+      captureToCanvas: vi.fn().mockResolvedValue({ width: 1, height: 1 }),
+      drawCachedElement: vi.fn(),
+      _captureWithHtmlToImage: vi.fn(),
+    };
+    cullCaptureToGlass({ capture, glassSet: new Set([boxed(785, 20, 137, 52)]) });
+    return capture._captureWithHtmlToImage(body, 760, 4400, 760, 4400).then(() => capture);
+  };
+  const cardWith = (rect, className) => {
+    const card = boxed(...rect);
+    card.className = className;
+    const inside = boxed(...rect);
+    card.append(inside);
+    return { card, inside };
   };
 
-  it("does not re-capture for a page mounting canvases clear of every glass panel", async () => {
+  it("empties only the library cards clear of every glass panel, keeping their box", async () => {
+    const body = boxed(570, 82, 760, 4400);
+    const grid = boxed(570, 82, 760, 4400);
+    grid.className = "lib-masonry-grid";
+    const behindPill = cardWith([780, 60, 200, 150], "lib-card");
+    const clearCard = cardWith([570, 400, 200, 150], "lib-card");
+    grid.append(behindPill.card, clearCard.card);
+    body.append(grid);
+
+    const capture = await cull(body);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, [clearCard.inside]);
+  });
+
+  it("empties a whole grid or list when none of its cards is near glass", async () => {
+    const body = boxed(570, 82, 760, 4400);
+    const list = boxed(570, 82, 760, 4400);
+    list.className = "lib-list-view";
+    const rows = [cardWith([570, 400, 760, 40], "lib-list-row"), cardWith([570, 450, 760, 40], "lib-list-row")];
+    list.append(...rows.map((row) => row.card));
+    body.append(list);
+
+    const capture = await cull(body);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, rows.map((row) => row.card));
+  });
+
+  it("does not clone a fully transparent wrapper, and caches a blank stand-in instead", async () => {
+    const closedPanel = boxed(106, 20, 440, 655);
+    closedPanel.style.opacity = "0";
+    closedPanel.append(boxed(107, 95, 438, 100));
+
+    const capture = await cull(closedPanel);
+
+    expect(capture.captureToCanvas).not.toHaveBeenCalled();
+    expect(capture.cache.get(closedPanel)).toMatchObject({ w: 760, h: 4400 });
+  });
+
+  it("leaves timetable lessons clear of every glass panel out of the capture", async () => {
+    const grid = boxed(106, 345, 440, 400);
+    const lesson = boxed(200, 400, 100, 60);
+    lesson.className = "untis-lesson";
+    grid.append(lesson);
+
+    const capture = await cull(grid);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(grid, 760, 4400, [lesson]);
+  });
+});
+
+describe("recaptureBackgroundOnChange no-recapture subtrees", () => {
+  // DocumentView's scrolled page content: html-to-image would render it from
+  // the top whatever its scroll offset, so a re-capture could only show the
+  // same misplaced page again, for ~800ms of frozen main thread on the tablet.
+  const noRecapture = (parent) => {
+    const node = document.createElement("div");
+    node.setAttribute(NO_RECAPTURE_ATTR, "");
+    parent.append(node);
+    return node;
+  };
+
+  it("only repaints for changes inside the page content, a pinch and a page mount alike", async () => {
     vi.useFakeTimers();
-    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
-    const page = pageAt(body, box(700, 0, 500, 1100));
+    const { body, captureElement, markChanged, stop } = setup();
+    const content = noRecapture(body);
     await settle();
     captureElement.mockClear();
+    markChanged.mockClear();
 
-    page.append(document.createElement("canvas"));
+    content.style.transform = "translate(0px, -120px) scale(1)";
+    content.append(document.createElement("canvas"));
+    content.firstChild.setAttribute("width", "1600");
     await settle();
     vi.advanceTimersByTime(2000);
-    expect(captureElement).not.toHaveBeenCalled();
 
+    expect(captureElement).not.toHaveBeenCalled();
+    expect(markChanged).toHaveBeenCalledWith(body);
     stop();
     vi.useRealTimers();
   });
 
-  it("re-captures a page behind glass, but only once the view settles", async () => {
+  it("does not re-capture for a marked node coming or going, but still does for its siblings", async () => {
     vi.useFakeTimers();
-    const { body, captureElement, stop } = setup(box(0, 0, 100, 700));
-    const page = pageAt(body, box(60, 0, 800, 1100));
+    const { body, captureElement, stop } = setup();
     await settle();
-    captureElement.mockClear();
 
-    page.append(document.createElement("canvas"));
+    const toast = noRecapture(body);
     await settle();
+    toast.remove();
+    await settle();
+    vi.advanceTimersByTime(2000);
     expect(captureElement).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1500);
-    expect(captureElement).toHaveBeenCalledWith(body, true);
 
+    body.append(document.createElement("span"));
+    await settle();
+    expect(captureElement).toHaveBeenCalledWith(body, true);
     stop();
     vi.useRealTimers();
   });

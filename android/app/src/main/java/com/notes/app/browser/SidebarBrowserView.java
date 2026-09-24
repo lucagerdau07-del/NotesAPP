@@ -92,8 +92,8 @@ public final class SidebarBrowserView {
       // canvas the WebView draws into) works consistently.
       // The panel (.editor-sidebar) is a rounded 30px card whose top corners belong
       // to the toolbar (clipped fine by CSS overflow:hidden); only the wrapper's
-      // bottom edge touches the panel's rounded bottom corners, so only those two
-      // get clipped here — rounding all 4 would notch the top corners open.
+      // bottom-right corner is the panel's rounded outer corner, so only that one
+      // gets clipped here.
       wrapper = new FrameLayout(activity);
       float radius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 30f, activity.getResources().getDisplayMetrics());
       wrapper.setOutlineProvider(new ViewOutlineProvider() {
@@ -101,16 +101,12 @@ public final class SidebarBrowserView {
           int w = view.getWidth();
           int h = view.getHeight();
           if (w <= 0 || h <= 0) return;
-          float r = Math.min(radius, Math.min(w, h) / 2f);
-          android.graphics.Path path = new android.graphics.Path();
-          path.moveTo(0, 0);
-          path.lineTo(w, 0);
-          path.lineTo(w, h - r);
-          path.arcTo(w - 2 * r, h - 2 * r, w, h, 0, 90, false);
-          path.lineTo(r, h);
-          path.arcTo(0, h - 2 * r, 2 * r, h, 90, 90, false);
-          path.close();
-          outline.setConvexPath(path);
+          int r = Math.round(Math.min(radius, Math.min(w, h) / 2f));
+          // A convex-path outline can't clip before API 30 (the tablet ignored it),
+          // so use a round rect pushed past the top/left edges: only the
+          // bottom-right corner — the panel's outer corner — stays rounded; the
+          // bottom-left meets the tool rail and must stay square.
+          outline.setRoundRect(-r, -r, w, h, r);
         }
       });
       wrapper.setClipToOutline(true);

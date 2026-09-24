@@ -7,7 +7,7 @@ export default function PdfLinkLayer({ page, sourceHandle, zoom = 1, onOpenLink 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const pdfPage = await sourceHandle?.document?.getPage?.(page.index + 1);
+      const pdfPage = await sourceHandle?.document?.getPage?.((page.sourceIndex ?? page.index) + 1);
       const annotations = await pdfPage?.getAnnotations?.({ intent: "display" });
       if (cancelled) return;
       const viewport = pdfPage.getViewport({ scale: zoom });
@@ -25,7 +25,7 @@ export default function PdfLinkLayer({ page, sourceHandle, zoom = 1, onOpenLink 
     }
     load().catch(() => !cancelled && setLinks([]));
     return () => { cancelled = true; };
-  }, [page.index, sourceHandle, zoom]);
+  }, [page.sourceIndex, page.index, sourceHandle, zoom]);
 
   return (
     <div className="pdf-link-layer" aria-label="PDF-Links">

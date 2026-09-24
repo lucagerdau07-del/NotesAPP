@@ -19,6 +19,7 @@ function DocumentPage({
   strokes = [],
   zoom = 1,
   dpr = 1,
+  repaintKey,
   children,
 }) {
   const openLink = useBrowserLink();
@@ -177,7 +178,8 @@ function DocumentPage({
     >
       {hasRendered && isVisible && (
         <>
-          {sourceType === "pdf" && sourceHandle && (
+          {/* A blank page added to an imported document has no source page. */}
+          {sourceType === "pdf" && sourceHandle && page.sourceIndex !== null && (
             <PdfPageCanvas
               page={page}
               sourceHandle={sourceHandle}
@@ -186,7 +188,7 @@ function DocumentPage({
               canvasWindow={canvasWindow}
             />
           )}
-          {sourceType === "image" && sourceHandle && (
+          {sourceType === "image" && sourceHandle && page.sourceIndex !== null && (
             <ImagePageCanvas
               page={page}
               sourceHandle={sourceHandle}
@@ -195,7 +197,7 @@ function DocumentPage({
               canvasWindow={canvasWindow}
             />
           )}
-          {sourceType === "pdf" && sourceHandle && (
+          {sourceType === "pdf" && sourceHandle && page.sourceIndex !== null && (
             <PdfLinkLayer page={page} sourceHandle={sourceHandle} zoom={zoom} onOpenLink={openLink} />
           )}
           <InkPageCanvas
@@ -204,6 +206,7 @@ function DocumentPage({
             zoom={zoom}
             dpr={dpr}
             canvasWindow={canvasWindow}
+            repaintKey={repaintKey}
           />
         </>
       )}

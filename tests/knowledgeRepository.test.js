@@ -156,3 +156,87 @@ describe("knowledge repository", () => {
     ).not.toThrow();
   });
 });
+
+describe("knowledge repository — IServ-Termine", () => {
+  const iserv = (overrides = {}) => ({
+    kind: "homework",
+    title: "Blatt 3",
+    subject: "Mathe",
+    due: "2026-09-24",
+    iservId: "https://iserv/ex/1",
+    url: "https://iserv/ex/1",
+    description: "Löse Seite 10",
+    attachments: [{ filename: "Blatt.pdf", path: "u/h/Blatt.pdf", size_bytes: 3 }],
+    ...overrides,
+  });
+
+  it("legt einen IServ-Termin mit Beschreibung und Anhängen an", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [iserv()], sourceNoteId: "iserv" });
+    expect(repository.read().events[0]).toMatchObject({
+      sourceNoteId: "iserv",
+      iservId: "https://iserv/ex/1",
+      url: "https://iserv/ex/1",
+      description: "Löse Seite 10",
+      attachments: [{ filename: "Blatt.pdf", path: "u/h/Blatt.pdf" }],
+    });
+  });
+
+  it("aktualisiert Titel und Frist am selben Termin und behält das Häkchen", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [iserv()], sourceNoteId: "iserv" });
+    const [first] = repository.read().events;
+    repository.setEventDone(first.id, true);
+
+    const result = repository.mergeFindings({
+      events: [iserv({ title: "Blatt 3 (neu)", due: "2026-09-25" })],
+      sourceNoteId: "iserv",
+    });
+
+    expect(result.addedEvents).toBe(0);
+    const events = repository.read().events;
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      id: first.id,
+      title: "Blatt 3 (neu)",
+      due: "2026-09-25",
+      done: true,
+    });
+  });
+
+  it("verwechselt einen Scan-Termin nicht mit einem IServ-Termin gleichen Titels", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [hausaufgabe], sourceNoteId: "note-1" });
+    repository.mergeFindings({
+      events: [iserv({ title: hausaufgabe.title, due: hausaufgabe.due, subject: hausaufgabe.subject })],
+      sourceNoteId: "iserv",
+    });
+    expect(repository.read().events).toHaveLength(2);
+  });
+});
+
+describe("Abgabeuhrzeit", () => {
+  it("übernimmt die Uhrzeit eines Fundes", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [{ ...hausaufgabe, time: "07:45" }], terms: [], sourceNoteId: "note-1" });
+    expect(repository.read().events[0].time).toBe("07:45");
+  });
+
+  it("lässt die Uhrzeit weg, wenn der Fund keine hat", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [hausaufgabe], terms: [], sourceNoteId: "note-1" });
+    expect(repository.read().events[0].time).toBeUndefined();
+  });
+});
+
+describe("eigene Kalendereinträge", () => {
+  it("legt einen Termin an und entfernt ihn wieder", () => {
+    const repository = repo();
+    const event = repository.addEvent({ title: " Zahnarzt ", due: "2026-09-24", time: "14:30" });
+    expect(repository.read().events).toEqual([
+      expect.objectContaining({ kind: "appointment", title: "Zahnarzt", time: "14:30", sourceNoteId: "manual", done: false }),
+    ]);
+    repository.removeEvent(event.id);
+    expect(repository.read().events).toEqual([]);
+  });
+});

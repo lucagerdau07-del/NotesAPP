@@ -40,7 +40,7 @@ import useLongPress from "../hooks/useLongPress";
 import useInkPointer from "../hooks/useInkPointer";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
-import { renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
+import { changedInkRegion, renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 import useScrollbarGrip, { useLeftHandScrubber } from "./document/useScrollbarGrip.js";
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
@@ -1003,6 +1003,24 @@ const maxPages = 20;
 // sight. Below this distance from center a release springs back instead.
 const DOC_EDGE_SLACK_RATIO = 0.25;
 const DOC_SNAP_THRESHOLD_X = 24;
+// ponytail: how far (as a share of their start distance) two fingers may drift
+// apart or together and still count as a pan. Calibration knob: raise it if
+// scrolling still zooms, lower it if a small deliberate pinch feels sticky.
+const PINCH_DEAD_ZONE = Math.log(1.08);
+
+// Two fingers never keep their distance exactly while they pan, and
+// committing that drift on release re-lays-out the document, reallocates the
+// ink canvas and redraws every stroke — after every scroll. So the zoom stays
+// put inside the dead zone, catches up across the next dead zone's width, and
+// follows the fingers exactly beyond that: no jump anywhere, and a real pinch
+// lands where it always did.
+export function pinchZoomRatio(distanceRatio) {
+  const stretch = Math.log(distanceRatio);
+  const size = Math.abs(stretch);
+  if (size < PINCH_DEAD_ZONE) return 1;
+  if (size >= 2 * PINCH_DEAD_ZONE) return distanceRatio;
+  return Math.exp(Math.sign(stretch) * 2 * (size - PINCH_DEAD_ZONE));
+}
 // Same clearance split mode reserves with a static margin (see the scroll
 // container's own margin below) — the floating title/action pills at the top
 // of the screen are that tall. Full mode instead runs the page edge-to-edge
@@ -1353,21 +1371,42 @@ export default function DocumentView({
   }, [pageBackground, note?.kind]);
 
   const documentHeight = resolvedPageHeight * pagesCount;
-  const pageDescriptors =
-    note?.kind === "imported" &&
-    Array.isArray(note.pages) &&
-    note.pages.length > 0
+  // Imported documents take page sizes from the source file (note.pages), but
+  // the order and set of pages from the ink document - that is what the pages
+  // panel reorders, adds to and removes from. sourceIndex keeps each page
+  // showing its own PDF page after it moved; a page added later has none.
+  const sourcePages =
+    note?.kind === "imported" && Array.isArray(note.pages) && note.pages.length > 0
       ? note.pages
-      : pageIds.map((id, index) => ({
-          id,
-          index,
-          width: inkDocument.pages[index]?.width || resolvedPageWidth,
-          height: inkDocument.pages[index]?.height || resolvedPageHeight,
-        }));
-  // Memoized so imported documents (pageDescriptors === note.pages, a stable
-  // reference) get a stable pageLayouts array/objects across unrelated
-  // re-renders - otherwise every DocumentPage below would see a "new" page
-  // prop each time and React.memo on it would never hit.
+      : null;
+  const importedDescriptors = useMemo(() => {
+    if (!sourcePages) return null;
+    const byId = new Map(sourcePages.map((page) => [page.id, page]));
+    return inkDocument.pages.map((inkPage, index) => {
+      const source = byId.get(inkPage.id);
+      return source
+        ? { ...source, index, sourceIndex: source.index }
+        : {
+            id: inkPage.id,
+            index,
+            sourceIndex: null,
+            width: sourcePages[0].width,
+            height: sourcePages[0].height,
+          };
+    });
+  }, [sourcePages, inkDocument.pages]);
+  const pageDescriptors =
+    importedDescriptors ||
+    pageIds.map((id, index) => ({
+      id,
+      index,
+      width: inkDocument.pages[index]?.width || resolvedPageWidth,
+      height: inkDocument.pages[index]?.height || resolvedPageHeight,
+    }));
+  // Memoized so imported documents (a stable pageDescriptors reference until
+  // the page list changes) get a stable pageLayouts array/objects across
+  // unrelated re-renders - otherwise every DocumentPage below would see a
+  // "new" page prop each time and React.memo on it would never hit.
   const documentMetrics = useMemo(
     () => calculateDocumentMetrics(pageDescriptors),
     [pageDescriptors],
@@ -1482,6 +1521,9 @@ export default function DocumentView({
       const cssHeight = parseFloat(canvas.style.height) || 0;
       const perCssX = cssWidth > 0 ? canvas.width / cssWidth : 1;
       const perCssY = cssHeight > 0 ? canvas.height / cssHeight : 1;
+      if (!paintedPageDraftsRef.current.has(draft)) {
+        paintedPageDraftsRef.current.set(draft, strokesByPage.get(draft.pageId));
+      }
       renderInkStroke(context, segment, {
         offsetX: -(parseFloat(canvas.style.left) || 0) * perCssX,
         offsetY: -(parseFloat(canvas.style.top) || 0) * perCssY,
@@ -1505,7 +1547,22 @@ export default function DocumentView({
       scaleX: zoom,
       scaleY: zoom,
     });
+    paintedDraftsRef.current.add(draft);
   };
+  // Drafts drawn straight onto the canvas since the last redraw: it has to
+  // repair their pixels whether they commit, get erased as a palm or become a
+  // shape.
+  const paintedDraftsRef = useRef(new Set());
+  // Same for an imported note's per-page canvases, which only repaint when
+  // their page's strokes change: draft -> that page's strokes when it was
+  // painted. A draft that ends without changing them (turned into a shape,
+  // palm-cancelled) would otherwise stay on screen as ghost ink until the
+  // next stroke on that page.
+  const paintedPageDraftsRef = useRef(new Map());
+  const [pageRepaintKeys, setPageRepaintKeys] = useState({});
+  // What the canvas shows now, so a redraw repaints only what changed since —
+  // a stroke commit redraws a word, not the whole note (see changedInkRegion).
+  const paintedInkRef = useRef(null);
 
   // Contact geometry is reported in CSS px, so the palm threshold is panel
   // specific; the settings profile is the calibration knob for it. Settings
@@ -2024,6 +2081,7 @@ export default function DocumentView({
     document: inkDocument,
     commitStroke: inkController?.inkLayerLocked ? () => {} : inkController?.commitStroke,
     removeStrokes: inkController?.inkLayerLocked ? () => {} : inkController?.removeStrokes,
+    removeObjects: inkController?.inkLayerLocked ? () => {} : inkController?.removeObjects,
     addObject: inkController?.inkLayerLocked ? undefined : inkController?.addObject,
     onHoldWithoutShape: inkController?.inkLayerLocked
       ? undefined
@@ -2061,15 +2119,37 @@ export default function DocumentView({
         ),
       };
     }
-    renderInkDocument(context, previewDocument, {
-      ...pageLayout,
-      cssWidth,
-      cssHeight,
-      dpr,
-    });
+    const layout = { ...pageLayout, cssWidth, cssHeight, dpr };
+    // Only a canvas of the same size with the pages where they were still
+    // holds the last redraw's pixels; anything else starts over.
+    const key = [canvas.width, canvas.height, cssWidth, cssHeight, zoom]
+      .concat(pageLayout.pageLayouts.map((page) => `${page.id}:${page.top}`))
+      .join();
+    const last = paintedInkRef.current;
+    const region =
+      last?.key === key
+        ? changedInkRegion(last.strokes, previewDocument.strokes, previewDocument, layout, paintedDraftsRef.current)
+        : undefined;
+    paintedDraftsRef.current.clear();
+    paintedInkRef.current = { key, strokes: previewDocument.strokes };
+    if (region === null) return;
+    renderInkDocument(context, previewDocument, layout, region);
   };
 
   useLayoutEffect(() => {
+    const stale = [];
+    for (const [draft, strokes] of paintedPageDraftsRef.current) {
+      if (draft === inkPointer.draftStroke) continue;
+      paintedPageDraftsRef.current.delete(draft);
+      if (strokesByPage.get(draft.pageId) === strokes) stale.push(draft.pageId);
+    }
+    if (stale.length > 0) {
+      setPageRepaintKeys((keys) => {
+        const next = { ...keys };
+        for (const pageId of stale) next[pageId] = (next[pageId] || 0) + 1;
+        return next;
+      });
+    }
     if (!inkCanvasRef.current) return;
     redrawInkCanvasRef.current?.();
   }, [
@@ -2090,7 +2170,17 @@ export default function DocumentView({
     if (!canvas) return undefined;
     const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
     observer.observe(canvas);
-    return () => observer.disconnect();
+    // A lost GPU context comes back blank, so the pixels a partial redraw
+    // builds on are gone.
+    const restored = () => {
+      paintedInkRef.current = null;
+      redrawInkCanvasRef.current?.();
+    };
+    canvas.addEventListener("contextrestored", restored);
+    return () => {
+      observer.disconnect();
+      canvas.removeEventListener("contextrestored", restored);
+    };
   }, []);
 
   useEffect(() => {
@@ -2570,31 +2660,9 @@ export default function DocumentView({
       gutterPanData.current = startPan(event);
     }
 
-    if (activePointers.current.size === 2 && !needsPinchConfirmation()) {
-      // Outside passive-stylus mode every touch is already a deliberate
-      // finger (see needsPinchConfirmation), so there is no resting-hand
-      // ambiguity to wait out — arm immediately, same as before.
-      commitPinchArm(event);
-    }
-  };
-
-  // In passive-stylus mode a lone touch stands in for the pen (see
-  // useInkPointer), so a second one touching down is exactly as ambiguous as
-  // a hand landing beside the writing finger — shouldBlockTouch says as much.
-  // Every other mode has no such stand-in: two touches are always two fingers.
-  const needsPinchConfirmation = () => inputMode === "stylus" && palmGuard.passiveStylus;
-
-  // A freshly landed pair is armed once both contacts have actually travelled,
-  // not the instant a second one touches down. At touchdown a resting hand
-  // beside the writing finger and a real second finger look identical — only
-  // motion tells them apart, and a parked hand never contributes any. Below
-  // the threshold nothing is armed yet, so the moving contact just keeps
-  // drawing until this promotes it.
-  const armPinch = (event) => {
-    for (const p of activePointers.current.values()) {
-      if (Math.hypot(p.x - p.downX, p.y - p.downY) < palmGuard.restingPx) return;
-    }
-    commitPinchArm(event);
+    // Two touches are two fingers in every mode (see inputPolicy), so arm at
+    // touchdown: waiting for the pair to move is what let one of them draw.
+    if (activePointers.current.size === 2) commitPinchArm(event);
   };
 
   // The preview below moves every page's rendered box without touching the
@@ -2706,13 +2774,10 @@ export default function DocumentView({
     }
     if (e.pointerType !== "touch") return;
 
-    // A pending or armed pair is judged by armPinch's own movement check below,
-    // not by this — the classifier's palm election runs per contact and, on a
-    // panel that reports no contact geometry at all, decisively brands whichever
-    // finger hasn't moved *yet* the instant the other one does, which is simply
-    // the second finger of a pinch that has not started moving this frame. Once
-    // a pointer has already left the pair (or a third arrives), the normal
-    // per-touch guard below still applies.
+    // A pair keeps its fingers even if the guard turns on one mid-gesture (a
+    // pen coming into hover range, a thumb flattening to palm size) — dropping
+    // it would end the pinch under the user's hand. Once a pointer has left the
+    // pair (or a third arrives), the normal per-touch guard applies.
     if (inkPointer.shouldBlockTouch(e) && activePointers.current.size !== 2) {
       if (activePointers.current.has(e.pointerId)) {
         handleGestureEnd(e);
@@ -2730,8 +2795,9 @@ export default function DocumentView({
       return;
     }
 
+    // Down to a pair again after a third finger left: pinch with those two.
     if (activePointers.current.size === 2 && !pinchInitialData.current) {
-      armPinch(e);
+      commitPinchArm(e);
     }
 
     if (pinchInitialData.current) {
@@ -2771,7 +2837,7 @@ export default function DocumentView({
 
         const newZoom = Math.max(
           0.5,
-          Math.min(3, startZoom * (currentDistance / startDist)),
+          Math.min(3, startZoom * pinchZoomRatio(currentDistance / startDist)),
         );
         const zoomRatio = newZoom / startZoom;
 
@@ -3673,13 +3739,16 @@ export default function DocumentView({
         />
       )}
       {zoomToast !== null && (
-        <div className="zoom-toast" data-testid="zoom-toast">
+        <div className="zoom-toast" data-testid="zoom-toast" data-glass-no-recapture="">
           <span>{zoomToast}%</span>
         </div>
       )}
 
+      {/* Scrolled content: glass repaints it live, never re-shoots it (see
+          NO_RECAPTURE_ATTR in useLiquidGlass). */}
       <div
         ref={scrollRef}
+        data-glass-no-recapture=""
         style={{
           flex: 1,
           overflowY: "auto",
@@ -3824,6 +3893,7 @@ export default function DocumentView({
                   sourceType={note.source?.type}
                   sourceHandle={sourceHandle}
                   strokes={strokesByPage.get(pageLayout.id) || EMPTY_STROKES}
+                  repaintKey={pageRepaintKeys[pageLayout.id]}
                   zoom={zoom}
                   dpr={globalThis.devicePixelRatio || 1}
                 />

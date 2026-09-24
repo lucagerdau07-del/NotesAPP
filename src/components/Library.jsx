@@ -56,6 +56,7 @@ import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import useKnowledge from "../hooks/useKnowledge.js";
+import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserFolderRepository } from "../storage/folderRepository.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
@@ -72,7 +73,7 @@ import NewDocumentDialog from "./NewDocumentDialog.jsx";
 import FolderDialog from "./FolderDialog.jsx";
 import UpcomingCard from "./UpcomingCard.jsx";
 import { loadUntisCredentials } from "../ink/untisSettings.js";
-import { fetchUntisWeek, loadArchivedWeek, loadUpdatedAt, untisDateNumber, untisMonday, UNTIS_MAX_WEEKS_BACK } from "../ink/untisArchive.js";
+import { fetchUntisWeek, isLessonCancelled, loadArchivedWeek, loadUpdatedAt, untisDateNumber, untisMonday, UNTIS_MAX_WEEKS_BACK } from "../ink/untisArchive.js";
 
 /* The agent input is a pill-sized control nested inside the agent panel, so it
    matches the Ask AI pill's geometry rather than the panel's. */
@@ -2982,13 +2983,7 @@ function UntisWeekGrid({ lessons, monday, note }) {
                     ? lesson.su?.[0]?.name || lesson.su?.[0]?.longname
                     : lesson.su?.[0]?.longname || lesson.su?.[0]?.name) || "—";
                 const room = lesson.ro?.[0]?.name || "";
-                // Entfall = flagged cancelled, or the teacher/room was struck out ("---")
-                // with no substitute entered (e.g. "eigenverantwortliches Arbeiten").
-                const removed = (list) => list?.length > 0 && list.every((x) => x.id === 0 || x.name === "---");
-                // Untis also enters a cancellation as substText only (code stays unset,
-                // teacher list is empty for students), e.g. Spanisch on 2026-09-21.
-                const selfStudy = /eigenverantwortlich/i.test(lesson.substText || "") && subject !== "Lernzeit";
-                const cancelled = lesson.code === "cancelled" || removed(lesson.te) || removed(lesson.ro) || selfStudy;
+                const cancelled = isLessonCancelled(lesson);
                 const irregular = lesson.code === "irregular";
                 const color = cancelled
                   ? { accent: "#ff5a4f", bg: "rgba(255,90,79,.24)" }
@@ -3029,7 +3024,8 @@ function UntisWeekGrid({ lessons, monday, note }) {
 export default function Library({
   onOpenNote,
   onOpenSettings,
-  onOpenPlan,
+  onOpenCalendar,
+  onOpenGlossary,
   documentLibraryOptions,
 }) {
   const documentLibrary = useDocumentLibrary(documentLibraryOptions);
@@ -3304,12 +3300,15 @@ export default function Library({
       (note.pageKind === "whiteboard" ? "Whiteboard" : "Notiz"),
   }));
   const untisSubjects = [...new Set(untisLessons.map((lesson) => lesson.subject).filter(Boolean))];
-  const sourceNoteTitles = Object.fromEntries(
-    knowledgeNotes
-      .filter((note) => note.id && note.title)
-      .map((note) => [note.id, note.title]),
-  );
-  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects });
+  const sourceNoteTitles = {
+    ...Object.fromEntries(
+      knowledgeNotes
+        .filter((note) => note.id && note.title)
+        .map((note) => [note.id, note.title]),
+    ),
+    iserv: "IServ",
+  };
+  const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects, syncIserv });
   const allNotes = [...importedCards, ...createdCards];
 
   // Filter notes by selected subject and search query
@@ -3511,11 +3510,11 @@ export default function Library({
         </div>
         <button
           type="button"
-          onClick={onOpenPlan}
+          onClick={onOpenCalendar}
           className="lib-plan-btn"
-          title="Lernplan & Glossar"
-          aria-label="Lernplan & Glossar öffnen"
-          data-testid="open-plan-btn"
+          title="Kalender"
+          aria-label="Kalender öffnen"
+          data-testid="open-calendar-btn"
           style={{
             marginTop: "auto",
             width: 44,
@@ -3532,6 +3531,29 @@ export default function Library({
           }}
         >
           <CalendarDays size={19} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenGlossary}
+          className="lib-plan-btn"
+          title="Glossar"
+          aria-label="Glossar öffnen"
+          data-testid="open-glossary-btn"
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 15,
+            background: "transparent",
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#FFFFFF",
+            cursor: "pointer",
+            transition: "background-color 0.15s, color 0.15s",
+          }}
+        >
+          <BookOpen size={19} aria-hidden="true" />
         </button>
         <button
           type="button"

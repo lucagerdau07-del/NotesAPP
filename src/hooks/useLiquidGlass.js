@@ -98,11 +98,12 @@ function keepGlassPaintedWhileResizing() {
     const resized = checkSizes.call(this);
     // A panel that just finished growing now covers page objects the last
     // capture culled (see cullCaptureToGlass), and nothing in the DOM behind
-    // it changed to trigger a re-capture on its own.
+    // it changed to trigger a re-capture on its own. Only captures that did
+    // leave something out: the static scene backdrop is a ~1s re-capture on a
+    // Galaxy Tab A7 and was re-shot on every open and close of the panel.
     if (this.__glassResizing && !resized)
       for (const child of this.root?.children ?? [])
-        if (!this.glassSet.has(child) && !["CANVAS", "IMG", "VIDEO"].includes(child.tagName))
-          this.capture?.captureElement(child, true);
+        if (this.capture?.cache?.get(child)?.culled) this.capture.captureElement(child, true);
     this.__glassResizing = resized;
     if (resized) this._globalDirty = true;
     return resized;
@@ -295,26 +296,57 @@ export function cullCaptureToGlass(instance) {
 
   capture._captureWithHtmlToImage = async function (element, w, h, cssW, cssH) {
     if (cssW <= 0 || cssH <= 0 || w <= 0 || h <= 0) return;
+    // Captures asked for in the same frame (every wrapper, right after the
+    // library mounts) would otherwise run their microtask chains back to back as
+    // one uninterruptible task. A task boundary in front of each lets a tap or a
+    // paint in between.
+    await new Promise((resolve) => setTimeout(resolve));
     const viewport = viewportMatrix(element);
+    // A fully transparent wrapper (the closed assistant panel: ~110 nodes of chat)
+    // clones to nothing anyway, since its opacity is copied along. A 1px stand-in
+    // keeps the render loop from asking again every frame; opening the panel
+    // rewrites its attributes and the change observer re-captures it for real.
+    if (getComputedStyle(element).opacity === "0") {
+      const blank = document.createElement("canvas");
+      blank.width = blank.height = 1;
+      this.cache.set(element, { canvas: blank, w, h, viewport });
+      return;
+    }
     const glassRects = [...instance.glassSet].map((glass) => glass.getBoundingClientRect());
     // A whole imported page counts as one: at fit-width no page reaches the
     // rail or the pills, and cloning it drags its canvases and link layer
     // through every capture (measured on a Galaxy Tab A7: ~750ms freeze after
     // each pause in scrolling, style copy and toDataURL over pages nobody sees
-    // through glass).
-    const offGlass = [...element.querySelectorAll("[data-object-id], .document-page")].filter((object) => {
-      const box = object.getBoundingClientRect();
+    // through glass). The same goes for the library: ~11 nodes per note card and
+    // ~3 per timetable lesson, and with a few dozen notes that clone was a ~4s
+    // freeze right after returning from a document.
+    const clearOfGlass = (node) => {
+      const box = node.getBoundingClientRect();
       return !glassRects.some((glass) => intersects(box, glass, CULL_MARGIN_PX));
+    };
+    const offGlass = [
+      ...element.querySelectorAll("[data-object-id], .document-page, .untis-lesson"),
+    ].filter(clearOfGlass);
+    // Cards and rows sit in CSS columns / a flex column, so dropping one would
+    // reflow its neighbours in the clone. Keep the box (its computed size is
+    // copied inline) and drop only what is inside it - or, when no card of the
+    // grid is near glass, everything inside the grid's own box.
+    const hollowed = [...element.querySelectorAll(".lib-masonry-grid, .lib-list-view")].flatMap((grid) => {
+      const cards = [...grid.children];
+      return cards.every(clearOfGlass)
+        ? cards
+        : cards.filter(clearOfGlass).flatMap((card) => [...card.children]);
     });
     const restoreFullSizeClones = thumbnailCanvasClones(element);
     let canvas;
     try {
-      canvas = await this.captureToCanvas(element, cssW, cssH, offGlass);
+      canvas = await this.captureToCanvas(element, cssW, cssH, [...offGlass, ...hollowed]);
     } finally {
       restoreFullSizeClones();
     }
     if (!canvas) return;
-    this.cache.set(element, { canvas, w, h, viewport });
+    const culled = offGlass.length + hollowed.length > 0;
+    this.cache.set(element, { canvas, w, h, viewport, culled });
     this.onCacheUpdate?.(element);
   };
 
@@ -365,6 +397,16 @@ function styledDataAttributes() {
   return names;
 }
 
+// Marks a subtree whose changes a re-capture cannot show. DocumentView's page
+// content lives in its scroller, and html-to-image renders a scroller from the
+// top whatever its offset (see above), so re-shooting it after a pan, a zoom or
+// a stroke draws the same misplaced page as before — for ~800ms of blocked main
+// thread on a Galaxy Tab A7, landing in the first pause of the writing that
+// follows. Its canvases and images are drawn live on every repaint anyway, so a
+// repaint is all such a change is worth. Also for nodes that never sit behind
+// glass, like the zoom toast.
+export const NO_RECAPTURE_ATTR = "data-glass-no-recapture";
+
 export function recaptureBackgroundOnChange(instance, root) {
   const noop = () => {};
   const wrappers = Array.from(root.children).filter(
@@ -375,20 +417,26 @@ export function recaptureBackgroundOnChange(instance, root) {
   if (!instance?.capture || wrappers.length === 0) return noop;
   const styledData = styledDataAttributes();
 
-  let timer = 0;
   // Only the wrapper that actually changed: a re-capture is one html-to-image
   // pass over that whole subtree (~790ms for the document body on a Galaxy Tab
   // A7), so re-shooting all of them because one pill changed is three of those
   // for nothing.
   const dirty = new Set();
-  let viewportTimer = 0;
   const viewportMoved = new Set();
+  const repaintOnly = new Set();
+  const timers = new Map();
   const capture = (targets) => {
     const pending = [...targets];
     targets.clear();
     for (const wrapper of pending)
       Promise.resolve(instance.capture.captureElement(wrapper, true)).catch(noop);
   };
+  const repaint = (targets) => {
+    for (const wrapper of targets) instance.markChanged?.(wrapper);
+    targets.clear();
+  };
+  const skipped = (node) =>
+    (node.nodeType === 1 ? node : node.parentElement)?.closest?.(`[${NO_RECAPTURE_ATTR}]`);
 
   let lastPointerAt = -Infinity; // Nothing has touched the screen yet.
   const touched = () => {
@@ -399,20 +447,16 @@ export function recaptureBackgroundOnChange(instance, root) {
   document.addEventListener("pointerdown", touched, touchOptions);
   document.addEventListener("pointermove", touched, touchOptions);
 
-  // Returns the timer id to store, and re-arms itself for as long as the screen
-  // is still being touched (see HAND_OFF_MS).
-  const scheduleCapture = (targets, delay) => {
-    const run = () => {
+  // Replaces whatever is pending for these targets, and re-arms itself for as
+  // long as the screen is still being touched (see HAND_OFF_MS).
+  const schedule = (targets, delay, run = capture) => {
+    const attempt = () => {
       const since = performance.now() - lastPointerAt;
-      if (since < HAND_OFF_MS) {
-        const id = setTimeout(run, HAND_OFF_MS - since);
-        if (targets === dirty) timer = id;
-        else viewportTimer = id;
-        return;
-      }
-      capture(targets);
+      if (since < HAND_OFF_MS) timers.set(targets, setTimeout(attempt, HAND_OFF_MS - since));
+      else run(targets);
     };
-    return setTimeout(run, delay);
+    clearTimeout(timers.get(targets));
+    timers.set(targets, setTimeout(attempt, delay));
   };
 
   const observer = new MutationObserver((records) => {
@@ -431,20 +475,18 @@ export function recaptureBackgroundOnChange(instance, root) {
     for (const record of records) {
       const wrapper = wrappers.find((candidate) => candidate.contains(record.target));
       if (!wrapper) continue;
-      // A page mounting, unmounting or resizing its canvases while scrolling
-      // (see DocumentPage). Each capture is a fixed ~800ms on a Galaxy Tab A7
-      // however small the tree, and one per page that scrolls into view is what
-      // reads as a hitch after every pause. A page clear of every glass panel
-      // is left out of the capture anyway (see cullCaptureToGlass), so nothing
-      // it does can change one; only one behind a panel needs refreshing, and
-      // that waits for the view to settle like a camera move does.
-      const page = record.target.closest?.(".document-page");
-      if (page) {
-        const box = page.getBoundingClientRect();
-        const behindGlass = [...(instance.glassSet ?? [])].some((glass) =>
-          intersects(box, glass.getBoundingClientRect(), CULL_MARGIN_PX),
-        );
-        if (behindGlass) viewportMoved.add(wrapper);
+      if (record.type === "attributes") {
+        const name = record.attributeName;
+        const unchanged =
+          firstOldValues.get(record.target).get(name) === record.target.getAttribute(name);
+        if (unchanged || (name.startsWith("data-") && !styledData.has(name))) continue;
+      }
+      if (
+        skipped(record.target) ||
+        (record.type === "childList" &&
+          [...record.addedNodes, ...record.removedNodes].every(skipped))
+      ) {
+        repaintOnly.add(wrapper);
         continue;
       }
       // A camera move: the existing capture is redrawn shifted (see
@@ -458,22 +500,12 @@ export function recaptureBackgroundOnChange(instance, root) {
         instance.markChanged?.(wrapper);
         continue;
       }
-      if (record.type === "attributes") {
-        const name = record.attributeName;
-        const unchanged =
-          firstOldValues.get(record.target).get(name) === record.target.getAttribute(name);
-        if (unchanged || (name.startsWith("data-") && !styledData.has(name))) continue;
-      }
       dirty.add(wrapper);
       contentChanged = true;
     }
-    if (viewportMoved.size > 0) {
-      clearTimeout(viewportTimer);
-      viewportTimer = scheduleCapture(viewportMoved, VIEWPORT_SETTLE_MS);
-    }
-    if (!contentChanged) return;
-    clearTimeout(timer);
-    timer = scheduleCapture(dirty, BACKGROUND_QUIET_MS);
+    if (viewportMoved.size > 0) schedule(viewportMoved, VIEWPORT_SETTLE_MS);
+    if (repaintOnly.size > 0) schedule(repaintOnly, BACKGROUND_QUIET_MS, repaint);
+    if (contentChanged) schedule(dirty, BACKGROUND_QUIET_MS);
   });
   for (const wrapper of wrappers)
     observer.observe(wrapper, {
@@ -488,8 +520,7 @@ export function recaptureBackgroundOnChange(instance, root) {
     observer.disconnect();
     document.removeEventListener("pointerdown", touched, touchOptions);
     document.removeEventListener("pointermove", touched, touchOptions);
-    clearTimeout(timer);
-    clearTimeout(viewportTimer);
+    for (const id of timers.values()) clearTimeout(id);
   };
 }
 

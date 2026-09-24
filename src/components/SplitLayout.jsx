@@ -51,7 +51,7 @@ export default function SplitLayout({
     initialPageStyle,
     initialColor: initialInkColor,
     onPersisted:
-      note?.kind === "imported"
+      !note || note.kind === "imported"
         ? undefined
         : () => {
             const { title, subject, pageKind, format, background, ruling } = note;
@@ -74,7 +74,16 @@ export default function SplitLayout({
   // re-render this tree on every render of it.
   // paperStyle isn't part of inkController (it's local UI state, not document
   // state), but the agent's tools need it to snap text onto the page's ruling.
-  if (inkControllerRef) inkControllerRef.current = { ...inkController, paperStyle };
+  // The pages panel needs the imported file too: its thumbnails show the PDF
+  // page under the ink, and the ink pages alone carry no size for it.
+  if (inkControllerRef)
+    inkControllerRef.current = {
+      ...inkController,
+      paperStyle,
+      sourceHandle,
+      sourceType: note?.source?.type,
+      sourcePages: note?.kind === "imported" ? note.pages : null,
+    };
 
   const toolState = {
     color: inkController.color,

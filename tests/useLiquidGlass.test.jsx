@@ -167,6 +167,26 @@ describe('LiquidGlass control adapter', () => {
     expect(captureContent).not.toHaveBeenCalled()
   })
 
+  it('after a resize re-captures only backgrounds whose capture was culled', async () => {
+    init.mockResolvedValue({ destroy: vi.fn(), markChanged: vi.fn() })
+    render(<Harness />)
+    await waitFor(() => expect(init).toHaveBeenCalled())
+
+    const scene = document.createElement('div')
+    const body = document.createElement('div')
+    const captureElement = vi.fn()
+    const instance = {
+      __glassResizing: true,
+      root: { children: [scene, body] },
+      capture: { captureElement, cache: new Map([[scene, { culled: false }], [body, { culled: true }]]) },
+    }
+    checkSizes.mockReturnValue(false)
+    FakeLiquidGlass.prototype._checkGlassSizeChanges.call(instance)
+
+    expect(captureElement).toHaveBeenCalledTimes(1)
+    expect(captureElement).toHaveBeenCalledWith(body, true)
+  })
+
   it('holds the CSS glass fallback until the scene capture pipeline goes idle', async () => {
     // One capture lands, a second starts a few frames later: the old
     // quiet-timer readiness flipped in that gap and showed the empty scene.

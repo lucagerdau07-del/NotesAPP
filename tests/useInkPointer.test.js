@@ -351,6 +351,49 @@ describe('useInkPointer', () => {
     expect(commitStroke).not.toHaveBeenCalled();
   });
 
+  it('lets the stroke eraser remove a hold-to-convert shape object it swipes through', () => {
+    const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
+      strokes: [],
+      objects: [{
+        id: 'arrow-1', pageId: 'p1', type: 'arrow', x: 0, y: 0, width: 100, height: 0,
+      }],
+    };
+    const removeObjects = vi.fn();
+    const { result, removeStrokes } = renderInkPointer({
+      tool: 'stroke-eraser', width: 8, document, removeObjects,
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 0)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 0)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 52, 0)));
+
+    expect(removeObjects).toHaveBeenCalledWith(['arrow-1']);
+    expect(removeStrokes).not.toHaveBeenCalled();
+  });
+
+  it('leaves a shape object alone when the stroke eraser never reaches it', () => {
+    const document = {
+      documentId: 'doc-1',
+      pages: [{ id: 'p1' }],
+      strokes: [],
+      objects: [{
+        id: 'arrow-1', pageId: 'p1', type: 'arrow', x: 0, y: 0, width: 100, height: 0,
+      }],
+    };
+    const removeObjects = vi.fn();
+    const { result } = renderInkPointer({
+      tool: 'stroke-eraser', width: 8, document, removeObjects,
+    });
+
+    act(() => result.current.onPointerDown(pointer(7, 'pen', 300, 300)));
+    act(() => result.current.onPointerMove(pointer(7, 'pen', 302, 300)));
+    act(() => result.current.onPointerUp(pointer(7, 'pen', 302, 300)));
+
+    expect(removeObjects).not.toHaveBeenCalled();
+  });
+
   it('keeps a boundary-finished first finger as navigation when a second finger goes down', () => {
     const mapPoint = event => event.pointerId === 1 && event.clientX >= 3
       ? null
@@ -604,6 +647,79 @@ describe('hold-to-convert', () => {
       expect(commitStroke).toHaveBeenCalledTimes(3);
       expect(removeStrokes).toHaveBeenCalledWith(expect.arrayContaining(mergedIds));
       expect(result.current.draftStroke).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still fires the hold while a resting tip keeps jittering', () => {
+    vi.useFakeTimers();
+    try {
+      const addObject = vi.fn();
+      const { result } = renderInkPointer({ addObject });
+      const points = rectPoints(0, 0, 100, 60);
+      drawPoints(result, points);
+      // A pen held on the glass keeps reporting 1-2px moves every frame.
+      for (let i = 0; i < 30; i += 1) {
+        act(() => vi.advanceTimersByTime(16));
+        act(() => result.current.onPointerMove(pointer(7, 'pen', (i % 3) - 1, (i % 2) * 2)));
+      }
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'rect' }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  function straightLine(x1, y1, x2, y2, steps = 8) {
+    const points = [];
+    for (let s = 0; s <= steps; s += 1) points.push({ x: x1 + (x2 - x1) * (s / steps), y: y1 + (y2 - y1) * (s / steps) });
+    return points;
+  }
+
+  it('does not sweep up a stroke sitting just past the merge margin', () => {
+    vi.useFakeTimers();
+    try {
+      const addObject = vi.fn();
+      const { result, commitStroke, removeStrokes } = renderInkPointer({ addObject });
+      const unrelated = straightLine(0, 0, 60, 0);
+      drawPoints(result, unrelated);
+      act(() => result.current.onPointerUp(pointer(7, 'pen', 60, 0)));
+      expect(commitStroke).toHaveBeenCalledOnce();
+      const unrelatedId = commitStroke.mock.calls[0][0].id;
+
+      // 40px gap from the first stroke's bbox - past the merge margin, so a
+      // held pause here must recognize only this stroke, not reach back for
+      // the one already written.
+      drawPoints(result, straightLine(100, 0, 160, 0));
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'line' }));
+      expect(removeStrokes).not.toHaveBeenCalled();
+      expect(removeStrokes).not.toHaveBeenCalledWith(expect.arrayContaining([unrelatedId]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not sweep up a stroke written before the merge window - a held pause mid-handwriting must not delete a moment-old word', () => {
+    vi.useFakeTimers();
+    try {
+      const addObject = vi.fn();
+      const { result, commitStroke, removeStrokes } = renderInkPointer({ addObject });
+      const unrelated = straightLine(0, 0, 60, 0);
+      drawPoints(result, unrelated);
+      act(() => result.current.onPointerUp(pointer(7, 'pen', 60, 0)));
+      const unrelatedId = commitStroke.mock.calls[0][0].id;
+
+      // Past the merge window but well before the strokes would go stale.
+      act(() => vi.advanceTimersByTime(5000));
+
+      // Right next to the first stroke - would merge if it were still eligible.
+      drawPoints(result, straightLine(65, 0, 125, 0));
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'line' }));
+      expect(removeStrokes).not.toHaveBeenCalledWith(expect.arrayContaining([unrelatedId]));
     } finally {
       vi.useRealTimers();
     }

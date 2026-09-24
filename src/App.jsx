@@ -17,7 +17,8 @@ import { isLightBackground } from "./documents/pageStyles.js";
 // These screens/panels are not needed on initial load (library or a plain
 // note), so they're split into their own chunks and fetched on demand.
 const Settings = lazy(() => import("./components/Settings"));
-const PlanScreen = lazy(() => import("./components/PlanScreen"));
+const CalendarScreen = lazy(() => import("./components/CalendarScreen"));
+const GlossaryScreen = lazy(() => import("./components/GlossaryScreen"));
 const AiChatPanel = lazy(() => import("./components/AiChatPanel"));
 const BrowserPanel = lazy(() => import("./components/BrowserPanel"));
 const PagesPanel = lazy(() => import("./components/PagesPanel"));
@@ -416,14 +417,8 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
         </div>
       </div>
       {/* One glass control: the library re-measures each control's own
-          offsetWidth/Height every frame and keeps the canvas content in
-          step with the CSS width transition below — but its per-frame path
-          only marks *content* dirty on a size change, not the shader render
-          itself, so the panel sits blank until something marks it dirty.
-          Calling markChanged() on just this element (rather than dispatching
-          a global "resize", which forces a full re-capture of every glass
-          control on the page and shows as a page-wide flash) triggers that
-          redraw for the rail alone. */}
+          offsetWidth/Height every frame, and keepGlassPaintedWhileResizing
+          (useLiquidGlass) repaints it on the frame its width changes. */}
       <div
         className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""} ${paneCount > 1 && !isActive ? "rail-hidden" : ""}`}
         data-testid="editor-sidebar"
@@ -436,10 +431,6 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
         // arcs like a pill even though the CSS corner is tight.
         data-config={isPanelOpen ? '{"cornerRadius":30}' : undefined}
         style={isPanelOpen && !isBrowserFullscreen && railWidth ? { width: `${railWidth}px` } : undefined}
-        onTransitionEnd={(event) => {
-          if (event.propertyName === "width")
-            glassInstanceRef.current?.markChanged(event.currentTarget);
-        }}
       >
         <div className="rail-tools" ref={setRailSlot}>
           <div style={{ order: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
@@ -786,10 +777,18 @@ export default function App() {
     );
   }
 
-  if (screen === "plan") {
+  if (screen === "calendar") {
     return (
       <Suspense fallback={null}>
-        <PlanScreen onBack={() => setScreen("library")} />
+        <CalendarScreen onBack={() => setScreen("library")} onOpenNote={openNote} />
+      </Suspense>
+    );
+  }
+
+  if (screen === "glossary") {
+    return (
+      <Suspense fallback={null}>
+        <GlossaryScreen onBack={() => setScreen("library")} />
       </Suspense>
     );
   }
@@ -799,7 +798,8 @@ export default function App() {
       <Library
         onOpenNote={openNote}
         onOpenSettings={() => setScreen("settings")}
-        onOpenPlan={() => setScreen("plan")}
+        onOpenCalendar={() => setScreen("calendar")}
+        onOpenGlossary={() => setScreen("glossary")}
       />
     );
   }

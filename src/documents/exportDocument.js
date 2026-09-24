@@ -44,7 +44,7 @@ function blobToBase64(blob) {
 // share sheet, so the user can save it to Downloads, send it, print it, etc.
 // Plain browser (dev preview, no native shell): a normal <a download> link -
 // Filesystem/Share have no meaningful target there.
-async function saveAndShare(blob, filename) {
+export async function saveAndShare(blob, filename) {
   if (Capacitor.isNativePlatform()) {
     const data = await blobToBase64(blob);
     const { uri } = await Filesystem.writeFile({ path: filename, data, directory: Directory.Cache });
