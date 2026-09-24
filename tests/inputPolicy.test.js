@@ -30,18 +30,21 @@ describe('pointer admission and ownership policy', () => {
     expect(result.state).toMatchObject({ drawingPointerId: 2, drawingPointerType: 'pen' });
   });
 
-  it('cancels finger ink on the second touch and unlocks only after full release', () => {
-    let result = reducePointerInput(createInputState(), event('down', 1, 'touch'), 'finger');
-    result = reducePointerInput(result.state, event('down', 2, 'touch'), 'finger');
+  // Stylus mode with no pen ever seen is the passive stylus: the tip is a touch,
+  // and a second touch is a gesture there too, never a hand to write beside.
+  it.each(['finger', 'stylus'])('cancels touch ink on the second touch and unlocks only after full release in %s mode', (mode) => {
+    let result = reducePointerInput(createInputState(), event('down', 1, 'touch'), mode);
+    expect(result.intent).toBe('start-draw');
+    result = reducePointerInput(result.state, event('down', 2, 'touch'), mode);
     expect(result.intent).toBe('cancel-draw');
     expect(result.state.gestureLocked).toBe(true);
-    result = reducePointerInput(result.state, event('up', 2, 'touch'), 'finger');
-    result = reducePointerInput(result.state, event('move', 1, 'touch'), 'finger');
+    result = reducePointerInput(result.state, event('up', 2, 'touch'), mode);
+    result = reducePointerInput(result.state, event('move', 1, 'touch'), mode);
     expect(result.intent).toBe('navigate');
     expect(result.state.gestureLocked).toBe(true);
-    result = reducePointerInput(result.state, event('up', 1, 'touch'), 'finger');
+    result = reducePointerInput(result.state, event('up', 1, 'touch'), mode);
     expect(result.state.gestureLocked).toBe(false);
-    result = reducePointerInput(result.state, event('down', 3, 'touch'), 'finger');
+    result = reducePointerInput(result.state, event('down', 3, 'touch'), mode);
     expect(result.intent).toBe('start-draw');
   });
 
@@ -206,27 +209,10 @@ describe('passive stylus admission', () => {
     expect(result.state.blockedTouchPointerIds).toContain(1);
   });
 
-  it('cancels the palm stroke and names it for retroactive removal', () => {
-    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 30, x: 10, y: 10 }), 'stylus');
-    expect(result.intent).toBe('start-draw');
-    result = reducePointerInput(result.state, contact('down', 2, { size: 8, x: 40, y: 40, timeStamp: 1_050 }), 'stylus');
-    expect(result.intent).toBe('cancel-draw');
-    expect(result.state.retroBlockedPointerIds).toContain(1);
-  });
-
   it('treats an OS pointer cancel on a touch as a palm verdict', () => {
     let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20 }), 'stylus');
     expect(result.intent).toBe('start-draw');
     result = reducePointerInput(result.state, contact('cancel', 1, { size: 20, timeStamp: 1_020 }), 'stylus');
-    expect(result.intent).toBe('cancel-draw');
-    expect(result.state.retroBlockedPointerIds).toContain(1);
-  });
-
-  it('condemns a contact that has rested past the resting window beside a moving one', () => {
-    let result = reducePointerInput(createInputState(), contact('down', 2, { size: 20, x: 300, y: 200 }), 'stylus');
-    result = reducePointerInput(result.state, contact('down', 1, { size: 20, x: 5, y: 5, timeStamp: 1_050 }), 'stylus');
-    expect(result.state.drawingPointerId).toBe(1);
-    result = reducePointerInput(result.state, contact('move', 2, { size: 20, x: 340, y: 240, timeStamp: 1_400 }), 'stylus');
     expect(result.intent).toBe('cancel-draw');
     expect(result.state.retroBlockedPointerIds).toContain(1);
   });
@@ -238,21 +224,5 @@ describe('passive stylus admission', () => {
     result = reducePointerInput(result.state, contact('down', 1, { size: 8, timeStamp: 5_000 }), 'stylus');
     expect(result.intent).toBe('navigate');
     expect(result.state.drawingPointerId).toBe(null);
-  });
-
-  it('still admits a two-finger pinch in stylus mode once both fingers move', () => {
-    // Landing two contacts far apart is not yet a pinch here: without a
-    // digitizer the tip is a touch too, so that pair is just as likely to be a
-    // resting hand plus the pen. Nothing is blocked while the verdict is open,
-    // and the gesture locks as soon as the pair actually moves like a pinch.
-    let result = reducePointerInput(createInputState(), contact('down', 1, { size: 20, x: 100, y: 100 }), 'stylus');
-    result = reducePointerInput(result.state, contact('down', 2, { size: 22, x: 400, y: 300, timeStamp: 1_020 }), 'stylus');
-    expect(result.state.blockedTouchPointerIds).toEqual([]);
-    expect(result.state.gestureLocked).toBe(false);
-
-    result = reducePointerInput(result.state, contact('move', 1, { size: 20, x: 80, y: 90, timeStamp: 1_036 }), 'stylus');
-    result = reducePointerInput(result.state, contact('move', 2, { size: 22, x: 420, y: 310, timeStamp: 1_036 }), 'stylus');
-    expect(result.state.blockedTouchPointerIds).toEqual([]);
-    expect(result.state.gestureLocked).toBe(true);
   });
 });

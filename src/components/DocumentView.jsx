@@ -1363,21 +1363,42 @@ export default function DocumentView({
   }, [pageBackground, note?.kind]);
 
   const documentHeight = resolvedPageHeight * pagesCount;
-  const pageDescriptors =
-    note?.kind === "imported" &&
-    Array.isArray(note.pages) &&
-    note.pages.length > 0
+  // Imported documents take page sizes from the source file (note.pages), but
+  // the order and set of pages from the ink document - that is what the pages
+  // panel reorders, adds to and removes from. sourceIndex keeps each page
+  // showing its own PDF page after it moved; a page added later has none.
+  const sourcePages =
+    note?.kind === "imported" && Array.isArray(note.pages) && note.pages.length > 0
       ? note.pages
-      : pageIds.map((id, index) => ({
-          id,
-          index,
-          width: inkDocument.pages[index]?.width || resolvedPageWidth,
-          height: inkDocument.pages[index]?.height || resolvedPageHeight,
-        }));
-  // Memoized so imported documents (pageDescriptors === note.pages, a stable
-  // reference) get a stable pageLayouts array/objects across unrelated
-  // re-renders - otherwise every DocumentPage below would see a "new" page
-  // prop each time and React.memo on it would never hit.
+      : null;
+  const importedDescriptors = useMemo(() => {
+    if (!sourcePages) return null;
+    const byId = new Map(sourcePages.map((page) => [page.id, page]));
+    return inkDocument.pages.map((inkPage, index) => {
+      const source = byId.get(inkPage.id);
+      return source
+        ? { ...source, index, sourceIndex: source.index }
+        : {
+            id: inkPage.id,
+            index,
+            sourceIndex: null,
+            width: sourcePages[0].width,
+            height: sourcePages[0].height,
+          };
+    });
+  }, [sourcePages, inkDocument.pages]);
+  const pageDescriptors =
+    importedDescriptors ||
+    pageIds.map((id, index) => ({
+      id,
+      index,
+      width: inkDocument.pages[index]?.width || resolvedPageWidth,
+      height: inkDocument.pages[index]?.height || resolvedPageHeight,
+    }));
+  // Memoized so imported documents (a stable pageDescriptors reference until
+  // the page list changes) get a stable pageLayouts array/objects across
+  // unrelated re-renders - otherwise every DocumentPage below would see a
+  // "new" page prop each time and React.memo on it would never hit.
   const documentMetrics = useMemo(
     () => calculateDocumentMetrics(pageDescriptors),
     [pageDescriptors],

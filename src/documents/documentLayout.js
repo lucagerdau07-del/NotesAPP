@@ -13,6 +13,9 @@ export function calculateDocumentMetrics(pages = []) {
     return {
       id: page.id,
       index,
+      // Which page of an imported PDF/image this is; differs from `index` once
+      // pages are reordered, and is null for a blank page added afterwards.
+      sourceIndex: page?.sourceIndex,
       width,
       height,
       top: pageTop,

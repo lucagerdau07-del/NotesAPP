@@ -35,7 +35,7 @@ export default function PdfPageCanvas({
       const canvas = baseRef.current;
       if (!sourceHandle?.document?.getPage || !canvas) return;
       try {
-        const pdfPage = await sourceHandle.document.getPage(page.index + 1);
+        const pdfPage = await sourceHandle.document.getPage((page.sourceIndex ?? page.index) + 1);
         if (cancelled || !baseRef.current) {
           pdfPage?.cleanup?.();
           return;
@@ -70,7 +70,7 @@ export default function PdfPageCanvas({
         renderTask?.cancel();
       } catch {}
     };
-  }, [page.index, sourceHandle, windowed]);
+  }, [page.sourceIndex, page.index, sourceHandle, windowed]);
 
   useEffect(() => {
     let renderTask = null;
@@ -111,7 +111,7 @@ export default function PdfPageCanvas({
       canvas.style.height = `${Math.round(shown.height)}px`;
 
       try {
-        const pdfPage = await sourceHandle.document.getPage(page.index + 1);
+        const pdfPage = await sourceHandle.document.getPage((page.sourceIndex ?? page.index) + 1);
         if (cancelled || !canvasRef.current) {
           pdfPage?.cleanup?.();
           return;
@@ -187,7 +187,7 @@ export default function PdfPageCanvas({
         } catch {}
       }
     };
-  }, [page.index, page.width, page.height, sourceHandle, zoom, dpr, canvasWindow]);
+  }, [page.sourceIndex, page.index, page.width, page.height, sourceHandle, zoom, dpr, canvasWindow]);
 
   return (
     <>
