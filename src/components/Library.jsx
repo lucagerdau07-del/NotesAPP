@@ -3689,7 +3689,7 @@ export default function Library({
         data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })}
         style={{
           position: "absolute",
-          right: 88 + newNoteWidth + 14 + fileOpenWidth + 14,
+          right: 24 + newNoteWidth + 14 + fileOpenWidth + 14,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3770,7 +3770,7 @@ export default function Library({
         className="liquid-glass-pill lib-newnote"
         style={{
           position: "absolute",
-          right: 88,
+          right: 24,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3812,7 +3812,7 @@ export default function Library({
         }
         style={{
           position: "absolute",
-          right: 88 + newNoteWidth + 14,
+          right: 24 + newNoteWidth + 14,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3854,7 +3854,7 @@ export default function Library({
           style={{
             position: "fixed",
             top: 84,
-            right: 88,
+            right: 24,
             padding: "8px 18px",
             color: "#FFFFFF",
             font: "600 12px Manrope,sans-serif",
