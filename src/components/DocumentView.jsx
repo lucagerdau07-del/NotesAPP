@@ -2837,7 +2837,7 @@ export default function DocumentView({
 
         const newZoom = Math.max(
           0.5,
-          Math.min(3, startZoom * pinchZoomRatio(currentDistance / startDist)),
+          Math.min(6, startZoom * pinchZoomRatio(currentDistance / startDist)),
         );
         const zoomRatio = newZoom / startZoom;
 
@@ -2951,7 +2951,7 @@ export default function DocumentView({
                 e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
               const newZoom = Math.max(
                 0.5,
-                Math.min(3, prev - normalizedDeltaY * 0.0015),
+                Math.min(6, prev - normalizedDeltaY * 0.0015),
               );
               if (focusBoxState?.focusBox && newZoom !== prev) {
                 const ratio = prev / newZoom;
