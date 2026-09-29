@@ -868,9 +868,14 @@ function GenericFolderTile({ folder, count, onOpen }) {
           position: "absolute",
           left: 18,
           right: 14,
-          bottom: 44,
-          font: '800 20px "Bricolage Grotesque",sans-serif',
+          bottom: 40,
+          font: '800 17px/1.1 "Bricolage Grotesque",sans-serif',
           color: "#FFFFFF",
+          overflowWrap: "anywhere",
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: 3,
+          overflow: "hidden",
         }}
       >
         {folder.name}
