@@ -35,6 +35,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Markdown from "./Markdown";
+import IservBrowser from "./IservBrowser";
+import { iservAvailable } from "../documents/iservFiles";
+
+const ISERV_BUTTON_SIZE = 52;
 import useAgent from "../hooks/useAgent";
 import {
   StepList,
@@ -3049,6 +3053,8 @@ export default function Library({
     if (list.length === 1 && note) onOpenNote?.(note);
   };
 
+  const [iservOpen, setIservOpen] = useState(false);
+
   const [selectedSubject, setSelectedSubject] = useState(null); // null = all subjects
   const [viewMode, setViewMode] = useState("masonry"); // 'masonry' | 'list'
   const [sortBy, setSortBy] = useState("recent"); // 'recent' | 'title' | 'subject'
@@ -3362,6 +3368,12 @@ export default function Library({
   useLayoutEffect(() => {
     if (newNoteRef.current) setNewNoteWidth(newNoteRef.current.offsetWidth);
     if (fileOpenRef.current) setFileOpenWidth(fileOpenRef.current.offsetWidth);
+    const observer = new ResizeObserver(() => {
+      if (newNoteRef.current) setNewNoteWidth(newNoteRef.current.offsetWidth);
+      if (fileOpenRef.current) setFileOpenWidth(fileOpenRef.current.offsetWidth);
+    });
+    [newNoteRef.current, fileOpenRef.current].forEach((el) => el && observer.observe(el));
+    return () => observer.disconnect();
   }, [selectedSubject]);
 
   return (
@@ -3694,7 +3706,7 @@ export default function Library({
         data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })}
         style={{
           position: "absolute",
-          right: 24 + newNoteWidth + 14 + fileOpenWidth + 14,
+          right: 24 + newNoteWidth + 14 + fileOpenWidth + 14 + ISERV_BUTTON_SIZE + 14,
           top: 20,
           zIndex: 15,
           height: 52,
@@ -3838,6 +3850,39 @@ export default function Library({
           {documentLibrary.isImporting ? "Wird importiert…" : "Datei öffnen"}
         </span>
       </button>
+      {/* IServ: eigener Browser im gemerkten IServ-Ordner (Gruppen). */}
+      <button
+        type="button"
+        className="liquid-glass-pill lib-file-open lib-iserv"
+        onClick={() => setIservOpen(true)}
+        disabled={documentLibrary.isImporting}
+        aria-label="Aus IServ öffnen"
+        style={{
+          position: "absolute",
+          right: 24 + newNoteWidth + 14 + fileOpenWidth + 14,
+          top: 20,
+          zIndex: 15,
+          width: ISERV_BUTTON_SIZE,
+          height: ISERV_BUTTON_SIZE,
+          padding: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden", // the round edge cuts the logo's bar
+        }}
+      >
+        <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true">
+          <circle cx="15" cy="38" r="4" fill="#fff" />
+          <circle cx="26" cy="38" r="4" fill="#fff" />
+          <rect x="34" y="34" width="22" height="8" rx="4" fill="#fff" />
+        </svg>
+      </button>
+      {iservOpen && iservAvailable && (
+        <IservBrowser
+          onImport={runImport}
+          onClose={() => setIservOpen(false)}
+        />
+      )}
       <input
         ref={fileInputRef}
         className="visually-hidden"
