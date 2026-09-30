@@ -1,15 +1,44 @@
 import React, { useState } from "react";
-import { X } from "lucide-react";
+import { X, ImagePlus } from "lucide-react";
 import { FOLDER_ICONS, FOLDER_ICON_KEYS, FOLDER_COLORS } from "./folderIcons.js";
+
+// Downscale to a small square so the data URL stays cheap in localStorage.
+function fileToThumb(file, size = 512) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      const s = Math.min(img.width, img.height);
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.9));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("image load failed"));
+    };
+    img.src = url;
+  });
+}
 
 export default function FolderDialog({ mode = "create", initial, onSubmit, onClose }) {
   const [name, setName] = useState(initial?.name || "");
   const [color, setColor] = useState(initial?.color || FOLDER_COLORS[0]);
   const [icon, setIcon] = useState(initial?.icon || FOLDER_ICON_KEYS[0]);
 
+  const [image, setImage] = useState(initial?.image || null);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) setImage(await fileToThumb(file).catch(() => null));
+  };
+
   const submit = () => {
     if (!name.trim()) return;
-    onSubmit?.({ name: name.trim(), color, icon });
+    onSubmit?.({ name: name.trim(), color, icon, image });
   };
 
   return (
@@ -98,7 +127,10 @@ export default function FolderDialog({ mode = "create", initial, onSubmit, onClo
               return (
                 <button
                   key={key}
-                  onClick={() => setIcon(key)}
+                  onClick={() => {
+                    setIcon(key);
+                    setImage(null);
+                  }}
                   style={{
                     width: 36,
                     height: 36,
@@ -106,8 +138,8 @@ export default function FolderDialog({ mode = "create", initial, onSubmit, onClo
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    border: icon === key ? "2px solid #3E7BD8" : "1px solid rgba(255,255,255,.15)",
-                    background: icon === key ? "rgba(62,123,216,.15)" : "transparent",
+                    border: !image && icon === key ? "2px solid #3E7BD8" : "1px solid rgba(255,255,255,.15)",
+                    background: !image && icon === key ? "rgba(62,123,216,.15)" : "transparent",
                     color: "#FFFFFF",
                     cursor: "pointer",
                   }}
@@ -116,6 +148,37 @@ export default function FolderDialog({ mode = "create", initial, onSubmit, onClo
                 </button>
               );
             })}
+            <label
+              data-testid="folder-dialog-image"
+              title="Eigenes Bild"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                border: image ? "2px solid #3E7BD8" : "1px dashed rgba(255,255,255,.35)",
+                cursor: "pointer",
+              }}
+            >
+              {image ? (
+                <img src={image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <ImagePlus size={17} />
+              )}
+              <input type="file" accept="image/*" onChange={pickImage} style={{ display: "none" }} />
+            </label>
+            {image && (
+              <button
+                onClick={() => setImage(null)}
+                title="Bild entfernen"
+                style={{ background: "none", border: "none", color: "#FFFFFF", opacity: 0.6, cursor: "pointer" }}
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
         </div>
 

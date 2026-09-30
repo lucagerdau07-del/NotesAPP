@@ -41,12 +41,13 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
       return read();
     },
 
-    createFolder({ name, color, icon, parentId }) {
+    createFolder({ name, color, icon, image, parentId }) {
       const folder = {
         id: nextId(),
         name: String(name || "").trim(),
         color: color || null,
         icon: icon || null,
+        image: image || null,
         parentId: parentId || null,
         createdAt: now(),
       };
@@ -54,7 +55,7 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
       return folder;
     },
 
-    renameFolder(id, { name, color, icon }) {
+    renameFolder(id, { name, color, icon, image }) {
       const key = String(id);
       const folders = read().map((f) =>
         f.id === key
@@ -63,6 +64,7 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
               ...(name !== undefined ? { name: String(name).trim() } : {}),
               ...(color !== undefined ? { color } : {}),
               ...(icon !== undefined ? { icon } : {}),
+              ...(image !== undefined ? { image } : {}),
             }
           : f,
       );

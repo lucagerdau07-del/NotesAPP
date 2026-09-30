@@ -864,9 +864,26 @@ function GenericFolderTile({ folder, count, onOpen }) {
       bg={`linear-gradient(155deg, ${color}33, #0B0C10 75%)`}
       testId={`folder-tile-${folder.id}`}
     >
-      <div style={{ position: "absolute", left: 18, top: 16, color }}>
-        <Icon size={22} />
-      </div>
+      {folder.image ? (
+        <>
+          <img
+            src={folder.image}
+            alt=""
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(to bottom, transparent 35%, rgba(0,0,0,.75))",
+            }}
+          />
+        </>
+      ) : (
+        <div style={{ position: "absolute", left: 18, top: 16, color }}>
+          <Icon size={22} />
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
@@ -3240,13 +3257,13 @@ export default function Library({
 
   const handleOpenFolder = (folder) => setSelectedSubject(folder);
 
-  const handleCreateFolder = ({ name, color, icon }, parentId) => {
-    browserFolderRepository.createFolder({ name, color, icon, parentId });
+  const handleCreateFolder = ({ name, color, icon, image }, parentId) => {
+    browserFolderRepository.createFolder({ name, color, icon, image, parentId });
     setFolderDialog(null);
   };
 
-  const handleRenameFolder = (folder, { name, color, icon }) => {
-    const updated = browserFolderRepository.renameFolder(folder.id, { name, color, icon });
+  const handleRenameFolder = (folder, { name, color, icon, image }) => {
+    const updated = browserFolderRepository.renameFolder(folder.id, { name, color, icon, image });
     // Notes are matched to a folder by subject name (see matchesFolder), so a
     // rename must carry existing notes along or they'd silently fall out of
     // the folder.
