@@ -1,9 +1,11 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns3, X } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns3, X, FlaskConical } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
 import SplitPicker from "./components/SplitPicker";
+import ChemKeyboard from "./components/ChemKeyboard";
+import { setChemKeyboardEnabled, useChemKeyboardEnabled } from "./components/chemKeyboard/chemKeyboardState.js";
 import { createBrowserBridge } from "./browser/browserBridge";
 import { createBrowserRepository } from "./browser/browserRepository";
 import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
@@ -43,7 +45,7 @@ function savedRailWidth() {
   return Number.isFinite(stored) ? constrainedRailWidth(stored) : null;
 }
 
-function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, onClosePane }) {
+function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount = 1, onSplit, onClosePane }) {
   const glassRootRef = useRef(null);
   // The rail is rendered here so it is a direct child of the glass root (the
   // library only picks up ":scope > [data-liquid-glass-control]"); DocumentView
@@ -64,6 +66,7 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const chemKeyboardOn = useChemKeyboardEnabled();
   // "Öffnen": the picked PDF is handed down to whichever editor is showing.
   const [openRequest, setOpenRequest] = useState(null);
   const openInputRef = useRef(null);
@@ -261,7 +264,7 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
         </button>
       )}
       <div
-        className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""} ${paneCount > 1 && !isActive ? "no-rail" : ""}`}
+        className={`editor-title-pill ${isPanelOpen ? "panel-open" : ""} ${!hasRail ? "no-rail" : ""}`}
         data-liquid-glass-control="title"
       >
         {onBack && (
@@ -400,6 +403,17 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
               >
                 <Trash2 size={15} /> Alles löschen
               </button>
+              <button
+                style={{ whiteSpace: "nowrap" }}
+                data-testid="chem-keyboard-toggle"
+                onClick={() => {
+                  setIsMoreMenuOpen(false);
+                  setChemKeyboardEnabled(!chemKeyboardOn);
+                }}
+              >
+                <FlaskConical size={15} /> Chemie-Tastatur
+                {chemKeyboardOn && <Check size={15} style={{ marginLeft: "auto" }} />}
+              </button>
             </div>
           )}
           <input
@@ -420,9 +434,9 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
           offsetWidth/Height every frame, and keepGlassPaintedWhileResizing
           (useLiquidGlass) repaints it on the frame its width changes. */}
       <div
-        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""} ${paneCount > 1 && !isActive ? "rail-hidden" : ""}`}
+        className={`editor-sidebar ${isPanelOpen ? "panel-open" : ""} ${isBrowserFullscreen ? "browser-fullscreen" : ""} ${isRailResizing ? "is-resizing" : ""} ${!hasRail ? "rail-hidden" : ""}`}
         data-testid="editor-sidebar"
-        data-rail-visible={!(paneCount > 1 && !isActive)}
+        data-rail-visible={hasRail}
         data-mode={panelMode || "closed"}
         data-liquid-glass-control="rail"
         // The glass shader bevels to its own cornerRadius (default 65px,
@@ -550,6 +564,7 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
             <CalculatorPanel
               active={panelMode === "calculator"}
               isActive={isActive}
+              hasRail={hasRail}
               onClose={() => setPanelMode(null)}
               onInsertToDocument={({ dataUrl }) => {
                 setImageDropRequest({
@@ -583,6 +598,7 @@ function Editor({ activeNote, onBack, isActive = true, paneCount = 1, onSplit, o
           note={activeNote}
           documentId={activeNote.id}
           isActive={isActive}
+          hasRail={hasRail}
           onBack={onBack}
           railSlot={railSlot}
           panelSlot={panelSlot}
@@ -688,6 +704,7 @@ function Workspace({ notes, widths, onWidthsChange, activePaneId, onFocusPane, o
               activeNote={note}
               onBack={onBack}
               isActive={notes.length === 1 || activePaneId === note.id}
+              hasRail={index === 0}
               paneCount={notes.length}
               onSplit={onAddPane}
               onClosePane={notes.length > 1 ? () => onClosePane(note.id) : undefined}
@@ -816,6 +833,7 @@ export default function App() {
         onClosePane={closePane}
         onAddPane={() => setPickerOpen(true)}
       />
+      <ChemKeyboard />
       {isPickerOpen && (
         <SplitPicker
           excludeIds={openNotes.map((n) => n.id)}

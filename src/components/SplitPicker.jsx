@@ -70,7 +70,6 @@ export default function SplitPicker({ excludeIds = [], onPick, onClose, document
         <div className="split-picker-search">
           <Search size={14} />
           <input
-            autoFocus
             placeholder="Notizen durchsuchen"
             value={query}
             onChange={(event) => setQuery(event.target.value)}

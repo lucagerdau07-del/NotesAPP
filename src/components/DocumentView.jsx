@@ -1140,6 +1140,7 @@ export default function DocumentView({
   openRequest,
   onOpenHandled,
   isActive = true,
+  hasRail = true,
 }) {
   const openLink = useBrowserLink();
   // In split-screen a pane's own keyboard/paste shortcuts must stay silent
@@ -3762,8 +3763,8 @@ export default function DocumentView({
           margin: isFullBleed
             ? 0
             : isFullMode
-              ? "4px 4px 0 88px"
-              : "78px 12px 0 104px",
+              ? `4px 4px 0 ${hasRail ? 88 : 4}px`
+              : `78px 12px 0 ${hasRail ? 104 : 12}px`,
           background: "transparent",
           color: "#FFFFFF",
         }}
@@ -3988,6 +3989,7 @@ export default function DocumentView({
             onOpenLayers={openLayers}
             onGestureStart={handleGestureStart}
             panMode={isSpaceDown}
+            penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -4027,6 +4029,7 @@ export default function DocumentView({
             onOpenLayers={openLayers}
             onGestureStart={handleGestureStart}
             panMode={isSpaceDown}
+            penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg

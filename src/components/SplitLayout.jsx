@@ -31,6 +31,7 @@ export default function SplitLayout({
   openRequest,
   onOpenHandled,
   isActive = true,
+  hasRail = true,
 }) {
   const documentId = String(note?.id ?? propDocumentId ?? "default");
   const initialPageIds =
@@ -136,6 +137,7 @@ export default function SplitLayout({
           focusBoxState={focusBoxState}
           toolbarState={toolState}
           isActive={isActive}
+          hasRail={hasRail}
           onBack={onBack}
           railSlot={railSlot}
           panelSlot={panelSlot}

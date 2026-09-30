@@ -304,7 +304,7 @@ describe('App Component', () => {
     expect(screen.getByText('Bibliothek')).toBeInTheDocument();
   });
 
-  it('moves the single tool rail to whichever pane is clicked into', async () => {
+  it('keeps the single tool rail in the leftmost pane', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByText('Neue Notiz'));
@@ -323,12 +323,11 @@ describe('App Component', () => {
     expect(panes).toHaveLength(2);
     const sidebars = () => screen.getAllByTestId('editor-sidebar');
 
-    // Notiz A was just added, so its pane is focused and shows the rail.
-    expect(sidebars()[0]).toHaveAttribute('data-rail-visible', 'false');
-    expect(sidebars()[1]).toHaveAttribute('data-rail-visible', 'true');
+    // The rail stays in the leftmost pane, whichever pane has focus.
+    expect(sidebars()[0]).toHaveAttribute('data-rail-visible', 'true');
+    expect(sidebars()[1]).toHaveAttribute('data-rail-visible', 'false');
 
-    // Clicking into the first pane (Notiz B) moves the rail there instead.
-    fireEvent.pointerDown(panes[0]);
+    fireEvent.pointerDown(panes[1]);
     expect(sidebars()[0]).toHaveAttribute('data-rail-visible', 'true');
     expect(sidebars()[1]).toHaveAttribute('data-rail-visible', 'false');
   });

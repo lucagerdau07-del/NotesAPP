@@ -30,6 +30,7 @@ import {
 } from "../../ink/handDrawn.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
 import { renderInline } from "../Markdown.jsx";
+import { useChemKeyboardEnabled } from "../chemKeyboard/chemKeyboardState.js";
 
 // AI-written text only: renders **bold**/_italic_/`code`/~~strike~~ instead of
 // showing the raw markdown syntax. User-typed text always stays literal.
@@ -532,6 +533,7 @@ function useDrag(onCommit) {
 // per keystroke), so cellText in the object never changes mid-edit and React
 // never stomps on a caret mid-word — same trick the text object above relies on.
 function TableContent({ object, editable, onResize, focusCell, onExitEdit }) {
+  const chemKeyboard = useChemKeyboardEnabled();
   const tableRef = useRef(null);
   const rows = object.rows || 1;
   const cols = object.cols || 1;
@@ -618,6 +620,7 @@ function TableContent({ object, editable, onResize, focusCell, onExitEdit }) {
               <td
                 key={col}
                 contentEditable={editable}
+                inputMode={chemKeyboard ? "none" : undefined}
                 suppressContentEditableWarning
                 onPointerDown={(event) => {
                   // Stops the object container's own handler from starting a
@@ -652,6 +655,9 @@ function TableContent({ object, editable, onResize, focusCell, onExitEdit }) {
 
 function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null, onExitEdit }) {
   const editableRef = useRef(null);
+  // Text length left of the caret, saved when an early commit is about to re-render the field.
+  const caretRestore = useRef(null);
+  const chemKeyboard = useChemKeyboardEnabled();
   const bounds = objectLayoutBounds(object);
   const dashArray = dashArrayFor(object.strokeStyle);
   const opacity = (object.opacity ?? 100) / 100;
@@ -832,11 +838,27 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
   // reset the caret to the start, so this also re-runs then to put it back.
   useEffect(() => {
     if (!editable || !editableRef.current) return;
-    editableRef.current.focus();
-    const range = document.createRange();
-    range.selectNodeContents(editableRef.current);
-    range.collapse(false);
+    const el = editableRef.current;
+    el.focus();
     const selection = globalThis.getSelection?.();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    // Early commit while typing/deleting: React rewrote the text node, which
+    // parks the caret at 0 — put it back where it was (see handleInput).
+    let left = caretRestore.current;
+    caretRestore.current = null;
+    if (left != null) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (left <= node.data.length) {
+          range.setStart(node, left);
+          range.collapse(true);
+          break;
+        }
+        left -= node.data.length;
+      }
+    }
     selection?.removeAllRanges();
     selection?.addRange(range);
   }, [editable, object.text]);
@@ -864,14 +886,23 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
     const patch = {};
     if (Math.abs(nextHeight - bounds.height) > 0.5) patch.height = nextHeight;
     if (!fixedWidth && Math.abs(width - bounds.width) > 0.5) patch.width = width;
-    if (Object.keys(patch).length > 0)
+    if (Object.keys(patch).length > 0) {
+      const selection = globalThis.getSelection?.();
+      if (selection?.rangeCount && node.contains(selection.anchorNode)) {
+        const head = document.createRange();
+        head.selectNodeContents(node);
+        head.setEnd(selection.anchorNode, selection.anchorOffset);
+        caretRestore.current = head.toString().length;
+      }
       onResize?.(object.id, { ...patch, text: readText(node) });
+    }
   };
 
   return (
     <div
       ref={editableRef}
       contentEditable={editable}
+      inputMode={chemKeyboard ? "none" : undefined}
       suppressContentEditableWarning
       onInput={handleInput}
       onBlur={(event) => onCommitText(object.id, readText(event.currentTarget))}
@@ -1207,6 +1238,8 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   onGestureStart,
   // True while space is held (see DocumentView / WhiteboardEditor).
   panMode = false,
+  // True while the pen is writing/erasing (not move, lasso or a placing tool).
+  penDrawsThrough = false,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -1321,6 +1354,16 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               // Space held: the drag pans the view, wherever it starts — an
               // object under the cursor must not take it as a select/move.
               if (panMode) return;
+              // A pen-down on an unselected object starts ink, not a select:
+              // otherwise every text/table/image box is a dead zone for writing.
+              // Select it with a finger/mouse; a selected or editing one keeps the pen.
+              if (
+                penDrawsThrough &&
+                event.pointerType === "pen" &&
+                !isSelected &&
+                editingId !== object.id
+              )
+                return;
               // The page's two-finger pan/zoom is armed from touches that
               // bubble up to the scroll container — but a hit here is about
               // to stopPropagation below, and on a page full of text blocks
