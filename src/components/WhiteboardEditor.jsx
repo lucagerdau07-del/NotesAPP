@@ -1268,6 +1268,7 @@ export default function WhiteboardEditor({
     onShiftOrder: inkController.shiftLayerOrder,
     onOpenLayers: openLayers,
     panMode: isSpaceDown,
+    penDrawsThrough: !isMoveMode && !isLassoMode && !placingTool,
   };
 
   // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the bottom layer.
