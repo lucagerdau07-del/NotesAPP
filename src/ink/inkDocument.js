@@ -325,6 +325,23 @@ function applyInkCommand(document, command) {
       });
       return changed ? withUpdatedAt(document, { strokes, objects }) : document;
     }
+    case "recolor-selection": {
+      const strokeIds = new Set(command.strokeIds || []);
+      const objectIds = new Set(command.objectIds || []);
+      if (typeof command.color !== "string") return document;
+      let changed = false;
+      const strokes = document.strokes.map((stroke) => {
+        if (!strokeIds.has(stroke.id) || stroke.color === command.color) return stroke;
+        changed = true;
+        return { ...stroke, color: command.color };
+      });
+      const objects = pageObjectsOf(document).map((object) => {
+        if (!objectIds.has(object.id) || object.color === command.color) return object;
+        changed = true;
+        return createPageObject({ ...object, color: command.color });
+      });
+      return changed ? withUpdatedAt(document, { strokes, objects }) : document;
+    }
     case "add-page": {
       const page = createNextPage(document, command.page);
       return page === null

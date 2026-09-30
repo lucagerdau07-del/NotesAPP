@@ -955,9 +955,16 @@ export default function WhiteboardEditor({
     }
   };
 
+  // A lasso selection follows the pen color: picking a color recolors it.
+  const applyPenColor = (c) => {
+    inkController.setColor?.(c);
+    if (lassoSelection)
+      inkController.recolorSelection?.(lassoSelection.strokeIds, lassoSelection.objectIds, c);
+  };
+
   const handleColorChange = (index, color) => {
     setCustomColors((colors) => colors.map((c, i) => (i === index ? color : c)));
-    inkController.setColor?.(color);
+    applyPenColor(color);
     setIsEraser(false);
   };
 
@@ -1196,7 +1203,7 @@ export default function WhiteboardEditor({
               setIsColorPickerOpen((prev) => !prev);
               setActivePickerIndex(index);
             } else {
-              inkController.setColor?.(c);
+              applyPenColor(c);
               setIsEraser(false);
               setActivePickerIndex(index);
             }

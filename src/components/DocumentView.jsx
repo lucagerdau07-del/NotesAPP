@@ -1332,11 +1332,18 @@ export default function DocumentView({
     zoomToastTimeoutRef.current = setTimeout(() => setZoomToast(null), 1200);
   }, [zoom]);
 
+  // A lasso selection follows the pen color: picking a color recolors it.
+  const applyPenColor = (c) => {
+    setColor?.(c);
+    if (lassoSelection)
+      inkController?.recolorSelection?.(lassoSelection.strokeIds, lassoSelection.objectIds, c);
+  };
+
   const handleColorChange = (index, newColor) => {
     const newColors = [...customColors];
     newColors[index] = newColor;
     setCustomColors(newColors);
-    setColor?.(newColor);
+    applyPenColor(newColor);
     setIsEraser?.(false);
   };
 
@@ -3563,7 +3570,7 @@ export default function DocumentView({
               setIsColorPickerOpen((prev) => !prev);
               setActivePickerIndex(index);
             } else {
-              setColor?.(c);
+              applyPenColor(c);
               setIsEraser?.(false);
               setIsSelectMode?.(false);
               setActivePickerIndex(index);

@@ -200,6 +200,12 @@ export default function useInkDocument({
     },
     [applyCommand],
   );
+  const recolorSelection = useCallback(
+    (strokeIds, objectIds, color) => {
+      applyCommand({ type: "recolor-selection", strokeIds, objectIds, color });
+    },
+    [applyCommand],
+  );
   const reorderLayers = useCallback(
     (newObjectIds, inkLayerIndex) => {
       applyCommand({ type: "reorder-layers", newObjectIds, inkLayerIndex });
@@ -378,6 +384,7 @@ export default function useInkDocument({
     addObject,
     updateObject,
     removeObjects,
+    recolorSelection,
     reorderLayers,
     setLayerLock,
     setLayerVisibility,
