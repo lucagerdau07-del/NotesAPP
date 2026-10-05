@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import Markdown from "./Markdown";
 import IservBrowser from "./IservBrowser";
-import { iservAvailable } from "../documents/iservFiles";
+import { iservAvailable, pickLocalFiles } from "../documents/iservFiles";
 
 const ISERV_BUTTON_SIZE = 52;
 import useAgent from "../hooks/useAgent";
@@ -3839,7 +3839,11 @@ export default function Library({
         ref={fileOpenRef}
         type="button"
         className="liquid-glass-pill lib-file-open"
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() =>
+          iservAvailable
+            ? pickLocalFiles().then(runImport, (error) => console.error("Datei-Auswahl fehlgeschlagen", error))
+            : fileInputRef.current?.click()
+        }
         disabled={documentLibrary.isImporting}
         aria-label={
           documentLibrary.isImporting ? "Datei wird importiert" : "Datei öffnen"

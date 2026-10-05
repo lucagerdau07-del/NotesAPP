@@ -59,6 +59,48 @@ public class IServFilesPlugin extends Plugin {
     call.resolve();
   }
 
+  // Normal file picker for "Datei öffnen". The system picker reopens wherever it was last
+  // (e.g. the IServ folder), so always start it in Downloads instead.
+  @PluginMethod
+  public void pickFiles(PluginCall call) {
+    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.setType("*/*");
+    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/pdf", "image/png", "image/jpeg" });
+    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+    intent.putExtra(
+      DocumentsContract.EXTRA_INITIAL_URI,
+      DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download")
+    );
+    startActivityForResult(call, intent, "pickResult");
+  }
+
+  @ActivityCallback
+  private void pickResult(PluginCall call, ActivityResult result) {
+    if (call == null) return;
+    JSArray files = new JSArray();
+    Intent data = result.getData();
+    if (result.getResultCode() == Activity.RESULT_OK && data != null) {
+      java.util.List<Uri> uris = new java.util.ArrayList<>();
+      if (data.getClipData() != null) {
+        for (int i = 0; i < data.getClipData().getItemCount(); i++) {
+          uris.add(data.getClipData().getItemAt(i).getUri());
+        }
+      } else if (data.getData() != null) {
+        uris.add(data.getData());
+      }
+      try {
+        for (Uri uri : uris) files.put(copyToCache(uri));
+      } catch (Exception error) {
+        call.reject("Datei konnte nicht gelesen werden", error);
+        return;
+      }
+    }
+    JSObject out = new JSObject();
+    out.put("files", files);
+    call.resolve(out);
+  }
+
   // Children of docId (default: the remembered folder). Rejects "no-folder" if none chosen yet.
   @PluginMethod
   public void list(PluginCall call) {

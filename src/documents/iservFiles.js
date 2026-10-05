@@ -14,9 +14,13 @@ export const listIserv = (docId) => IServFiles.list(docId ? { docId } : {});
 const IMPORTABLE = /^(application\/pdf|image\/(png|jpeg))$/;
 export const isImportable = (item) => IMPORTABLE.test(item.type || "");
 
-// Reads one provider file into a File, only when it is actually imported.
-export async function readIservFile(docId) {
-  const { path, name, type } = await IServFiles.read({ docId });
+async function toFile({ path, name, type }) {
   const blob = await (await fetch(Capacitor.convertFileSrc(path))).blob();
   return new File([blob], name, { type: type || blob.type });
 }
+
+// Reads one provider file into a File, only when it is actually imported.
+export const readIservFile = async (docId) => toFile(await IServFiles.read({ docId }));
+
+// System picker that always starts in Downloads (not the last-visited IServ folder) -> File[]
+export const pickLocalFiles = async () => Promise.all((await IServFiles.pickFiles()).files.map(toFile));
