@@ -5,7 +5,8 @@ import { browserFolderRepository, folderWithDescendants } from "../storage/folde
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 import { readSource, searchSources } from "../knowledge/sources.js";
-import { requestSearch } from "./agentClient.js";
+import { requestSearch, requestWolfram } from "./agentClient.js";
+import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
   PAGE_WIDTH,
@@ -721,6 +722,84 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "wolfram_alpha",
+      description:
+        "Fragt Wolfram|Alpha für exakte Ergebnisse: Gleichungen lösen, Ableitungen, Integrale, Grenzwerte, Einheiten, Physik- und Chemie-Konstanten, Molmassen, Statistik. Nutze es statt im Kopf zu rechnen, sobald das Ergebnis stimmen muss. Die Anfrage am besten auf Englisch, kurz und als Rechenausdruck, z.B. \"solve x^2-5x+6=0\" oder \"molar mass of H2SO4\".",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string", description: "Rechenausdruck oder kurze Frage, englisch" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_file",
+      description:
+        "Erstellt eine Datei und öffnet das Teilen-Menü, damit der Nutzer sie speichern oder verschicken kann. Formate: pdf, docx (Referat, Bericht, Lernzettel), pptx (Präsentation), xlsx und csv (Tabelle), md und txt (Text), ics (Kalendertermine), flashcards (Karteikarten für Anki/Quizlet). Gib nur die zum Format passenden Felder an. PDF kann nur lateinische Zeichen, bei Formeln mit Sonderzeichen (π, √, Σ) nimm docx.",
+      parameters: {
+        type: "object",
+        properties: {
+          format: { type: "string", enum: FILE_FORMATS },
+          title: { type: "string", description: "Dateiname und Titel im Dokument" },
+          text: {
+            type: "string",
+            description:
+              "Für pdf, docx, md, txt: Inhalt als Markdown. Erlaubt sind # ## ### Überschriften, \"- \" Aufzählungen, **fett** und Absätze.",
+          },
+          slides: {
+            type: "array",
+            description: "Für pptx: eine Folie je Eintrag",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                bullets: { type: "array", items: { type: "string" } },
+                notes: { type: "string", description: "Sprechernotizen, optional" },
+              },
+              required: ["title"],
+            },
+          },
+          rows: {
+            type: "array",
+            description:
+              "Für xlsx und csv: Zeilen, jede eine Liste von Zellen (Zahlen als Zahl, \"=SUMME(A1:A5)\" als Formel). Erste Zeile ist die Kopfzeile.",
+            items: { type: "array", items: {} },
+          },
+          sheet: { type: "string", description: "Für xlsx: Tabellenblatt-Name, optional" },
+          events: {
+            type: "array",
+            description: "Für ics: Termine",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                start: { type: "string", description: "JJJJ-MM-TT (ganztägig) oder JJJJ-MM-TTTHH:MM" },
+                end: { type: "string", description: "optional, gleiches Format" },
+                description: { type: "string" },
+                location: { type: "string" },
+              },
+              required: ["title", "start"],
+            },
+          },
+          cards: {
+            type: "array",
+            description: "Für flashcards: Karteikarten",
+            items: {
+              type: "object",
+              properties: { front: { type: "string" }, back: { type: "string" } },
+              required: ["front", "back"],
+            },
+          },
+        },
+        required: ["format", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -740,6 +819,8 @@ const READ_ONLY_TOOL_NAMES = new Set([
   "search_sources",
   "read_source",
   "search_web",
+  "wolfram_alpha",
+  "create_file",
   "done",
 ]);
 
@@ -756,6 +837,8 @@ const NO_DOCUMENT_TOOL_NAMES = new Set([
   "search_sources",
   "read_source",
   "search_web",
+  "wolfram_alpha",
+  "create_file",
   "done",
 ]);
 
@@ -792,6 +875,7 @@ export const CORE_TOOL_NAMES = new Set([
   "edit_text",
   "add_page",
   "search_web",
+  "wolfram_alpha",
   "list_folders",
   "list_notes",
   "done",
@@ -895,6 +979,10 @@ export function describeToolCall(name, args = {}) {
       const label = args.source === "web" ? "Websuche" : args.source === "wikipedia" ? "Wikipedia" : "Suche";
       return `${label}: ${String(args.query || "").slice(0, 40)}`;
     }
+    case "wolfram_alpha":
+      return `Wolfram|Alpha: ${String(args.query || "").slice(0, 40)}`;
+    case "create_file":
+      return `Datei erstellen: ${String(args.title || args.format || "").slice(0, 40)}`;
     case "done":
       return "Fertig";
     default:
@@ -957,6 +1045,29 @@ function textPatch(args, existing, defaultColor, bounds) {
   return patch;
 }
 
+async function askWolfram(query) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed) return "Fehler: query ist leer.";
+  try {
+    return (await requestWolfram({ query: trimmed })) || `Wolfram|Alpha hat zu "${trimmed}" nichts geliefert.`;
+  } catch (error) {
+    return `Fehler: Wolfram|Alpha fehlgeschlagen (${error.message}).`;
+  }
+}
+
+// Baut die Datei und reicht sie ans Teilen-Menü. saveAndShare kommt per
+// dynamischem Import (jspdf + Capacitor-Plugins), api.shareFile ersetzt es in Tests.
+async function makeFile(args, api) {
+  try {
+    const { blob, filename } = await createFile(args);
+    const share = api?.shareFile || (await import("../documents/exportDocument.js")).saveAndShare;
+    await share(blob, filename);
+    return { created: filename, size: blob.size, hint: "Das Teilen-Menü wurde geöffnet." };
+  } catch (error) {
+    return `Fehler: ${error.message}`;
+  }
+}
+
 // Executes one tool call against the live document. Never throws on bad model
 // arguments: the error text goes back to the model as the tool result so it can
 // correct itself, and the run continues.
@@ -966,6 +1077,8 @@ export async function executeTool(name, rawArgs, api) {
   // search_web/done need no open document — the start-screen chat (Library.jsx)
   // calls executeTool without one at all, so api.getDocument below would throw.
   if (name === "search_web") return searchWeb(args.query, args.source);
+  if (name === "wolfram_alpha") return askWolfram(args.query);
+  if (name === "create_file") return makeFile(args, api);
   if (name === "done") return { summary: String(args.summary || "") };
 
   if (name === "list_folders") {

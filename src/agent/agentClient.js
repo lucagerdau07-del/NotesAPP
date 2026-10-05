@@ -205,3 +205,29 @@ export async function requestSearch({ query, signal, config = loadAgentConfig() 
   return Array.isArray(data?.results) ? data.results : [];
 }
 
+// Wolfram|Alpha (LLM-API, server-seitig geschlüsselt) — exakte Mathe, Physik,
+// Chemie, Einheiten. Gleiche Proxy-Route wie die Suche, nur /wolfram.
+export async function requestWolfram({ query, signal, config = loadAgentConfig() }) {
+  const baseUrl = String(config.baseUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) throw new Error("Keine Backend-Adresse eingestellt.");
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/wolfram`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.accessKey ? { "X-App-Key": config.accessKey } : {}),
+      },
+      body: JSON.stringify({ query }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw new Error("Server nicht erreichbar.");
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error?.message || `Fehler ${response.status}`);
+  return String(data?.result || "");
+}
