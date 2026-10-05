@@ -11,7 +11,12 @@ import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js
 import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
-import { isPdfFile, pdfWhiteboardBackgroundCommands, pdfWhiteboardObjects, readPdfPages } from "../ink/pdfObject.js";
+import {
+  isPdfFile,
+  pdfWhiteboardBackgroundCommands,
+  readPdfPages,
+  whiteboardBackgroundCommands,
+} from "../ink/pdfObject.js";
 import { whiteboardInkLayerIndex } from "../ink/inkDocument.js";
 import { tryRecognizeLink } from "../ink/linkRecognizer.js";
 import { removeImageBackground } from "../ink/imageBackground.js";
@@ -131,6 +136,8 @@ export default function WhiteboardEditor({
   const pageId = document.pages[0]?.id || "";
   const strokes = document.strokes;
   const pageObjects = pageObjectsOf(document);
+  // A locked object (an imported PDF) is paper: marking ink never drags it along.
+  const unlockedObjects = pageObjects.filter((o) => !o.locked);
   const { comments, addComment, editComment, removeComment } = useComments(document.documentId);
 
   useEffect(() => {
@@ -503,7 +510,7 @@ export default function WhiteboardEditor({
                 s.points.every((p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY),
             )
             .map((s) => s.id);
-          objectIds = pageObjects
+          objectIds = unlockedObjects
             .filter((o) => {
               if (o.pageId !== pageId) return false;
               const bounds = objectBounds(o);
@@ -517,7 +524,7 @@ export default function WhiteboardEditor({
             .map((o) => o.id);
         } else {
           strokeIds = strokesInLasso(strokes, pageId, polygon);
-          objectIds = objectsInLasso(pageObjects, pageId, polygon);
+          objectIds = objectsInLasso(unlockedObjects, pageId, polygon);
         }
         if (strokeIds.length > 0 || objectIds.length > 0) {
           setLassoSelection({ strokeIds, objectIds });
@@ -671,7 +678,7 @@ export default function WhiteboardEditor({
       if (mod && event.key.toLowerCase() === "a") {
         event.preventDefault();
         const strokeIds = strokes.filter((s) => s.pageId === pageId).map((s) => s.id);
-        const objectIds = pageObjects.map((o) => o.id);
+        const objectIds = unlockedObjects.map((o) => o.id);
         if (strokeIds.length > 0 || objectIds.length > 0) {
           setSelectedObjectId(null);
           setLassoSelection({ strokeIds, objectIds });
@@ -857,10 +864,11 @@ export default function WhiteboardEditor({
     if (!file) return;
     try {
       const center = screenToWorld(camera, { x: size.width / 2, y: size.height / 2 });
+      // Locked and under the ink, like "Öffnen": selecting is lasso/layers only.
       if (isPdfFile(file)) {
-        const objects = pdfWhiteboardObjects(pageId, await readPdfPages(file), center);
-        inkController.applyCommands?.(objects.map((object) => ({ type: "add-object", object })));
-        setSelectedObjectId(objects[0].id);
+        inkController.applyCommands?.(
+          pdfWhiteboardBackgroundCommands(inkController.getDocument(), await readPdfPages(file), center),
+        );
         return;
       }
       const { src, width, height } = await readImageObjectSource(file);
@@ -874,9 +882,9 @@ export default function WhiteboardEditor({
         width: maxWidth,
         height: height * scale,
         src,
+        locked: true,
       });
-      inkController.addObject?.(object);
-      setSelectedObjectId(object.id);
+      inkController.applyCommands?.(whiteboardBackgroundCommands(inkController.getDocument(), [object]));
     } catch {
       // A file the browser cannot decode simply inserts nothing.
     }
@@ -1256,6 +1264,9 @@ export default function WhiteboardEditor({
   );
 
   const inkIndex = whiteboardInkLayerIndex(document);
+  // A locked object is background, whatever its place in the stack.
+  const belowInk = pageObjects.filter((o, i) => i < inkIndex || o.locked);
+  const aboveInk = pageObjects.filter((o, i) => i >= inkIndex && !o.locked);
   const objectLayerProps = {
     pageLayout: objectLayerLayout,
     mapOrigin,
@@ -1276,6 +1287,7 @@ export default function WhiteboardEditor({
     onOpenLayers: openLayers,
     panMode: isSpaceDown,
     penDrawsThrough: !isMoveMode && !isLassoMode && !placingTool,
+    lockedPassesThrough: !isMoveMode,
   };
 
   // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the bottom layer.
@@ -1336,7 +1348,7 @@ export default function WhiteboardEditor({
         onContextMenu={(event) => event.preventDefault()}
       >
         {/* Objects sent below the ink (an opened PDF) sit under the canvas. */}
-        <PageObjectLayer ref={belowLayerRef} objects={pageObjects.slice(0, inkIndex)} {...objectLayerProps} />
+        <PageObjectLayer ref={belowLayerRef} objects={belowInk} {...objectLayerProps} />
         <WhiteboardCanvas
           ref={canvasControllerRef}
           pageId={pageId}
@@ -1457,7 +1469,7 @@ export default function WhiteboardEditor({
             }}
           />
         )}
-        <PageObjectLayer ref={objectLayerRef} objects={pageObjects.slice(inkIndex)} {...objectLayerProps} />
+        <PageObjectLayer ref={objectLayerRef} objects={aboveInk} {...objectLayerProps} />
         {isCommentMode && (
           <CommentLayer
             comments={comments}

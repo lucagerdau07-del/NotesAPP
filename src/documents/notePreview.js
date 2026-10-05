@@ -30,6 +30,9 @@ function firstPageOf(inkDoc) {
 // subscribeToPreviewImages and re-render.
 const imageCache = new Map();
 const imageReadyListeners = new Set();
+// Counts renders that had to skip a still-decoding image, so a thumbnail made
+// that way is not remembered as final (see renderNotePreviewDataUrl).
+let skippedImages = 0;
 
 export function subscribeToPreviewImages(listener) {
   imageReadyListeners.add(listener);
@@ -39,7 +42,9 @@ export function subscribeToPreviewImages(listener) {
 function getCachedPreviewImage(src) {
   const cached = imageCache.get(src);
   if (cached && cached !== "pending" && cached !== "error") return cached;
-  if (cached === "pending" || cached === "error" || typeof Image === "undefined") return null;
+  if (cached === "error" || typeof Image === "undefined") return null;
+  skippedImages += 1;
+  if (cached === "pending") return null;
   imageCache.set(src, "pending");
   const image = new Image();
   image.onload = () => {
@@ -405,8 +410,11 @@ function renderComposite({ inkDoc, page, pixelWidth, pixelHeight, dpr, scale, of
   );
   const inkIndex = resolveInkLayerIndex(inkDoc);
   const clampedIndex = Math.max(0, Math.min(objects.length, Math.round(inkIndex)));
-  const below = objects.slice(0, clampedIndex);
-  const above = objects.slice(clampedIndex);
+  // On a whiteboard a locked object is background, whatever its place in the stack.
+  const isBelow = (object, index) =>
+    index < clampedIndex || (page.kind === "whiteboard" && object.locked);
+  const below = objects.filter(isBelow);
+  const above = objects.filter((object, index) => !isBelow(object, index));
 
   if (!inkDoc.inkLayerHidden) {
     (inkDoc.strokes || [])
@@ -448,7 +456,7 @@ export function renderNotePreviewDataUrl(documentId) {
   const id = String(documentId);
   const raw = browserInkRepository.loadHistoryRaw(id);
   const cached = previewCache.get(id);
-  if (cached && cached.raw === raw) return cached.dataUrl;
+  if (cached && cached.raw === raw && !cached.incomplete) return cached.dataUrl;
 
   const inkDoc = browserInkRepository.loadHistory(id)?.present;
   const pageId = firstPageOf(inkDoc);
@@ -467,6 +475,7 @@ export function renderNotePreviewDataUrl(documentId) {
     (THUMB_WIDTH - contentWidth * scale) / 2 - (bounds.minX - CONTENT_PADDING) * scale;
   const offsetY = (CONTENT_PADDING - bounds.minY) * scale;
 
+  const skippedBefore = skippedImages;
   const dataUrl = renderComposite({
     inkDoc,
     page,
@@ -483,7 +492,7 @@ export function renderNotePreviewDataUrl(documentId) {
       maxY: (THUMB_HEIGHT - offsetY) / scale,
     },
   });
-  previewCache.set(id, { raw, dataUrl });
+  previewCache.set(id, { raw, dataUrl, incomplete: skippedImages > skippedBefore });
   return dataUrl;
 }
 

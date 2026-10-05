@@ -86,6 +86,9 @@ const WhiteboardCanvas = forwardRef(function WhiteboardCanvas({
         width: `${width}px`,
         height: `${height}px`,
         touchAction: "none",
+        // Presses fall through to the surface, and to any unlocked object
+        // below the ink, which must stay grabbable.
+        pointerEvents: "none",
         // Kept on permanently, not toggled per gesture: switching will-change
         // on/off forces the browser to tear down and rebuild this element's
         // compositing layer on every pinch/pan start, which is a visible

@@ -11,6 +11,7 @@ import {
   pdfPageCommands,
   pdfWhiteboardBackgroundCommands,
   pdfWhiteboardObjects,
+  whiteboardBackgroundCommands,
 } from "../src/ink/pdfObject";
 
 const pdf = [
@@ -56,6 +57,19 @@ describe("pdfWhiteboardObjects", () => {
     expect(first.x + first.width / 2).toBe(100);
     expect(first.y + first.height / 2).toBe(200);
     expect(second.y).toBeGreaterThan(first.y + first.height);
+  });
+});
+
+describe("whiteboardBackgroundCommands", () => {
+  it("sends any object under the ink, existing ones stay above it", () => {
+    const base = createInkDocument("board", 1, { kind: "whiteboard" });
+    const existing = createPageObject({ id: "old", pageId: base.pages[0].id, type: "rect" });
+    const doc = { ...base, objects: [existing] };
+    const photo = createPageObject({ id: "photo", pageId: base.pages[0].id, type: "image", src: "data:p" });
+
+    const present = run(doc, whiteboardBackgroundCommands(doc, [photo]));
+    expect(pageObjectsOf(present).map((o) => o.id)).toEqual(["photo", "old"]);
+    expect(whiteboardInkLayerIndex(present)).toBe(1);
   });
 });
 

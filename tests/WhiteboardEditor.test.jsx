@@ -1,9 +1,14 @@
 // tests/WhiteboardEditor.test.jsx
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WhiteboardEditor from '../src/components/WhiteboardEditor.jsx';
 import * as renderInk from '../src/ink/renderInk.js';
+
+vi.mock('../src/ink/imageObject.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  readImageObjectSource: vi.fn(async () => ({ src: 'data:image/png;base64,AAAA', width: 400, height: 200 })),
+}));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -37,6 +42,19 @@ function createControllerDouble(overrides = {}) {
 }
 
 describe('WhiteboardEditor', () => {
+  it('sends an imported image under the ink, so writing on it stays visible', async () => {
+    const applyCommands = vi.fn();
+    const controller = createControllerDouble({ applyCommands, getDocument: () => controller.document });
+    const { container } = render(<WhiteboardEditor inkController={controller} />);
+    const input = container.querySelector('input[type="file"]');
+    fireEvent.change(input, { target: { files: [new File(['x'], 'foto.png', { type: 'image/png' })] } });
+
+    await waitFor(() => expect(applyCommands).toHaveBeenCalledTimes(1));
+    const commands = applyCommands.mock.calls[0][0];
+    expect(commands.map((command) => command.type)).toEqual(['add-object', 'reorder-layers']);
+    expect(commands[0].object.locked).toBe(true);
+  });
+
   it('uses the document\'s background instead of the hardcoded dark default', () => {
     const controller = createControllerDouble();
     controller.document.pages[0].background = '#FFFFFF';
@@ -271,6 +289,73 @@ describe('WhiteboardEditor', () => {
     expect(screen.getByTestId('lasso-selection-layer')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(removeStrokes).toHaveBeenCalledWith(['s1']);
+  });
+
+  describe('with a locked imported file on the board', () => {
+    const lockedDocument = () => ({
+      version: 1, documentId: 'wb-1', pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+      strokes: [{ id: 's1', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 50 }, { x: 60, y: 60 }] }],
+      objects: [{ id: 'pdf', pageId: 'wb-1-page-1', type: 'image', src: 'data:p', x: 0, y: 0, width: 300, height: 300, locked: true }],
+      inkLayerIndex: 1,
+      updatedAt: 0,
+    });
+    const setup = (overrides) => {
+      const controller = createControllerDouble({ document: lockedDocument(), ...overrides });
+      render(<WhiteboardEditor inkController={controller} />);
+      const surface = screen.getByTestId('whiteboard-surface');
+      surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+      return surface;
+    };
+
+    it('writes on it with the mouse instead of selecting it', () => {
+      const commitStroke = vi.fn();
+      setup({ commitStroke });
+      const file = screen.getByTestId('object-container');
+      fireEvent.pointerDown(file, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(file, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      fireEvent.pointerUp(file, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      expect(commitStroke).toHaveBeenCalledTimes(1);
+    });
+
+    it('lays a locked text under the ink like a background and writes through it', () => {
+      const commitStroke = vi.fn();
+      const document = lockedDocument();
+      delete document.inkLayerIndex;
+      document.objects = [{ id: 't', pageId: 'wb-1-page-1', type: 'text', text: 'Titel', x: 0, y: 0, width: 200, height: 40, color: '#fff', fontSize: 20, locked: true }];
+      setup({ document, commitStroke });
+      const text = screen.getByTestId('object-container');
+      const canvas = screen.getByTestId('whiteboard-canvas');
+      expect(text.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      fireEvent.pointerDown(text, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(text, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      fireEvent.pointerUp(text, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      expect(commitStroke).toHaveBeenCalledTimes(1);
+    });
+
+    it('places a text box on it with the text tool', () => {
+      const addObject = vi.fn();
+      setup({ addObject });
+      fireEvent.click(screen.getByTestId('text-tool-btn'));
+      const file = screen.getByTestId('object-container');
+      fireEvent.pointerDown(file, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+      fireEvent.pointerUp(file, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'text' }));
+    });
+
+    it('lasso marks the ink on it without taking the file along', () => {
+      const removeStrokes = vi.fn();
+      const removeObjects = vi.fn();
+      const surface = setup({ removeStrokes, removeObjects });
+      fireEvent.click(screen.getByTestId('lasso-tool-btn'));
+      fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 400, clientY: 0 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 400, clientY: 400 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 400 });
+      fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 400 });
+      fireEvent.keyDown(window, { key: 'Delete' });
+      expect(removeStrokes).toHaveBeenCalledWith(['s1']);
+      expect(removeObjects).not.toHaveBeenCalled();
+    });
   });
 
   it('inserts a shape via the design-tools popover, placed at world coordinates', () => {

@@ -1240,6 +1240,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   panMode = false,
   // True while the pen is writing/erasing (not move, lasso or a placing tool).
   penDrawsThrough = false,
+  // Wider than penDrawsThrough: the text, lasso and fill tools must reach
+  // the canvas through a locked object too, not just writing.
+  lockedPassesThrough = penDrawsThrough,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -1354,6 +1357,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               // Space held: the drag pans the view, wherever it starts — an
               // object under the cursor must not take it as a select/move.
               if (panMode) return;
+              // A locked object is paper: whatever draws writes on it, and only
+              // unlocking (layers drawer, or the lock button in move mode) lets it be grabbed.
+              if (lockedPassesThrough && object.locked) return;
               // A pen-down on an unselected object starts ink, not a select:
               // otherwise every text/table/image box is a dead zone for writing.
               // Select it with a finger/mouse; a selected or editing one keeps the pen.

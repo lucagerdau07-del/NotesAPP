@@ -72,13 +72,21 @@ function underEverything(document, added, inkIndex) {
   };
 }
 
-// Whiteboard "open": the PDF is the locked bottom layer, at its own size.
-export function pdfWhiteboardBackgroundCommands(document, pages, center) {
-  const objects = pdfWhiteboardObjects(document.pages[0].id, pages, center, { locked: true });
+// An imported file is there to be written on, so it goes under the ink: above
+// it, an opaque page would hide every stroke and swallow the pointer.
+export function whiteboardBackgroundCommands(document, objects) {
   return [
     ...objects.map((object) => ({ type: "add-object", object })),
     underEverything(document, objects, whiteboardInkLayerIndex(document)),
   ];
+}
+
+// Whiteboard "open": the PDF is the locked bottom layer, at its own size.
+export function pdfWhiteboardBackgroundCommands(document, pages, center) {
+  return whiteboardBackgroundCommands(
+    document,
+    pdfWhiteboardObjects(document.pages[0].id, pages, center, { locked: true }),
+  );
 }
 
 // Document "open": each PDF page becomes the locked bottom layer of its own
