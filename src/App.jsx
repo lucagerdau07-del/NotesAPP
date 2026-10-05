@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useBackHandler } from "./lib/backStack";
 import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns3, X, FlaskConical } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
@@ -205,6 +206,18 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
   };
 
   const glassInstanceRef = useLiquidGlass(glassRootRef, activeNote?.id || "note");
+
+  // Android back: base handler leaves the note; menus / panels stack above it.
+  useBackHandler(isActive, onBack);
+  useBackHandler(isActive && isImmersive, () => setIsImmersive(false));
+  useBackHandler(isActive && (isExportMenuOpen || isMoreMenuOpen), () => {
+    setIsExportMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  });
+  useBackHandler(isActive && panelMode !== null, () => {
+    setBrowserFullscreen(false);
+    setPanelMode(null);
+  });
 
   useEffect(() => {
     railWidthRef.current = railWidth;
@@ -734,6 +747,9 @@ export default function App() {
   const [paneWidths, setPaneWidths] = useState([]);
   const [activePaneId, setActivePaneId] = useState(null);
   const [isPickerOpen, setPickerOpen] = useState(false);
+
+  useBackHandler(screen !== "library" && screen !== "editor", () => setScreen("library"));
+  useBackHandler(isPickerOpen, () => setPickerOpen(false));
 
   const normalizeNote = (note) => {
     const id = String(

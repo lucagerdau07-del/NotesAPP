@@ -60,6 +60,7 @@ import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import reededGlassBackground from "../assets/reeded-glass-background.png";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
+import { useBackHandler } from "../lib/backStack";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
@@ -3306,6 +3307,18 @@ export default function Library({
 
   const importedCards = (documentLibrary.importedNotes || []).map((note) => ({
     ...note,
+  // Android back: close the topmost overlay, else step up one folder level.
+  useBackHandler(selectedSubject !== null, () =>
+    setSelectedSubject(
+      browserFolderRepository.listFolders().find((f) => f.id === selectedSubject.parentId) || null,
+    ),
+  );
+  useBackHandler(Boolean(detailNote), () => setDetailNote(null));
+  useBackHandler(agentOpen && !detailNote, () => setAgentOpen(false));
+  useBackHandler(isNewDocDialogOpen, () => setIsNewDocDialogOpen(false));
+  useBackHandler(iservOpen, () => setIservOpen(false));
+  useBackHandler(folderDialog !== null, () => setFolderDialog(null));
+
     type: "imported-document",
     dot: "#8AD4FF",
     when: "importiert",
