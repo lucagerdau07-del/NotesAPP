@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Check,
 } from "lucide-react";
+import reededGlassBackground from "../assets/reeded-glass-background.png";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import {
   loadPalmProfile,
@@ -342,6 +343,7 @@ export default function Settings({ onBack }) {
       {/* Capturable backdrop for the top bar's shader — same reeded scene the
           Library root uses. Without a child to rasterise there is nothing
           behind the bar to refract and it renders as flat white. */}
+      <img className="liquid-glass-scene-image" src={reededGlassBackground} alt="" />
       <div className="liquid-glass-scene" aria-hidden="true" />
 
       {/* Topbar */}

@@ -57,6 +57,7 @@ import pgwCard from "../assets/subjects/pgw-card.jpg";
 import philosophieCard from "../assets/subjects/philosophie-card.jpg";
 import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
+import reededGlassBackground from "../assets/reeded-glass-background.png";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import useKnowledge from "../hooks/useKnowledge.js";
@@ -3482,6 +3483,7 @@ export default function Library({
             font: '800 15px "Bricolage Grotesque",sans-serif',
             marginBottom: 10,
           }}
+      <img className="liquid-glass-scene-image" src={reededGlassBackground} alt="" />
         >
           N
         </div>
@@ -4100,6 +4102,7 @@ export default function Library({
             <button
               onClick={() => setSelectedSubject(null)}
               title="Zurück zur Übersicht"
+              className="lib-tile-row"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -4214,6 +4217,7 @@ export default function Library({
               font: "600 9.5px ui-monospace,monospace",
               letterSpacing: ".11em",
               color: "#FFFFFF",
+            className="lib-tile-row"
             }}
           >
             {sortedRecent.length}{" "}

@@ -10,6 +10,7 @@ import { createBrowserBridge } from "./browser/browserBridge";
 import { createBrowserRepository } from "./browser/browserRepository";
 import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
+import reededGlassBackground from "./assets/reeded-glass-background.png";
 import useLiquidGlass from "./hooks/useLiquidGlass";
 import { browserNoteRepository } from "./storage/noteRepository.js";
 import { browserDocumentRepository } from "./storage/documentRepository.js";
@@ -253,6 +254,7 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
       data-whiteboard={activeNote?.pageKind === "whiteboard" ? "" : undefined}
       ref={glassRootRef}
     >
+      <img className="liquid-glass-scene-image" src={reededGlassBackground} alt="" />
       <div className="liquid-glass-scene" />
       {isImmersive && (
         <button

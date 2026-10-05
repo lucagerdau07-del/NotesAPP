@@ -330,8 +330,11 @@ export function cullCaptureToGlass(instance) {
     // Cards and rows sit in CSS columns / a flex column, so dropping one would
     // reflow its neighbours in the clone. Keep the box (its computed size is
     // copied inline) and drop only what is inside it - or, when no card of the
-    // grid is near glass, everything inside the grid's own box.
-    const hollowed = [...element.querySelectorAll(".lib-masonry-grid, .lib-list-view")].flatMap((grid) => {
+    // grid is near glass, everything inside the grid's own box. Folder tiles
+    // too: each one inlines its cover photo, ~1.5 MB of SVG per library capture.
+    const hollowed = [
+      ...element.querySelectorAll(".lib-masonry-grid, .lib-list-view, .lib-tile-row"),
+    ].flatMap((grid) => {
       const cards = [...grid.children];
       return cards.every(clearOfGlass)
         ? cards
@@ -541,6 +544,14 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         skipStaticCapturePrewarm();
         useAppBackgroundAsSceneBase();
         keepGlassPaintedWhileResizing();
+        // An <img> root child (the scene plate) is drawn straight from the
+        // element, but only once decoded — and nothing re-renders the glass when
+        // that happens later. Decode it alongside init.
+        const imagesDecoded = Promise.all(
+          [...root.children]
+            .filter((child) => child.tagName === "IMG")
+            .map((img) => img.decode?.().catch(() => {})),
+        );
         await document.fonts?.ready;
         if (cancelled) return;
         const glassElements = collectControlGlassElements(root);
@@ -560,7 +571,9 @@ export default function useLiquidGlass(rootRef, invalidateKey) {
         instance = created;
         instanceRef.current = created;
         cullCaptureToGlass(created);
-        instanceRef.current.markChanged();
+        await imagesDecoded;
+        if (cancelled) return;
+        created.markChanged();
         await sceneCapturesIdle(created);
         if (cancelled) return;
         // Only once the initial scene is complete: the re-capture keeps the

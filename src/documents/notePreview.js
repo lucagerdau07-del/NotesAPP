@@ -33,10 +33,17 @@ const imageReadyListeners = new Set();
 // Counts renders that had to skip a still-decoding image, so a thumbnail made
 // that way is not remembered as final (see renderNotePreviewDataUrl).
 let skippedImages = 0;
+// Counts images that finished decoding: a thumbnail drawn while one was
+// missing can only come out different once this has moved on.
+let decodedImages = 0;
 
 export function subscribeToPreviewImages(listener) {
   imageReadyListeners.add(listener);
   return () => imageReadyListeners.delete(listener);
+}
+
+function notifyPreviewImages() {
+  imageReadyListeners.forEach((listener) => listener());
 }
 
 function getCachedPreviewImage(src) {
@@ -49,7 +56,8 @@ function getCachedPreviewImage(src) {
   const image = new Image();
   image.onload = () => {
     imageCache.set(src, image);
-    imageReadyListeners.forEach((listener) => listener());
+    decodedImages += 1;
+    notifyPreviewImages();
   };
   image.onerror = () => imageCache.set(src, "error");
   image.src = src;
@@ -456,8 +464,41 @@ export function renderNotePreviewDataUrl(documentId) {
   const id = String(documentId);
   const raw = browserInkRepository.loadHistoryRaw(id);
   const cached = previewCache.get(id);
-  if (cached && cached.raw === raw && !cached.incomplete) return cached.dataUrl;
+  if (cached && cached.raw === raw) {
+    if (cached.incomplete && cached.decodedImages !== decodedImages) queueRedraw(id);
+    return cached.dataUrl;
+  }
+  return drawNotePreview(id, raw);
+}
 
+// A thumbnail that skipped a still-decoding image is redrawn once one has
+// decoded - but not inside the render asking for it. Each redraw is a full PNG
+// encode (up to ~200ms with a photo on a Galaxy Tab A7), and right after
+// startup they all land in the same Library render: one ~0.8s block that held
+// up everything else on screen, the liquid glass included. The old thumbnail
+// stays up meanwhile, and the card re-renders once the redraws are done.
+const redrawQueue = new Set();
+
+function whenIdle(callback) {
+  if (globalThis.requestIdleCallback) requestIdleCallback(callback, { timeout: 1000 });
+  else setTimeout(callback, 0);
+}
+
+function queueRedraw(id) {
+  if (redrawQueue.size === 0) whenIdle(redrawNext);
+  redrawQueue.add(id);
+}
+
+// One per idle period: a single redraw already outlasts an idle deadline.
+function redrawNext() {
+  const [id] = redrawQueue;
+  redrawQueue.delete(id);
+  drawNotePreview(id, browserInkRepository.loadHistoryRaw(id));
+  if (redrawQueue.size > 0) whenIdle(redrawNext);
+  else notifyPreviewImages();
+}
+
+function drawNotePreview(id, raw) {
   const inkDoc = browserInkRepository.loadHistory(id)?.present;
   const pageId = firstPageOf(inkDoc);
   const bounds = pageId ? contentBoundsOf(inkDoc, pageId) : null;
@@ -476,6 +517,7 @@ export function renderNotePreviewDataUrl(documentId) {
   const offsetY = (CONTENT_PADDING - bounds.minY) * scale;
 
   const skippedBefore = skippedImages;
+  const decodedBefore = decodedImages;
   const dataUrl = renderComposite({
     inkDoc,
     page,
@@ -492,7 +534,12 @@ export function renderNotePreviewDataUrl(documentId) {
       maxY: (THUMB_HEIGHT - offsetY) / scale,
     },
   });
-  previewCache.set(id, { raw, dataUrl, incomplete: skippedImages > skippedBefore });
+  previewCache.set(id, {
+    raw,
+    dataUrl,
+    incomplete: skippedImages > skippedBefore,
+    decodedImages: decodedBefore,
+  });
   return dataUrl;
 }
 

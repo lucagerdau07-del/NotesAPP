@@ -340,6 +340,19 @@ describe("cullCaptureToGlass library", () => {
     expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, rows.map((row) => row.card));
   });
 
+  it("drops every folder tile, cover photo included, when no tile is near glass", async () => {
+    const body = boxed(570, 82, 760, 4400);
+    const row = boxed(580, 157, 729, 504);
+    row.className = "lib-tile-row";
+    const tiles = [cardWith([580, 163, 220, 148], "lib-tile"), cardWith([812, 163, 150, 164], "lib-tile")];
+    row.append(...tiles.map((tile) => tile.card));
+    body.append(row);
+
+    const capture = await cull(body);
+
+    expect(capture.captureToCanvas).toHaveBeenCalledWith(body, 760, 4400, tiles.map((tile) => tile.card));
+  });
+
   it("does not clone a fully transparent wrapper, and caches a blank stand-in instead", async () => {
     const closedPanel = boxed(106, 20, 440, 655);
     closedPanel.style.opacity = "0";

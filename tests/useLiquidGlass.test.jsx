@@ -22,11 +22,12 @@ vi.mock('@ybouane/liquidglass', () => ({ LiquidGlass: FakeLiquidGlass }))
 import { collectControlGlassElements } from '../src/liquidGlass/controlGlass'
 import useLiquidGlass from '../src/hooks/useLiquidGlass'
 
-function Harness({ invalidateKey = 'all' }) {
+function Harness({ invalidateKey = 'all', plate = false }) {
   const rootRef = useRef(null)
   useLiquidGlass(rootRef, invalidateKey)
   return (
     <div ref={rootRef} data-testid="root">
+      {plate && <img alt="" />}
       {Array.from({ length: 5 }, (_, index) => (
         <button key={index} data-liquid-glass-control={`control-${index}`} />
       ))}
@@ -212,6 +213,34 @@ describe('LiquidGlass control adapter', () => {
     await waitFor(() =>
       expect(root).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
     )
+  })
+
+  it('holds the fallback until the scene plate image is decoded, then repaints', async () => {
+    // The library draws an <img> root child only once it is decoded and never
+    // re-renders the glass by itself when that happens later.
+    let decoded
+    const decode = vi.fn(() => new Promise(resolve => { decoded = resolve }))
+    const original = HTMLImageElement.prototype.decode
+    HTMLImageElement.prototype.decode = decode
+    try {
+      const instance = { destroy: vi.fn(), markChanged: vi.fn() }
+      init.mockResolvedValue(instance)
+      const view = render(<Harness plate />)
+      await waitFor(() => expect(init).toHaveBeenCalledTimes(1))
+      await act(async () => {})
+      expect(decode).toHaveBeenCalledTimes(1)
+      expect(instance.markChanged).not.toHaveBeenCalled()
+      expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'loading')
+
+      await act(async () => decoded())
+      await waitFor(() =>
+        expect(view.getByTestId('root')).toHaveAttribute('data-liquid-glass-state', 'enhanced'),
+      )
+      expect(instance.markChanged).toHaveBeenCalledTimes(1)
+    } finally {
+      if (original) HTMLImageElement.prototype.decode = original
+      else delete HTMLImageElement.prototype.decode
+    }
   })
 
   it('stops waiting when no capture is ever queued', async () => {
