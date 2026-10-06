@@ -1,15 +1,22 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import SplitLayout from '../src/components/SplitLayout';
 
+// The split toggle lives in App's "Mehr" menu and reaches the layout via this ref.
+const renderSplit = (props) => {
+  const ref = { current: null };
+  const view = render(<SplitLayout activeTab="smartCanvas" inkControllerRef={ref} {...props} />);
+  return { ...view, toggleSplit: () => act(() => ref.current.toggleLayoutMode()) };
+};
+
 describe('SplitLayout', () => {
   it('renders DocumentView full-page by default, with WritingZone available via the split toggle', () => {
-    render(<SplitLayout activeTab="smartCanvas" />);
+    const { toggleSplit } = renderSplit();
     expect(screen.getByTestId('document-view')).toBeInTheDocument();
     expect(screen.queryByTestId('writing-zone')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    toggleSplit();
     expect(screen.getByTestId('writing-zone')).toBeInTheDocument();
   });
 
@@ -19,13 +26,13 @@ describe('SplitLayout', () => {
   });
 
   it('exposes stylus input and pixel eraser as controller defaults to both views', () => {
-    render(<SplitLayout activeTab="smartCanvas" documentId="note-1" />);
+    const { toggleSplit } = renderSplit({ documentId: 'note-1' });
 
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-document-id', 'note-1');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'stylus');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'pixel');
 
-    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    toggleSplit();
     expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-document-id', 'note-1');
     expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-input-mode', 'stylus');
     expect(screen.getByTestId('writing-zone')).toHaveAttribute('data-eraser-mode', 'pixel');

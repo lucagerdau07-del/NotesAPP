@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isLightBackground } from "../documents/pageStyles.js";
-import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Hand, Columns2 } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Hand } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
@@ -998,6 +998,7 @@ export default function WhiteboardEditor({
     }
     toolbarState?.setLayoutMode?.(isSplit ? "full" : "split");
   };
+  if (toolbarState?.layoutToggleRef) toolbarState.layoutToggleRef.current = toggleSplit;
   const startFocusBoxDrag = (event) => {
     if (!focusBox) return;
     event.stopPropagation();
@@ -1267,18 +1268,8 @@ export default function WhiteboardEditor({
       >
         <MessageSquare size={18} />
       </button>
-      <div className="rail-divider" />
-      <button
-        className={`rail-btn ${isSplit ? "active" : ""}`}
-        onClick={toggleSplit}
-        title={isSplit ? "Geteilte Ansicht ausschalten" : "Geteilte Ansicht (Fokus-Box) einschalten"}
-        data-testid="layout-mode-btn"
-      >
-        <Columns2 size={18} />
-      </button>
       <button
         className={`rail-btn ${isLayersOpen ? "active" : ""}`}
-        style={{ marginTop: "auto" }}
         title="Ebenen"
         data-testid="layers-toggle-btn"
         onClick={toggleLayers}

@@ -336,8 +336,9 @@ describe('full-document ink workspace', () => {
   });
 
   it('commits focus ink into the same controller and one undo removes it everywhere', () => {
-    render(<SplitLayout activeTab="smartCanvas" documentId="shared-note" />);
-    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    const ref = { current: null };
+    render(<SplitLayout activeTab="smartCanvas" documentId="shared-note" inkControllerRef={ref} />);
+    act(() => ref.current.toggleLayoutMode());
     const focusCanvas = screen.getByTestId('focus-ink-canvas');
     mockRect(focusCanvas, { left: 0, top: 0, width: 500, height: 200 });
 
@@ -391,11 +392,12 @@ describe('full-document ink workspace', () => {
   });
 
   it('reconciles a removed focus page before focus ink can create an orphan stroke', async () => {
-    render(<SplitLayout activeTab="smartCanvas" documentId="orphan-note" />);
+    const ref = { current: null };
+    render(<SplitLayout activeTab="smartCanvas" documentId="orphan-note" inkControllerRef={ref} />);
     const page = screen.getByTestId('document-page');
     page.parentElement.scrollTo = vi.fn();
     fireEvent.click(screen.getByTestId('add-page-btn'));
-    fireEvent.click(screen.getByTestId('layout-mode-btn'));
+    act(() => ref.current.toggleLayoutMode());
     fireEvent.click(screen.getByTestId('select-mode-btn'));
 
     mockRect(page, { left: 0, top: 0, width: 800, height: 2300 });

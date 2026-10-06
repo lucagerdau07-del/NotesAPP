@@ -10,7 +10,6 @@ import {
   Highlighter,
   PenLine,
   Layers,
-  Columns2,
   X,
   Palette,
   Sliders,
@@ -1192,6 +1191,7 @@ export default function DocumentView({
     setPaperStyle,
     layoutMode,
     setLayoutMode,
+    layoutToggleRef,
     rawColor,
     tool,
     setTool,
@@ -1207,6 +1207,11 @@ export default function DocumentView({
   const canRedo = inkController?.canRedo;
   const penColor = rawColor ?? color;
   const isFullMode = layoutMode !== "split";
+  if (layoutToggleRef)
+    layoutToggleRef.current = () => {
+      setIsSelectMode?.(false);
+      setLayoutMode?.(isFullMode ? "split" : "full");
+    };
   const [customColors, setCustomColors] = useState([
     "#EFECE4",
     "#3E7BD8",
@@ -3639,25 +3644,8 @@ export default function DocumentView({
       >
         <MessageSquare size={18} />
       </button>
-      <div className="rail-divider" />
-      <button
-        className={`rail-btn ${!isFullMode ? "active" : ""}`}
-        onClick={() => {
-          setIsSelectMode?.(false);
-          setLayoutMode?.(isFullMode ? "split" : "full");
-        }}
-        title={
-          isFullMode
-            ? "Geteilte Ansicht (Fokus-Box) einschalten"
-            : "Geteilte Ansicht ausschalten"
-        }
-        data-testid="layout-mode-btn"
-      >
-        <Columns2 size={18} />
-      </button>
       <button
         className={`rail-btn ${isLayersOpen ? "active" : ""}`}
-        style={{ marginTop: "auto" }}
         title="Ebenen"
         data-testid="layers-toggle-btn"
         onClick={toggleLayers}

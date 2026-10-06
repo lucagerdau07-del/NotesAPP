@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DocumentView from "./DocumentView";
 import WritingZone from "./WritingZone";
 import useInkDocument from "../hooks/useInkDocument";
@@ -42,6 +42,9 @@ export default function SplitLayout({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [showPageBreaks, setShowPageBreaks] = useState(true);
   const [layoutMode, setLayoutMode] = useState("full"); // 'full' | 'split'
+  // The split toggle lives in App's "Mehr" menu, but the editor knows how to
+  // switch (the whiteboard seeds a focus box first), so it registers it here.
+  const layoutToggleRef = useRef(null);
   const resolvedNoteStyle =
     !note || note?.kind === "imported" ? undefined : resolvePageStyle(note);
   const initialPageStyle = resolvedNoteStyle;
@@ -84,6 +87,8 @@ export default function SplitLayout({
       sourceHandle,
       sourceType: note?.source?.type,
       sourcePages: note?.kind === "imported" ? note.pages : null,
+      layoutMode,
+      toggleLayoutMode: () => layoutToggleRef.current?.(),
     };
 
   const toolState = {
@@ -107,6 +112,7 @@ export default function SplitLayout({
     setShowPageBreaks,
     layoutMode,
     setLayoutMode,
+    layoutToggleRef,
   };
 
   const focusBoxState = useFocusBox(

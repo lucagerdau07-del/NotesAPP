@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useBackHandler } from "./lib/backStack";
-import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns3, X, FlaskConical } from "lucide-react";
+import { ArrowLeft, Globe2, Share, MoreHorizontal, Maximize2, Minimize2, Image as ImageIcon, FileText, FolderOpen, Files, Presentation, Calculator, Check, Trash2, Columns2, Columns3, X, FlaskConical } from "lucide-react";
 import "./styles/main.css";
 import SplitLayout from "./components/SplitLayout";
 import Library from "./components/Library";
@@ -420,6 +420,19 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
               </button>
               <button
                 style={{ whiteSpace: "nowrap" }}
+                data-testid="layout-mode-btn"
+                onClick={() => {
+                  setIsMoreMenuOpen(false);
+                  inkControllerRef.current?.toggleLayoutMode?.();
+                }}
+              >
+                <Columns2 size={15} /> Geteilte Ansicht (Fokus-Box)
+                {inkControllerRef.current?.layoutMode === "split" && (
+                  <Check size={15} style={{ marginLeft: "auto" }} />
+                )}
+              </button>
+              <button
+                style={{ whiteSpace: "nowrap" }}
                 data-testid="chem-keyboard-toggle"
                 onClick={() => {
                   setIsMoreMenuOpen(false);
@@ -462,7 +475,7 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
         style={isPanelOpen && !isBrowserFullscreen && railWidth ? { width: `${railWidth}px` } : undefined}
       >
         <div className="rail-tools" ref={setRailSlot}>
-          <div style={{ order: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div style={{ order: 2, display: "flex", flexDirection: "column", alignItems: "center", gap: "inherit" }}>
           <button
             className={`rail-btn rail-ai-btn ${panelMode === "agent" ? "active" : ""}`}
             onClick={() => {
