@@ -1893,6 +1893,68 @@ body::after {
   opacity: 1;
 }
 
+/* Card for a document the agent created online (Google Docs). */
+.rail-chat-doccard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.rail-chat-doccard:hover {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.rail-chat-doccard:active {
+  transform: scale(0.985);
+}
+
+.rail-chat-doccard-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: #4285f4;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.35);
+}
+
+.rail-chat-doccard-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rail-chat-doccard-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rail-chat-doccard-sub {
+  font: 400 11px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.55);
+}
+
+.rail-chat-doccard-open {
+  flex: none;
+  color: rgba(241, 238, 231, 0.55);
+}
+
 /* The step list is the progress indicator: the number of steps isn't known
    ahead of the run, so there is nothing a bar could fill. */
 .rail-chat-steps {
