@@ -738,6 +738,30 @@ body::after {
   filter: brightness(0.12);
 }
 
+/* Glass catches the light along its rim. The shader draws that rim, but the
+   scrim over light documents and the darkened whiteboard canvas both swallow
+   it, so the editor's rail and pills carry their own on top: a 1px ring,
+   bright where the light hits (top-left, mirrored bottom-right), nearly clear
+   along the sides. Overrides the fallback's top shine line (.editor-sidebar::before). */
+[data-liquid-glass-state="enhanced"] > :is(.editor-sidebar, .editor-title-pill, .editor-actions-pill)::before {
+  display: block;
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6),
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    rgba(255, 255, 255, 0.35)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
 /* The WebGL canvas replaces the CSS glass's own border/shadow as the focus
    affordance (see .liquid-glass-pill:focus-within above), so give every
    enhanced control an explicit focus ring back. */
