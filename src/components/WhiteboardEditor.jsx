@@ -1,7 +1,7 @@
 // src/components/WhiteboardEditor.jsx
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { isLightBackground } from "../documents/pageStyles.js";
+import { isLightBackground, readableInk } from "../documents/pageStyles.js";
 import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Hand } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
@@ -142,9 +142,8 @@ export default function WhiteboardEditor({
   // An opened PDF is paper, like an imported note, so its controls keep the scrim.
   const hasPaper = unlockedObjects.length < pageObjects.length;
 
+  const isLight = hasPaper || isLightBackground(document.pages[0]?.background);
   useEffect(() => {
-    const bg = document.pages[0]?.background;
-    const isLight = hasPaper || isLightBackground(bg);
     const shell = containerRef.current?.closest(".editor-shell");
     if (shell) {
       if (isLight) {
@@ -155,7 +154,15 @@ export default function WhiteboardEditor({
         shell.classList.remove("light-doc");
       }
     }
-  }, [document.pages, hasPaper]);
+  }, [isLight]);
+  // Only on a paper or board change: a color picked afterwards stays picked.
+  useEffect(() => {
+    const ink = readableInk(inkController.color, isLight);
+    if (ink !== inkController.color) inkController.setColor?.(ink);
+    setCustomColors((colors) => colors.map((c) => readableInk(c, isLight)));
+    setTextStyle((style) => ({ ...style, color: readableInk(style.color, isLight) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLight, document.documentId]);
 
   const mapOrigin = useCallback(
     () => worldToScreen(camera, { x: 0, y: 0 }),

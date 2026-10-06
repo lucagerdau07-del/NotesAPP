@@ -57,7 +57,7 @@ import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
-import { isLightBackground } from "../documents/pageStyles.js";
+import { isLightBackground, readableInk } from "../documents/pageStyles.js";
 
 
 // Default footprint per type, in page units. Inserts land centered on the
@@ -1380,11 +1380,11 @@ export default function DocumentView({
   const resolvedPageHeight = inkDocument.pages[0]?.height || pageHeight;
   const pageBackground = inkDocument.pages[0]?.background || DEFAULT_PAGE_BACKGROUND;
 
+  const isLightPage = isLightBackground(pageBackground, note?.kind);
   useEffect(() => {
-    const isLight = isLightBackground(pageBackground, note?.kind);
     const shell = documentViewRef.current?.closest(".editor-shell");
     if (shell) {
-      if (isLight) {
+      if (isLightPage) {
         shell.setAttribute("data-document-theme", "light");
         shell.classList.add("light-doc");
       } else {
@@ -1392,7 +1392,15 @@ export default function DocumentView({
         shell.classList.remove("light-doc");
       }
     }
-  }, [pageBackground, note?.kind]);
+  }, [isLightPage]);
+  // Only on a paper or note change: a color picked afterwards stays picked.
+  useEffect(() => {
+    const ink = readableInk(penColor, isLightPage);
+    if (ink !== penColor) setColor?.(ink);
+    setCustomColors((colors) => colors.map((c) => readableInk(c, isLightPage)));
+    setTextStyle((style) => ({ ...style, color: readableInk(style.color, isLightPage) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLightPage, inkDocument.documentId]);
 
   const documentHeight = resolvedPageHeight * pagesCount;
   // Imported documents take page sizes from the source file (note.pages), but

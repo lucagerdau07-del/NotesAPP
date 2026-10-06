@@ -56,6 +56,16 @@ export function resolvePageStyle(options = {}) {
   };
 }
 
+const LIGHT_INK = '#EFECE4';
+const DARK_INK = '#1A1A1A';
+
+// Default ink is the other default when it would vanish on this paper: white
+// on light pages and PDFs, black on dark ones. Any other color is the user's.
+export function readableInk(color, isLight) {
+  const vanishing = isLight ? LIGHT_INK : DARK_INK;
+  return String(color).toUpperCase() === vanishing ? (isLight ? DARK_INK : LIGHT_INK) : color;
+}
+
 export function isLightBackground(background, kind) {
   if (kind === 'imported') return true;
   if (!background) return false;
