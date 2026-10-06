@@ -16,6 +16,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -525,7 +526,7 @@ body::after {
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.liquid-glass-pill:hover, .liquid-glass-pill:focus-within {
+.liquid-glass-pill:hover, .liquid-glass-pill:has(:focus-visible) {
   border-color: rgba(255, 255, 255, 0.35);
   box-shadow: 
     inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.75),
@@ -765,7 +766,7 @@ body::after {
 /* The WebGL canvas replaces the CSS glass's own border/shadow as the focus
    affordance (see .liquid-glass-pill:focus-within above), so give every
    enhanced control an explicit focus ring back. */
-[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]:focus-within {
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]:has(:focus-visible) {
   outline: 2px solid var(--subj-accent, #FFFFFF);
   outline-offset: 2px;
 }
