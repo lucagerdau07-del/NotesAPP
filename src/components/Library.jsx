@@ -3693,6 +3693,8 @@ export default function Library({
           zIndex: 30,
           height: 52,
           width: 440,
+          // never run under the right-hand button cluster (view-sort pill ≈140px wide)
+          maxWidth: agentOpen ? undefined : `calc(100% - 106px - ${24 + newNoteWidth + 14 + fileOpenWidth + 14 + ISERV_BUTTON_SIZE + 14 + 140 + 14}px)`,
           padding: "0 20px 0 16px",
           gap: 12,
           cursor: "text",
