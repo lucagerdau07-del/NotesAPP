@@ -1,4 +1,6 @@
 import React from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
 // A small block/inline Markdown renderer. It exists instead of a dependency
@@ -8,7 +10,20 @@ import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 // ponytail: no nested lists, no reference links, no images. Reach for a real
 // parser if answers ever need them.
 
-const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
+const INLINE = /(\$[^$\n]+\$|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
+
+function Katex({ tex, block = false }) {
+  const html = React.useMemo(() => {
+    try {
+      return katex.renderToString(tex, { throwOnError: false, displayMode: block });
+    } catch {
+      return null;
+    }
+  }, [tex, block]);
+  if (html == null) return block ? `$$${tex}$$` : `$${tex}$`;
+  const Tag = block ? "div" : "span";
+  return <Tag className={block ? "md-math-block" : "md-math"} dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 export function renderInline(text, keyPrefix = "i", openLink = null) {
   return String(text)
@@ -22,6 +37,7 @@ export function renderInline(text, keyPrefix = "i", openLink = null) {
       if (/^\*[^*]+\*$/.test(part) || /^_[^_]+_$/.test(part))
         return <em key={key}>{part.slice(1, -1)}</em>;
       if (/^`[^`]+`$/.test(part)) return <code key={key}>{part.slice(1, -1)}</code>;
+      if (/^\$[^$\n]+\$$/.test(part)) return <Katex key={key} tex={part.slice(1, -1)} />;
       const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (link) {
         const href = link[2];
@@ -96,6 +112,25 @@ function Markdown({ text }) {
       blocks.push(
         <CodeBlock key={blocks.length} code={code.join("\n")} language={fence[1]} />,
       );
+      continue;
+    }
+
+    if (/^\s*\$\$\s*$/.test(line)) {
+      const tex = [];
+      index += 1;
+      while (index < lines.length && !/^\s*\$\$\s*$/.test(lines[index])) {
+        tex.push(lines[index]);
+        index += 1;
+      }
+      index += 1;
+      blocks.push(<Katex key={blocks.length} tex={tex.join("\n")} block />);
+      continue;
+    }
+
+    const blockMathInline = line.match(/^\s*\$\$(.+)\$\$\s*$/);
+    if (blockMathInline) {
+      blocks.push(<Katex key={blocks.length} tex={blockMathInline[1]} block />);
+      index += 1;
       continue;
     }
 

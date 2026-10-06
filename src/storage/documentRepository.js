@@ -69,6 +69,11 @@ export function createDocumentRepository({ dbName = DOCUMENT_DB_NAME } = {}) {
       const note = await db.get("importedNotes", noteId);
       if (note) await db.put("importedNotes", { ...note, title });
     },
+    async saveImportedThumbnail(noteId, thumbnail) {
+      const db = await database();
+      const note = await db.get("importedNotes", noteId);
+      if (note) await db.put("importedNotes", { ...note, thumbnail });
+    },
     async listImportedNotes() {
       const db = await database();
       return (

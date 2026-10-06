@@ -8,7 +8,7 @@ const THUMB_MAX_DIMENSION = 500;
 // An imported PDF/image page is the file itself, not ink, so its thumbnail
 // backdrop is rendered from the open source handle - once per handle and page.
 const sourceThumbs = new WeakMap();
-function sourceThumbOf(handle, type, sourceIndex) {
+export function sourceThumbOf(handle, type, sourceIndex) {
   let perHandle = sourceThumbs.get(handle);
   if (!perHandle) sourceThumbs.set(handle, (perHandle = new Map()));
   if (!perHandle.has(sourceIndex))
@@ -47,7 +47,7 @@ async function renderSourceThumb(handle, type, sourceIndex) {
 // Ink pages of an imported document carry no size (it comes from the file),
 // so without this they'd render cropped to their strokes, dark and misaligned
 // with the page underneath. Pages added later take the first page's size.
-function withSourcePageSizes(doc, sourcePages) {
+export function withSourcePageSizes(doc, sourcePages) {
   if (!sourcePages?.length) return doc;
   const byId = new Map(sourcePages.map((page) => [page.id, page]));
   return {

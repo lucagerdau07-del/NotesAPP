@@ -16,6 +16,8 @@ import {
   ScanSearch,
   Globe,
   Zap,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
@@ -120,7 +122,39 @@ export function WritingGlobe() {
   return <Globe size={13} className="rail-chat-status-globe" />;
 }
 
+// A document the agent created online (create_google_doc): a tappable card
+// that opens it in Google Docs / the browser.
+export function DocCard({ card }) {
+  return (
+    <a className="rail-chat-doccard" href={card.url} target="_blank" rel="noreferrer noopener">
+      <span className="rail-chat-doccard-icon">
+        <FileText size={20} />
+      </span>
+      <span className="rail-chat-doccard-text">
+        <span className="rail-chat-doccard-title">{card.title}</span>
+        <span className="rail-chat-doccard-sub">Google Docs · Zum Öffnen tippen</span>
+      </span>
+      <ExternalLink size={15} className="rail-chat-doccard-open" />
+    </a>
+  );
+}
+
+// Cards sit outside the collapsible step list, so they stay visible after the
+// run's steps are folded away. Library.jsx renders StepList too, so it gets
+// them for free.
 export function StepList({ steps, elapsedMs }) {
+  const cards = steps.filter((step) => step.card);
+  return (
+    <>
+      <Steps steps={steps} elapsedMs={elapsedMs} />
+      {cards.map((step) => (
+        <DocCard key={step.id} card={step.card} />
+      ))}
+    </>
+  );
+}
+
+function Steps({ steps, elapsedMs }) {
   const [expanded, setExpanded] = useState(elapsedMs == null);
 
   if (elapsedMs != null && !expanded) {

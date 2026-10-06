@@ -231,3 +231,32 @@ export async function requestWolfram({ query, signal, config = loadAgentConfig()
   if (!response.ok) throw new Error(data?.error?.message || `Fehler ${response.status}`);
   return String(data?.result || "");
 }
+
+// Google Docs (OAuth server-seitig): schickt ein fertiges .docx (base64), der
+// Space legt daraus ein Google Doc im Drive des Nutzers an. Gibt {id, title, url}.
+export async function requestGoogleDoc({ title, docx, signal, config = loadAgentConfig() }) {
+  const baseUrl = String(config.baseUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) throw new Error("Keine Backend-Adresse eingestellt.");
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/gdoc`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.accessKey ? { "X-App-Key": config.accessKey } : {}),
+      },
+      body: JSON.stringify({ title, docx }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw new Error("Server nicht erreichbar.");
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error?.message || `Fehler ${response.status}`);
+  // The URL ends up in a clickable card, so only accept a Google https link.
+  if (!/^https:\/\/(docs|drive)\.google\.com\//.test(data?.url || "")) throw new Error("Keine Dokument-Adresse erhalten.");
+  return { id: data.id, title: String(data.title || title), url: data.url };
+}

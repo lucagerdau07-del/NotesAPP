@@ -438,6 +438,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                     state: failed ? "failed" : "done",
                     ...(failed ? { detail: result } : {}),
                     ...(sawPages ? { detail: `${result.pages.length} Bild(er)` } : {}),
+                    ...(result?.card ? { card: result.card } : {}),
                   }
                 : entry,
             );
@@ -478,7 +479,11 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
                   {
                     role: "tool",
                     tool_call_id: call.id,
-                    content: typeof result === "string" ? result : JSON.stringify(result),
+                    // The card is for the UI only; the model needn't see (and re-quote) its URL.
+                    content:
+                      typeof result === "string"
+                        ? result
+                        : JSON.stringify(result?.card ? { ...result, card: undefined } : result),
                   },
                 ];
           }

@@ -5,7 +5,7 @@ import { browserFolderRepository, folderWithDescendants } from "../storage/folde
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 import { readSource, searchSources } from "../knowledge/sources.js";
-import { requestSearch, requestWolfram } from "./agentClient.js";
+import { requestGoogleDoc, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
@@ -800,6 +800,26 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "create_google_doc",
+      description:
+        "Legt ein Google Doc im Google Drive des Nutzers an. Im Chat erscheint automatisch eine Karte mit dem Link zum Öffnen, wiederhole den Link nicht. Nimm es, wenn der Nutzer Google Docs will oder das Dokument online weiterbearbeiten oder teilen möchte (Referat, Lernzettel, Protokoll). Sonst create_file.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Titel des Dokuments" },
+          text: {
+            type: "string",
+            description:
+              "Inhalt als Markdown. Erlaubt sind # ## ### Überschriften, \"- \" Aufzählungen, **fett** und Absätze.",
+          },
+        },
+        required: ["title", "text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -812,6 +832,7 @@ export const AGENT_TOOLS = [
 ];
 
 const READ_ONLY_TOOL_NAMES = new Set([
+  "create_google_doc",
   "read_document",
   "see_document",
   "list_folders",
@@ -832,6 +853,7 @@ export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
 );
 
 const NO_DOCUMENT_TOOL_NAMES = new Set([
+  "create_google_doc",
   "list_folders",
   "list_notes",
   "search_sources",
@@ -983,6 +1005,8 @@ export function describeToolCall(name, args = {}) {
       return `Wolfram|Alpha: ${String(args.query || "").slice(0, 40)}`;
     case "create_file":
       return `Datei erstellen: ${String(args.title || args.format || "").slice(0, 40)}`;
+    case "create_google_doc":
+      return `Google Doc erstellen: ${String(args.title || "").slice(0, 40)}`;
     case "done":
       return "Fertig";
     default:
@@ -1068,6 +1092,29 @@ async function makeFile(args, api) {
   }
 }
 
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+// Baut dasselbe .docx wie create_file, der Space macht daraus ein Google Doc.
+// result.card geht nicht ans Modell, sondern als Karte in den Chat (useAgent).
+async function makeGoogleDoc(args) {
+  try {
+    const { blob } = await createFile({ format: "docx", title: args.title, text: args.text });
+    const doc = await requestGoogleDoc({ title: String(args.title || "").trim() || "Dokument", docx: await blobToBase64(blob) });
+    return {
+      created: doc.title,
+      hint: "Der Nutzer sieht im Chat eine Karte zum Öffnen.",
+      card: { kind: "gdoc", title: doc.title, url: doc.url },
+    };
+  } catch (error) {
+    return `Fehler: Google Docs fehlgeschlagen (${error.message}). Alternativ create_file mit format docx.`;
+  }
+}
+
 // Executes one tool call against the live document. Never throws on bad model
 // arguments: the error text goes back to the model as the tool result so it can
 // correct itself, and the run continues.
@@ -1079,6 +1126,7 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "search_web") return searchWeb(args.query, args.source);
   if (name === "wolfram_alpha") return askWolfram(args.query);
   if (name === "create_file") return makeFile(args, api);
+  if (name === "create_google_doc") return makeGoogleDoc(args);
   if (name === "done") return { summary: String(args.summary || "") };
 
   if (name === "list_folders") {

@@ -61,6 +61,8 @@ import reededGlassBackground from "../assets/reeded-glass-background.png";
 import useLiquidGlass from "../hooks/useLiquidGlass";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import { useBackHandler } from "../lib/backStack";
+import useDocumentSource from "../hooks/useDocumentSource.js";
+import { sourceThumbOf, withSourcePageSizes } from "./PagesPanel.jsx";
 import useKnowledge from "../hooks/useKnowledge.js";
 import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
@@ -72,6 +74,7 @@ import {
   notePageStyleOf,
   previewTextOf,
   renderNotePagesOf,
+  renderPagesFromDocument,
   renderNotePreviewDataUrl,
   subscribeToPreviewImages,
 } from "../documents/notePreview.js";
@@ -1885,10 +1888,33 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
   // previewVersion isn't read by renderNotePagesOf - it's a dependency purely
   // to force this memo to recompute once a page's image finishes decoding
   // (see notePreview.js's async image cache).
-  const pages = useMemo(
-    () => (note ? renderNotePagesOf(note.id) : []),
-    [note?.id, previewVersion],
-  );
+  // An imported note's ink sits on the PDF/image page itself: draw the ink
+  // over that page (sized like the file) instead of on a blank sheet.
+  const importedPages = !editable && note?.pages?.length ? note.pages : null;
+  const pages = useMemo(() => {
+    if (!note) return [];
+    if (!importedPages) return renderNotePagesOf(note.id);
+    const inkDoc = browserInkRepository.loadHistory(note.id)?.present || {
+      pages: importedPages.map((page) => ({ id: page.id })),
+      strokes: [],
+    };
+    return renderPagesFromDocument(withSourcePageSizes(inkDoc, importedPages));
+  }, [note?.id, previewVersion]);
+  const { sourceHandle } = useDocumentSource({ note: importedPages ? note : undefined });
+  const [sourceSrcs, setSourceSrcs] = useState({});
+  useEffect(() => {
+    setSourceSrcs({});
+    if (!sourceHandle || !importedPages) return undefined;
+    let cancelled = false;
+    importedPages.forEach((page) =>
+      sourceThumbOf(sourceHandle, note.source.type, page.index).then((src) => {
+        if (!cancelled) setSourceSrcs((current) => ({ ...current, [page.id]: src }));
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceHandle]);
   const { dragX, handlers: swipeHandlers } = usePageSwipe(pages.length, pageIndex, setPageIndex);
 
   useEffect(() => {
@@ -1972,13 +1998,21 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
                 }}
               >
                 {pages.map((p) => (
-                  <div key={p.id} style={{ flex: "0 0 100%", height: "100%" }}>
+                  <div key={p.id} style={{ flex: "0 0 100%", height: "100%", position: "relative" }}>
+                    {sourceSrcs[p.id] && (
+                      <img
+                        src={sourceSrcs[p.id]}
+                        alt=""
+                        draggable={false}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+                      />
+                    )}
                     {p.src && (
                       <img
                         src={p.src}
                         alt=""
                         draggable={false}
-                        style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
                       />
                     )}
                   </div>
@@ -2748,6 +2782,20 @@ function RecentCard({ n, onOpen, onLongPress }) {
       )}
 
       {/* 12. Imported Document Card */}
+      {n.type === "imported-document" && n.thumbnail && (
+        <div style={{ height: 150, overflow: "hidden", background: "#fff" }}>
+          <img
+            src={n.thumbnail}
+            alt=""
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "top left",
+            }}
+          />
+        </div>
+      )}
       {n.type === "imported-document" && (
         <div style={{ padding: "16px 18px 14px" }}>
           <div
@@ -3259,6 +3307,18 @@ export default function Library({
 
   const handleOpenFolder = (folder) => setSelectedSubject(folder);
 
+  // Android back: close the topmost overlay, else step up one folder level.
+  useBackHandler(selectedSubject !== null, () =>
+    setSelectedSubject(
+      browserFolderRepository.listFolders().find((f) => f.id === selectedSubject.parentId) || null,
+    ),
+  );
+  useBackHandler(Boolean(detailNote), () => setDetailNote(null));
+  useBackHandler(agentOpen && !detailNote, () => setAgentOpen(false));
+  useBackHandler(isNewDocDialogOpen, () => setIsNewDocDialogOpen(false));
+  useBackHandler(iservOpen, () => setIservOpen(false));
+  useBackHandler(folderDialog !== null, () => setFolderDialog(null));
+
   const handleCreateFolder = ({ name, color, icon, image }, parentId) => {
     browserFolderRepository.createFolder({ name, color, icon, image, parentId });
     setFolderDialog(null);
@@ -3307,18 +3367,6 @@ export default function Library({
 
   const importedCards = (documentLibrary.importedNotes || []).map((note) => ({
     ...note,
-  // Android back: close the topmost overlay, else step up one folder level.
-  useBackHandler(selectedSubject !== null, () =>
-    setSelectedSubject(
-      browserFolderRepository.listFolders().find((f) => f.id === selectedSubject.parentId) || null,
-    ),
-  );
-  useBackHandler(Boolean(detailNote), () => setDetailNote(null));
-  useBackHandler(agentOpen && !detailNote, () => setAgentOpen(false));
-  useBackHandler(isNewDocDialogOpen, () => setIsNewDocDialogOpen(false));
-  useBackHandler(iservOpen, () => setIservOpen(false));
-  useBackHandler(folderDialog !== null, () => setFolderDialog(null));
-
     type: "imported-document",
     dot: "#8AD4FF",
     when: "importiert",
@@ -3448,6 +3496,7 @@ export default function Library({
         }
       }}
     >
+      <img className="liquid-glass-scene-image" src={reededGlassBackground} alt="" />
       <div className="liquid-glass-scene" aria-hidden="true" />
 
       {/* 2. Dynamic Thematic Ambient Lighting overlay */}
@@ -3496,7 +3545,6 @@ export default function Library({
             font: '800 15px "Bricolage Grotesque",sans-serif',
             marginBottom: 10,
           }}
-      <img className="liquid-glass-scene-image" src={reededGlassBackground} alt="" />
         >
           N
         </div>
@@ -4067,6 +4115,7 @@ export default function Library({
 
             {/* Folders horizontal selector row */}
             <div
+              className="lib-tile-row"
               style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -4115,7 +4164,6 @@ export default function Library({
             <button
               onClick={() => setSelectedSubject(null)}
               title="Zurück zur Übersicht"
-              className="lib-tile-row"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -4182,6 +4230,7 @@ export default function Library({
 
         {selectedSubject && (
           <div
+            className="lib-tile-row"
             style={{
               display: "flex",
               flexWrap: "wrap",
@@ -4230,7 +4279,6 @@ export default function Library({
               font: "600 9.5px ui-monospace,monospace",
               letterSpacing: ".11em",
               color: "#FFFFFF",
-            className="lib-tile-row"
             }}
           >
             {sortedRecent.length}{" "}

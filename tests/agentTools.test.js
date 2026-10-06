@@ -389,6 +389,7 @@ describe("AGENT_NO_DOCUMENT_TOOLS", () => {
   it("exposes only library browsing and search, nothing that needs an open note", () => {
     expect(AGENT_NO_DOCUMENT_TOOLS.map((tool) => tool.function.name).sort()).toEqual([
       "create_file",
+      "create_google_doc",
       "done",
       "list_folders",
       "list_notes",

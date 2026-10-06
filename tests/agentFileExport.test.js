@@ -107,3 +107,28 @@ describe("wolfram_alpha", () => {
     expect(await executeTool("wolfram_alpha", { query: " " })).toMatch(/^Fehler: query ist leer/);
   });
 });
+
+describe("create_google_doc", () => {
+  const docUrl = "https://docs.google.com/document/d/abc/edit";
+
+  it("posts a real docx and returns a card, hiding it from the model's tool message", async () => {
+    let seen;
+    vi.stubGlobal("fetch", async (url, init) => {
+      seen = { url, body: JSON.parse(init.body) };
+      return new Response(JSON.stringify({ id: "abc", title: "Referat", url: docUrl }), { status: 200 });
+    });
+    const result = await executeTool("create_google_doc", { title: "Referat", text: "# Hallo\n\n- eins" });
+    expect(seen.url).toMatch(/\/api\/notes\/gdoc$/);
+    expect(seen.body.title).toBe("Referat");
+    expect(atob(seen.body.docx).slice(0, 2)).toBe("PK");
+    expect(result.card).toEqual({ kind: "gdoc", title: "Referat", url: docUrl });
+  });
+
+  it("turns proxy errors and foreign links into a Fehler string", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { message: "Google ist im Space nicht eingerichtet" } }), { status: 500 }));
+    expect(String(await executeTool("create_google_doc", { title: "x", text: "# a" }))).toMatch(/^Fehler: Google Docs fehlgeschlagen \(Google ist im Space nicht eingerichtet\)/);
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ url: "javascript:alert(1)" }), { status: 200 }));
+    expect(String(await executeTool("create_google_doc", { title: "x", text: "# a" }))).toMatch(/^Fehler: Google Docs fehlgeschlagen/);
+    expect(String(await executeTool("create_google_doc", { title: "x", text: " " }))).toMatch(/text fehlt/);
+  });
+});
