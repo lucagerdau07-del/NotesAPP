@@ -692,10 +692,7 @@ body::after {
    so controls remain legible; everywhere else (Library, Settings, dark notes),
    the authentic crystal-clear Liquid Glass shines through. */
 [data-liquid-glass-state="enhanced"][data-document-theme="light"] > [data-liquid-glass-control]::after,
-.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after,
-/* A whiteboard can show light content (PDFs, images, white paper) on any page
-   background, so its controls always keep the scrim. */
-.editor-shell[data-whiteboard][data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -717,13 +714,7 @@ body::after {
 [data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-title-pill::after,
 [data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-actions-pill::after,
 .editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-title-pill::after,
-.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after,
-.editor-shell[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-title-pill::after,
-.editor-shell[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-actions-pill::after,
-/* A whiteboard's white canvas runs under the rail too (a page has a margin
-   there and shows the scene instead), so the rail needs the same carried-along
-   texture as the pills or it reads as a flat grey slab. */
-.editor-shell[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-sidebar::after {
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after {
   background-color: #08080A;
   background-image:
     linear-gradient(rgba(8, 8, 12, 0.74), rgba(8, 8, 12, 0.74)),
@@ -734,6 +725,17 @@ body::after {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
+}
+
+/* A light whiteboard should read like the dark document view: smooth dark
+   glass with its rim, not the reeded scrim, which hides the refraction
+   entirely. Darken the refraction itself instead, so white paper behind the
+   controls comes out as dark glass and the white icons keep their contrast. */
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+  content: none;
+}
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] > canvas {
+  filter: brightness(0.12);
 }
 
 /* The WebGL canvas replaces the CSS glass's own border/shadow as the focus

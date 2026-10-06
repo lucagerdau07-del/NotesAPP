@@ -139,10 +139,12 @@ export default function WhiteboardEditor({
   // A locked object (an imported PDF) is paper: marking ink never drags it along.
   const unlockedObjects = pageObjects.filter((o) => !o.locked);
   const { comments, addComment, editComment, removeComment } = useComments(document.documentId);
+  // An opened PDF is paper, like an imported note, so its controls keep the scrim.
+  const hasPaper = unlockedObjects.length < pageObjects.length;
 
   useEffect(() => {
     const bg = document.pages[0]?.background;
-    const isLight = isLightBackground(bg);
+    const isLight = hasPaper || isLightBackground(bg);
     const shell = containerRef.current?.closest(".editor-shell");
     if (shell) {
       if (isLight) {
@@ -153,7 +155,7 @@ export default function WhiteboardEditor({
         shell.classList.remove("light-doc");
       }
     }
-  }, [document.pages]);
+  }, [document.pages, hasPaper]);
 
   const mapOrigin = useCallback(
     () => worldToScreen(camera, { x: 0, y: 0 }),
