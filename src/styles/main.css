@@ -2442,6 +2442,29 @@ body::after {
   text-align: right;
 }
 
+.thickness-val-input {
+  font: 600 11px ui-monospace, monospace;
+  color: #E9E6DF;
+  width: 44px;
+  padding: 4px 2px;
+  text-align: right;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.thickness-val-input::-webkit-outer-spin-button,
+.thickness-val-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.thickness-slider-wrap:has(.thickness-val-input) .thickness-val {
+  width: auto;
+}
+
 /* Stroke preview box */
 .stroke-preview-box {
   width: 100%;

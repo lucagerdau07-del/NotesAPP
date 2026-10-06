@@ -2,7 +2,9 @@
 import { useCallback, useState } from "react";
 
 const MIN_SCALE = 0.1;
-const MAX_SCALE = 4;
+// The whiteboard canvas is one viewport big whatever the zoom, so deep zoom
+// costs no extra memory.
+const MAX_SCALE = 16;
 
 export function clampWhiteboardScale(scale) {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));

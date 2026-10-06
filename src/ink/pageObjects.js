@@ -76,7 +76,7 @@ export function createPageObject(input = {}) {
     width: finite(source.width, 160),
     height: finite(source.height, 90),
     color: text(source.color, "#3E7BD8"),
-    strokeWidth: Math.max(1, finite(source.strokeWidth, 3)),
+    strokeWidth: Math.max(0.1, finite(source.strokeWidth, 3)),
     text: text(source.text),
     href: text(source.href),
     src: text(source.src),

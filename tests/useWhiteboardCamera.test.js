@@ -26,10 +26,10 @@ describe('useWhiteboardCamera', () => {
     expect(100 / camera.scale + camera.y).toBeCloseTo(100);
   });
 
-  it('clamps scale to [0.1, 4]', () => {
+  it('clamps scale to [0.1, 16]', () => {
     const { result } = renderHook(() => useWhiteboardCamera({ x: 0, y: 0, scale: 1 }));
     act(() => result.current.zoomBy({ x: 0, y: 0 }, 100));
-    expect(result.current.camera.scale).toBe(4);
+    expect(result.current.camera.scale).toBe(16);
     act(() => result.current.zoomBy({ x: 0, y: 0 }, 0.0001));
     expect(result.current.camera.scale).toBe(0.1);
   });

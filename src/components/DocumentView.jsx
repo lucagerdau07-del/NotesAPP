@@ -540,6 +540,10 @@ export function PenSettingsPopover({
   const thicknessPresets = isHighlighter
     ? [10, 16, 24, 32, 44]
     : [1.5, 3, 5, 8, 14];
+  // Zoomed in far, a 1px pen is a fat line: allow hairlines down to 0.1.
+  const widthMin = isHighlighter ? 8 : 0.1;
+  const widthMax = isHighlighter ? 48 : 20;
+  const widthStep = isHighlighter ? 1 : 0.1;
 
   const tools = [
     { id: "pen", name: "Stift", icon: <PenLine size={15} /> },
@@ -628,14 +632,35 @@ export function PenSettingsPopover({
       <div className="thickness-slider-wrap">
         <input
           type="range"
-          min={isHighlighter ? "8" : "1"}
-          max={isHighlighter ? "48" : "20"}
-          step={isHighlighter ? "1" : "0.5"}
+          min={widthMin}
+          max={widthMax}
+          step={widthStep}
           value={rawLineWidth || 3}
           onChange={(e) => setLineWidth?.(parseFloat(e.target.value))}
           className="thickness-slider"
         />
-        <span className="thickness-val">{rawLineWidth || 3}px</span>
+        {/* Typed, not live: a controlled field would snap back mid-keystroke
+            ("0" is no valid width on the way to "0.5"), so commit on blur. */}
+        <input
+          key={rawLineWidth}
+          type="number"
+          min={widthMin}
+          max={widthMax}
+          step={widthStep}
+          defaultValue={rawLineWidth || 3}
+          onBlur={(e) => {
+            const typed = parseFloat(e.target.value);
+            if (!Number.isFinite(typed)) {
+              e.target.value = rawLineWidth || 3;
+              return;
+            }
+            setLineWidth?.(Math.min(widthMax, Math.max(widthMin, Math.round(typed * 10) / 10)));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+          className="thickness-val-input"
+          data-testid="pen-width-input"
+        />
+        <span className="thickness-val">px</span>
       </div>
 
       {/* Stroke Preview */}
@@ -1007,6 +1032,11 @@ const DOC_SNAP_THRESHOLD_X = 24;
 // apart or together and still count as a pan. Calibration knob: raise it if
 // scrolling still zooms, lower it if a small deliberate pinch feels sticky.
 const PINCH_DEAD_ZONE = Math.log(1.08);
+// Imported pages only allocate the visible slice of a canvas (see
+// pageCanvasSlice), so their memory cost stops following the zoom. A note's one
+// ink canvas is capped at MAX_CANVAS_DIMENSION and just gets blurry past ~5x.
+const MAX_ZOOM = 6;
+const MAX_ZOOM_IMPORTED = 16;
 
 // Two fingers never keep their distance exactly while they pan, and
 // committing that drift on release re-lays-out the document, reallocates the
@@ -1314,6 +1344,7 @@ export default function DocumentView({
   const imageInputRef = useRef(null);
 
   const [zoom, setZoom] = useState(1);
+  const maxZoom = note?.kind === "imported" ? MAX_ZOOM_IMPORTED : MAX_ZOOM;
   const pagesCountRef = useRef(1);
   useEffect(() => {
     pagesCountRef.current = pagesCount;
@@ -2845,7 +2876,7 @@ export default function DocumentView({
 
         const newZoom = Math.max(
           0.5,
-          Math.min(6, startZoom * pinchZoomRatio(currentDistance / startDist)),
+          Math.min(maxZoom, startZoom * pinchZoomRatio(currentDistance / startDist)),
         );
         const zoomRatio = newZoom / startZoom;
 
@@ -2959,7 +2990,7 @@ export default function DocumentView({
                 e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
               const newZoom = Math.max(
                 0.5,
-                Math.min(6, prev - normalizedDeltaY * 0.0015),
+                Math.min(maxZoom, prev - normalizedDeltaY * 0.0015),
               );
               if (focusBoxState?.focusBox && newZoom !== prev) {
                 const ratio = prev / newZoom;
@@ -3012,7 +3043,7 @@ export default function DocumentView({
     };
     scrollContainer.addEventListener("wheel", handleWheel, { passive: false });
     return () => scrollContainer.removeEventListener("wheel", handleWheel);
-  }, [focusBoxState]);
+  }, [focusBoxState, maxZoom]);
 
   // Hand the previewed zoom over to React. The transform stays on until the new
   // layout exists, so the layout effect below is what drops it and applies the
