@@ -28,7 +28,9 @@ body {
 
 .split-layout {
   display: flex;
-  width: 100vw;
+  /* Not 100vw: inside a split-screen pane that is wider than the pane and
+     lets the pane scroll sideways. */
+  width: 100%;
   height: 100vh;
   gap: 16px;
   padding: 16px 8px;
@@ -242,22 +244,12 @@ body {
 }
 
 /* Masonry Board (Image 2 style) */
+/* Column count follows the space the grid really gets (the docked overview
+   column and the window/pane width both eat into it), not the viewport. */
 .lib-masonry-grid {
-  column-count: 3;
+  column-width: 320px;
   column-gap: 16px;
   width: 100%;
-}
-
-@media (max-width: 1280px) {
-  .lib-masonry-grid {
-    column-count: 2;
-  }
-}
-
-@media (max-width: 768px) {
-  .lib-masonry-grid {
-    column-count: 1;
-  }
 }
 
 .lib-masonry-grid .lib-card {
@@ -1281,11 +1273,13 @@ body::after {
    the buttons never move, the chat fills the rest. */
 .editor-sidebar.panel-open {
   width: min(clamp(520px, 42vw, 800px), calc(100vw - 24px));
+  /* The shell is a window or a split pane - never open wider than it is. */
+  max-width: calc(100% - 16px);
   border-radius: 30px;
 }
 
 .editor-sidebar.browser-fullscreen {
-  width: calc(100vw - 16px);
+  width: calc(100% - 16px);
 }
 
 .editor-sidebar.is-resizing {
@@ -3231,10 +3225,10 @@ body::after {
    with a real gap, not one continuous box. */
 .agent-panel {
   position: absolute;
-  left: 106px;
+  left: var(--lib-left, 106px);
   top: 20px;
   bottom: 86px;
-  width: 440px;
+  width: min(440px, calc(100% - var(--lib-left, 106px) - 24px));
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -3756,7 +3750,9 @@ body::after {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 26px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  /* Not "all": the cluster's right offsets are chained to this button's
+     measured width, which must not animate when the tier drops its label. */
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
 }
 .lib-file-open:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
@@ -4712,12 +4708,6 @@ body::after {
   font: 400 12px/1.5 Manrope, sans-serif;
 }
 
-@media (max-width: 720px) {
-  .editor-sidebar.panel-open {
-    width: calc(100vw - 16px);
-  }
-}
-
 @container (max-width: 460px) {
   .browser-toolbar {
     gap: 1px;
@@ -5435,4 +5425,140 @@ body::after {
   box-shadow:
     inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+
+/* ==========================================================================
+   Width tiers: xs <480, sm <720, md <1100, lg (see hooks/useWidthTier.js).
+   The tier is the element's own width, so a split-screen pane and a narrow
+   window adapt the same way.
+   ========================================================================== */
+
+/* --- Editor (window or pane) --- */
+.editor-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .rail-btn-optional {
+  display: none;
+}
+
+/* The pills are absolutely placed, so cap the title pill before it runs
+   under the actions pill: 3 buttons (126px) + 26px inset + gap, or 4 with
+   the pane's close button. */
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .editor-title-pill {
+  --actions-reserve: 164px;
+  min-width: 0;
+  max-width: max(64px, calc(100% - 104px - var(--actions-reserve)));
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]):not([data-panes="1"]) .editor-title-pill {
+  --actions-reserve: 198px;
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .editor-title-pill.no-rail {
+  max-width: max(64px, calc(100% - 24px - var(--actions-reserve)));
+}
+
+.editor-shell[data-tier="xs"] :is(.editor-subject, .editor-title-sep) {
+  display: none;
+}
+
+/* --- Library --- */
+.lib-root {
+  --lib-left: 106px;
+  --lib-content-left: 570px;
+  --lib-top: 82px;
+}
+
+/* Below lg the overview column no longer sits beside the cards (the clock
+   button slides it over them), so they start right after the rail. */
+.lib-root:not([data-tier="lg"]) {
+  --lib-content-left: var(--lib-left);
+}
+
+.lib-root:not([data-tier="lg"]) .lib-btn-label {
+  display: none;
+}
+
+.lib-root:not([data-tier="lg"]) :is(.lib-newnote, .lib-file-open) {
+  width: 52px;
+  padding: 0 !important;
+  justify-content: center;
+}
+
+.lib-overview-btn[data-active="true"] {
+  background: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+.lib-root .liquid-control-search[data-agent-open="true"] {
+  max-width: calc(100% - var(--lib-left) - 24px);
+}
+
+/* sm/xs: slim rail, and the header splits into two rows - search on top,
+   view/sort + actions below. */
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) {
+  --lib-left: 74px;
+  --lib-top: 146px;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-navigation {
+  left: 8px !important;
+  width: 56px !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-search:not([data-agent-open="true"]) {
+  right: 24px;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) :is(.liquid-control-view-sort, .lib-newnote, .lib-file-open) {
+  top: 84px !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-view-sort {
+  right: auto !important;
+  left: var(--lib-left);
+}
+
+.lib-root[data-tier="xs"] .liquid-control-view-sort {
+  display: none;
+}
+
+/* --- Settings --- */
+@media (max-width: 640px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .settings-topbar > span {
+    display: none;
+  }
+
+  .settings-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .settings-nav-label {
+    display: none;
+  }
+
+  .settings-nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .settings-content {
+    padding: 16px;
+  }
 }

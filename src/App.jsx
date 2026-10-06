@@ -13,6 +13,7 @@ import { BrowserLinkProvider } from "./browser/BrowserLinkContext";
 import { isInternalBrowserUrl } from "./browser/browserInput";
 import reededGlassBackground from "./assets/reeded-glass-background.png";
 import useLiquidGlass from "./hooks/useLiquidGlass";
+import useWidthTier from "./hooks/useWidthTier";
 import { browserNoteRepository } from "./storage/noteRepository.js";
 import { browserDocumentRepository } from "./storage/documentRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "./documents/exportDocument.js";
@@ -49,6 +50,7 @@ function savedRailWidth() {
 
 function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount = 1, onSplit, onClosePane }) {
   const glassRootRef = useRef(null);
+  const tier = useWidthTier(glassRootRef);
   // The rail is rendered here so it is a direct child of the glass root (the
   // library only picks up ":scope > [data-liquid-glass-control]"); DocumentView
   // portals its buttons in. Keeping it as a state-backed element rather than a
@@ -264,6 +266,8 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
     <div
       className={`editor-shell ${isImmersive ? "immersive" : ""} ${isLightDoc ? "light-doc" : ""}`}
       data-document-theme={isLightDoc ? "light" : "dark"}
+      data-tier={tier}
+      data-panes={paneCount}
       data-whiteboard={activeNote?.pageKind === "whiteboard" ? "" : undefined}
       ref={glassRootRef}
     >
@@ -314,6 +318,7 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
           </span>
         )}
         <span
+          className="editor-title-sep"
           style={{
             width: 1,
             height: 18,
@@ -336,7 +341,7 @@ function Editor({ activeNote, onBack, isActive = true, hasRail = true, paneCount
       </div>
       <div className="editor-actions-pill" data-liquid-glass-control="actions">
         <button
-          className="rail-btn"
+          className="rail-btn rail-btn-optional"
           title="Vollbild"
           onClick={() => setIsImmersive(true)}
         >

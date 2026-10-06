@@ -59,6 +59,7 @@ import englischCard from "../assets/subjects/englisch-card.jpg";
 import spanischCard from "../assets/subjects/spanisch-card.jpg";
 import reededGlassBackground from "../assets/reeded-glass-background.png";
 import useLiquidGlass from "../hooks/useLiquidGlass";
+import useWidthTier from "../hooks/useWidthTier";
 import useDocumentLibrary from "../hooks/useDocumentLibrary";
 import { useBackHandler } from "../lib/backStack";
 import useDocumentSource from "../hooks/useDocumentSource.js";
@@ -3130,10 +3131,15 @@ export default function Library({
   const [isNewDocDialogOpen, setIsNewDocDialogOpen] = useState(false);
   const [sortToast, setSortToast] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
+  // Below the "lg" tier the Anstehend/Stundenplan column has no room beside
+  // the cards; the clock button in the rail slides it over them instead.
+  const [overviewPeek, setOverviewPeek] = useState(false);
   const [detailNote, setDetailNote] = useState(null);
   const [folderDialog, setFolderDialog] = useState(null); // null | { mode: "create", parentId } | { mode: "rename", folder }
   const toastTimeoutRef = useRef(null);
   const liquidGlassRootRef = useRef(null);
+  const tier = useWidthTier(liquidGlassRootRef);
+  const overviewDocked = tier === "lg";
   const agentScrollRef = useRef(null);
   const agentDropRef = useRef(null);
   const pillDragRef = useRef(null);
@@ -3315,6 +3321,7 @@ export default function Library({
   );
   useBackHandler(Boolean(detailNote), () => setDetailNote(null));
   useBackHandler(agentOpen && !detailNote, () => setAgentOpen(false));
+  useBackHandler(overviewPeek && !overviewDocked && !agentOpen && !detailNote, () => setOverviewPeek(false));
   useBackHandler(isNewDocDialogOpen, () => setIsNewDocDialogOpen(false));
   useBackHandler(iservOpen, () => setIservOpen(false));
   useBackHandler(folderDialog !== null, () => setFolderDialog(null));
@@ -3458,6 +3465,8 @@ export default function Library({
   return (
     <div
       ref={liquidGlassRootRef}
+      className="lib-root"
+      data-tier={tier}
       style={{
         position: "relative",
         width: "100vw",
@@ -3563,11 +3572,19 @@ export default function Library({
         >
           <LayoutGrid size={19} />
         </div>
-        <div
+        <button
+          type="button"
+          className="lib-overview-btn"
+          data-active={!overviewDocked && overviewPeek}
+          onClick={() => setOverviewPeek((open) => !open)}
+          title="Anstehend & Stundenplan"
+          aria-label="Anstehend und Stundenplan"
           style={{
             width: 44,
             height: 44,
             borderRadius: 15,
+            border: "none",
+            background: "transparent",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -3576,7 +3593,7 @@ export default function Library({
           }}
         >
           <Clock size={19} />
-        </div>
+        </button>
         <div
           style={{
             width: 44,
@@ -3685,16 +3702,17 @@ export default function Library({
         className="liquid-glass-pill liquid-control liquid-control-search"
         data-liquid-glass-control="search"
         data-config={JSON.stringify({ cornerRadius: 26, zRadius: 24 })}
+        data-agent-open={agentOpen}
         style={{
           position: "absolute",
-          left: 106,
+          left: "var(--lib-left)",
           top: agentOpen ? "auto" : "calc(20px + env(safe-area-inset-top, 0px))",
           bottom: agentOpen ? 20 : "auto",
           zIndex: 30,
           height: 52,
           width: 440,
           // never run under the right-hand button cluster (view-sort pill ≈140px wide)
-          maxWidth: agentOpen ? undefined : `calc(100% - 106px - ${24 + newNoteWidth + 14 + fileOpenWidth + 14 + ISERV_BUTTON_SIZE + 14 + 140 + 14}px)`,
+          maxWidth: agentOpen ? undefined : `calc(100% - var(--lib-left) - ${24 + newNoteWidth + 14 + fileOpenWidth + 14 + ISERV_BUTTON_SIZE + 14 + 140 + 14}px)`,
           padding: "0 20px 0 16px",
           gap: 12,
           cursor: "text",
@@ -3867,6 +3885,7 @@ export default function Library({
         ref={newNoteRef}
         onClick={() => setIsNewDocDialogOpen(true)}
         className="liquid-glass-pill lib-newnote"
+        title={selectedSubject ? `Neue ${selectedSubject.name}-Notiz` : "Neue Notiz"}
         style={{
           position: "absolute",
           right: 24,
@@ -3888,6 +3907,7 @@ export default function Library({
       >
         <PenLine size={17} />
         <span
+          className="lib-btn-label"
           style={{
             font: '700 13px "Bricolage Grotesque",sans-serif',
             whiteSpace: "nowrap",
@@ -3928,6 +3948,7 @@ export default function Library({
       >
         <FileUp size={17} />
         <span
+          className="lib-btn-label"
           style={{
             font: '700 13px "Bricolage Grotesque",sans-serif',
             whiteSpace: "nowrap",
@@ -4071,8 +4092,8 @@ export default function Library({
         className="lib-scroll"
         style={{
           position: "absolute",
-          left: 570,
-          top: 82,
+          left: "var(--lib-content-left)",
+          top: "var(--lib-top)",
           right: 0,
           bottom: 20,
           overflowY: "auto",
@@ -4321,10 +4342,10 @@ export default function Library({
       {/* left overview: shown in the space the agent panel occupies once it's collapsed */}
       <div
         className="agent-panel"
-        data-open={!agentOpen && !detailNote}
+        data-open={!agentOpen && !detailNote && (overviewDocked || overviewPeek)}
         data-testid="left-overview-panel"
         style={{
-          top: "calc(82px + env(safe-area-inset-top, 0px))",
+          top: "calc(var(--lib-top) + env(safe-area-inset-top, 0px))",
           bottom: 20,
         }}
       >
@@ -4506,7 +4527,7 @@ export default function Library({
         data-open={Boolean(detailNote)}
         data-testid="note-detail-overlay"
         style={{
-          top: "calc(82px + env(safe-area-inset-top, 0px))",
+          top: "calc(var(--lib-top) + env(safe-area-inset-top, 0px))",
           bottom: 20,
         }}
       >
