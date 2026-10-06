@@ -2188,6 +2188,20 @@ body::after {
   position: relative;
 }
 
+/* Ecke nur am aktiven Tool: nochmal tippen öffnet seine Einstellungen. */
+.rail-btn.has-settings.active::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  opacity: 0.9;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
 .rail-btn-badge {
   position: absolute;
   top: 3px;
@@ -3694,6 +3708,47 @@ body::after {
   display: flex;
   gap: 6px;
   margin-bottom: 14px;
+}
+
+.text-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.text-row .text-setting-label {
+  flex: none;
+  width: 54px;
+  margin: 0;
+}
+
+.text-row .text-style-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+
+.text-row .text-color-btn {
+  height: 28px;
+}
+
+.text-row .thickness-val {
+  flex: none;
+  width: 44px;
+}
+
+.text-select {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: #F1EEE7;
+  font: 500 12px 'Manrope', sans-serif;
+  color-scheme: dark;
 }
 
 .text-style-btn {

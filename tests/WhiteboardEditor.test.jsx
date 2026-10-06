@@ -258,6 +258,18 @@ describe('WhiteboardEditor', () => {
     expect(eraserBtn.className).toContain('active');
   });
 
+  it('pen is active by default, second tap opens settings, hand button owns move mode', () => {
+    const setInputMode = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ setInputMode })} />);
+    const penBtn = screen.getByTestId('pen-tool-btn');
+    expect(penBtn).toHaveClass('active');
+    fireEvent.click(penBtn);
+    expect(screen.getByTestId('pen-settings-popover')).toBeInTheDocument();
+    expect(setInputMode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('move-tool-btn'));
+    expect(setInputMode).toHaveBeenCalledWith('move');
+  });
+
   it("has the document rail: the active color slot opens the color wheel", () => {
     render(<WhiteboardEditor inkController={createControllerDouble()} />);
     fireEvent.click(screen.getByTestId("color-slot-0"));

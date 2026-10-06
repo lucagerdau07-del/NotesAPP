@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { useState } from 'react';
 import { render, screen, fireEvent, createEvent } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import DocumentView from '../src/components/DocumentView';
+import DocumentView, { TextSettingsPopover } from '../src/components/DocumentView';
 import PageObjectLayer from '../src/components/document/PageObjectLayer.jsx';
 import LassoSelectionLayer from '../src/components/document/LassoSelectionLayer.jsx';
 
@@ -604,6 +604,77 @@ test('opens and interacts with pen settings popover', () => {
   const presetBtn = screen.getByTitle('5px');
   fireEvent.click(presetBtn);
   expect(setLineWidth).toHaveBeenCalledWith(5);
+});
+
+test('hand button toggles move mode without touching the pen settings', () => {
+  const setInputMode = vi.fn();
+  const { rerender } = render(
+    <DocumentView inkController={createControllerDouble({ setInputMode })} toolbarState={toolState()} />,
+  );
+
+  fireEvent.click(screen.getByTestId('move-tool-btn'));
+  expect(setInputMode).toHaveBeenLastCalledWith('move');
+  expect(screen.queryByTestId('pen-settings-popover')).toBeNull();
+
+  rerender(
+    <DocumentView
+      inkController={createControllerDouble({ setInputMode, inputMode: 'move' })}
+      toolbarState={toolState()}
+    />,
+  );
+  expect(screen.getByTestId('move-tool-btn')).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByTestId('pen-tool-btn')).not.toHaveClass('active');
+  fireEvent.click(screen.getByTestId('move-tool-btn'));
+  expect(setInputMode).toHaveBeenLastCalledWith('stylus');
+});
+
+test('pen tap selects the pen first, second tap opens its settings', () => {
+  const setIsEraser = vi.fn();
+  const controller = createControllerDouble();
+  const { rerender } = render(
+    <DocumentView inkController={controller} toolbarState={toolState({ isEraser: true, setIsEraser })} />,
+  );
+
+  fireEvent.click(screen.getByTestId('pen-tool-btn'));
+  expect(setIsEraser).toHaveBeenCalledWith(false);
+  expect(screen.queryByTestId('pen-settings-popover')).toBeNull();
+
+  rerender(<DocumentView inkController={controller} toolbarState={toolState({ setIsEraser })} />);
+  expect(screen.getByTestId('pen-tool-btn')).toHaveClass('active');
+  fireEvent.click(screen.getByTestId('pen-tool-btn'));
+  expect(screen.getByTestId('pen-settings-popover')).toBeTruthy();
+  fireEvent.click(screen.getByTestId('pen-tool-btn'));
+  expect(screen.queryByTestId('pen-settings-popover')).toBeNull();
+});
+
+test('text tap starts placing, second tap opens text settings', () => {
+  render(<DocumentView inkController={createControllerDouble()} toolbarState={toolState()} />);
+
+  fireEvent.click(screen.getByTestId('text-tool-btn'));
+  expect(screen.getByTestId('text-tool-btn')).toHaveClass('active');
+  expect(screen.queryByTestId('text-settings-popover')).toBeNull();
+
+  fireEvent.click(screen.getByTestId('text-tool-btn'));
+  expect(screen.getByTestId('text-settings-popover')).toBeTruthy();
+});
+
+test('text settings fold font, alignment and line snapping into dropdowns', () => {
+  const onStyleChange = vi.fn();
+  const style = { fontFamily: 'sans', fontSize: 24, textAlign: 'left', color: '#EFECE4', snapToLines: false, lineStep: 1 };
+  render(
+    <TextSettingsPopover style={style} onStyleChange={onStyleChange} paperStyle="lined" onInsert={vi.fn()} onClose={vi.fn()} />,
+  );
+
+  fireEvent.change(screen.getByTestId('text-font-select'), { target: { value: 'serif' } });
+  expect(onStyleChange).toHaveBeenLastCalledWith({ fontFamily: 'serif' });
+  fireEvent.change(screen.getByTestId('text-align-select'), { target: { value: 'center' } });
+  expect(onStyleChange).toHaveBeenLastCalledWith({ textAlign: 'center' });
+  fireEvent.change(screen.getByTestId('text-snap-select'), { target: { value: '2' } });
+  expect(onStyleChange).toHaveBeenLastCalledWith({ snapToLines: true, lineStep: 2 });
+  fireEvent.change(screen.getByTestId('text-snap-select'), { target: { value: 'free' } });
+  expect(onStyleChange).toHaveBeenLastCalledWith({ snapToLines: false });
+  fireEvent.click(screen.getByTestId('text-bold'));
+  expect(onStyleChange).toHaveBeenLastCalledWith({ bold: true });
 });
 
 test('opens color wheel popover and updates color', () => {

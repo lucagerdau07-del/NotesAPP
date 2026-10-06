@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isLightBackground } from "../documents/pageStyles.js";
-import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Move, Columns2 } from "lucide-react";
+import { Undo2, Redo2, PenLine, Eraser, LassoSelect, Shapes, PaintBucket, Type, MessageSquare, Layers, Hand, Columns2 } from "lucide-react";
 import useInkPointer from "../hooks/useInkPointer.js";
 import useWhiteboardCamera, { clampWhiteboardScale } from "../hooks/useWhiteboardCamera.js";
 import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
@@ -976,7 +976,7 @@ export default function WhiteboardEditor({
     setIsEraser(false);
   };
 
-  const PenIcon = isMoveMode ? Move : PEN_TOOL_ICONS[inkController.tool] || PenLine;
+  const PenIcon = PEN_TOOL_ICONS[inkController.tool] || PenLine;
   const isPenActive =
     Boolean(PEN_TOOL_ICONS[inkController.tool]) &&
     !isEraser &&
@@ -1040,7 +1040,25 @@ export default function WhiteboardEditor({
       </button>
       <div className="rail-divider" />
       <button
-        className={`rail-btn pen-rail-btn ${isPenActive || isMoveMode ? "active" : ""}`}
+        className={`rail-btn ${isMoveMode ? "active" : ""}`}
+        onClick={() => {
+          setIsEraser(false);
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+          setPlacingTool(null);
+          setIsDesignToolsOpen(false);
+          setIsPenSettingsOpen(false);
+          inkController.setInputMode?.(isMoveMode ? "stylus" : "move");
+        }}
+        title="Bewegen (Seite verschieben)"
+        aria-pressed={isMoveMode}
+        data-testid="move-tool-btn"
+      >
+        <Hand size={18} />
+      </button>
+      <button
+        className={`rail-btn has-settings pen-rail-btn ${isPenActive ? "active" : ""}`}
         onPointerDown={(e) => {
           penLongPressFired.current = false;
           const buttonEl = e.currentTarget;
@@ -1057,27 +1075,32 @@ export default function WhiteboardEditor({
         }}
         onPointerUp={() => clearTimeout(penLongPressTimer.current)}
         onPointerLeave={() => clearTimeout(penLongPressTimer.current)}
-        onClick={() => {
+        onClick={(e) => {
           if (penLongPressFired.current) return;
-          if (isEraser || isBucketMode || isLassoMode || placingTool) {
-            setIsEraser(false);
-            setIsBucketMode(false);
-            setIsLassoMode(false);
-            setLassoSelection(null);
-            setPlacingTool(null);
-            if (isMoveMode) inkController.setInputMode?.("stylus");
-          } else {
-            inkController.setInputMode?.(isMoveMode ? "stylus" : "move");
+          if (isPenActive) {
+            anchorPopoverToButton(e.currentTarget);
+            setIsPenSettingsOpen((prev) => !prev);
+            setIsColorPickerOpen(false);
+            setIsEraserSettingsOpen(false);
+            setIsTextSettingsOpen(false);
+            return;
           }
+          setIsEraser(false);
+          setIsBucketMode(false);
+          setIsLassoMode(false);
+          setLassoSelection(null);
+          setPlacingTool(null);
+          setIsDesignToolsOpen(false);
           setIsPenSettingsOpen(false);
+          if (isMoveMode) inkController.setInputMode?.("stylus");
         }}
-        title="Stift: Klick = Bewegen, Halten = Einstellungen"
+        title="Stift: Nochmal tippen = Einstellungen"
         data-testid="pen-tool-btn"
       >
         <PenIcon size={18} />
       </button>
       <button
-        className={`rail-btn eraser-rail-btn ${isEraser ? "active" : ""}`}
+        className={`rail-btn has-settings eraser-rail-btn ${isEraser ? "active" : ""}`}
         onClick={(e) => {
           if (isEraser) {
             anchorPopoverToButton(e.currentTarget);
@@ -1161,7 +1184,7 @@ export default function WhiteboardEditor({
         {isDesignPlacing ? placingTool.icon : <Shapes size={18} />}
       </button>
       <button
-        className={`rail-btn text-rail-btn ${
+        className={`rail-btn has-settings text-rail-btn ${
           isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
         }`}
         onPointerDown={(e) => {
@@ -1179,9 +1202,18 @@ export default function WhiteboardEditor({
         }}
         onPointerUp={() => clearTimeout(textLongPressTimer.current)}
         onPointerLeave={() => clearTimeout(textLongPressTimer.current)}
-        onClick={() => {
+        onClick={(e) => {
           if (textLongPressFired.current) return;
-          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+          if (placingTool?.id === "text") {
+            anchorPopoverToButton(e.currentTarget);
+            setIsTextSettingsOpen((prev) => !prev);
+            setIsDesignToolsOpen(false);
+            setIsPenSettingsOpen(false);
+            setIsEraserSettingsOpen(false);
+            setIsColorPickerOpen(false);
+            return;
+          }
+          setPlacingTool(TEXT_TOOL);
           setIsBucketMode(false);
           setIsLassoMode(false);
           setLassoSelection(null);
@@ -1190,8 +1222,8 @@ export default function WhiteboardEditor({
         }}
         title={
           placingTool?.id === "text"
-            ? "Text ziehen zum Platzieren (Klick zum Abbrechen)"
-            : "Text: Klick = Platzieren, Halten = Einstellungen"
+            ? "Text ziehen zum Platzieren, nochmal tippen = Einstellungen"
+            : "Text: Tippen = Platzieren"
         }
         data-testid="text-tool-btn"
       >

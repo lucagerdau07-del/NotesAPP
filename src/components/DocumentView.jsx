@@ -17,7 +17,7 @@ import {
   PenTool,
   Pencil,
   Plus,
-  Move,
+  Hand,
   ArrowUpRight,
   Minus,
   Square,
@@ -27,12 +27,8 @@ import {
   Link2,
   Shapes,
   PaintBucket,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Bold,
   Italic,
-  Baseline,
   ScanSearch,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
@@ -88,8 +84,6 @@ export const TEXT_TOOL = {
   width: 24,
   height: 34,
 };
-
-const TEXT_SIZE_PRESETS = [14, 18, 24, 32, 48];
 
 // Circle-to-search: an armed placingTool exactly like the shape tools (same
 // drag-a-box mechanic, already wired for pointerDown/Move/Up) — only its
@@ -165,6 +159,11 @@ export function DesignToolsPopover({ onInsert, onClose, top = 120 }) {
 }
 
 const TEXT_COLORS = ["#EFECE4", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#141418"];
+const ALIGNMENTS = [
+  { id: "left", name: "Links" },
+  { id: "center", name: "Mitte" },
+  { id: "right", name: "Rechts" },
+];
 
 // Edits the selected text object when there is one, otherwise the defaults the
 // next insert will use — same controls either way.
@@ -185,11 +184,6 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
     return () => document.removeEventListener("pointerdown", handleDown);
   }, [onClose]);
 
-  const alignments = [
-    { id: "left", icon: <AlignLeft size={14} /> },
-    { id: "center", icon: <AlignCenter size={14} /> },
-    { id: "right", icon: <AlignRight size={14} /> },
-  ];
   const snapHint = { lined: "Linien", grid: "Karo", dotted: "Punktraster" }[paperStyle] ||
     "unsichtbarem Raster";
 
@@ -197,7 +191,7 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
     <div
       ref={popoverRef}
       className="editor-popover text-settings-popover"
-      style={{ top, width: 250 }}
+      style={{ top, width: 270, maxHeight: `calc(100% - ${top}px - 8px)`, overflowY: "auto" }}
       data-testid="text-settings-popover"
     >
       <div className="editor-popover-header">
@@ -209,37 +203,24 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
         </button>
       </div>
 
-      <div className="tool-types-grid">
-        {FONT_STACKS.map((font) => (
-          <button
-            key={font.id}
-            className={`tool-type-btn ${style.fontFamily === font.id ? "active" : ""}`}
-            data-testid={`text-font-${font.id}`}
-            onClick={() => onStyleChange({ fontFamily: font.id })}
-          >
-            <span style={{ fontFamily: font.stack, fontSize: 15 }}>Ag</span>
-            <span>{font.name}</span>
-          </button>
-        ))}
+      <div className="text-row">
+        <span className="text-setting-label">SCHRIFT</span>
+        <select
+          className="text-select"
+          value={style.fontFamily ?? FONT_STACKS[0].id}
+          data-testid="text-font-select"
+          onChange={(e) => onStyleChange({ fontFamily: e.target.value })}
+        >
+          {FONT_STACKS.map((font) => (
+            <option key={font.id} value={font.id}>
+              {font.name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <div className="text-setting-label">
-        SCHRIFTGRÖSSE ({style.snapToLines ? "vom Raster" : `${style.fontSize}px`})
-      </div>
-      <div className="thickness-presets">
-        {TEXT_SIZE_PRESETS.map((size) => (
-          <button
-            key={size}
-            className={`thickness-preset-btn ${style.fontSize === size ? "active" : ""}`}
-            disabled={style.snapToLines}
-            onClick={() => onStyleChange({ fontSize: size })}
-            title={`${size}px`}
-          >
-            <span style={{ fontSize: Math.min(18, size * 0.42), lineHeight: 1 }}>A</span>
-          </button>
-        ))}
-      </div>
-      <div className="thickness-slider-wrap">
+      <div className="text-row">
+        <span className="text-setting-label">GRÖSSE</span>
         <input
           type="range"
           min="8"
@@ -251,24 +232,27 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
           className="thickness-slider"
           data-testid="text-size-slider"
         />
-        <span className="thickness-val">{style.fontSize}px</span>
+        <span className="thickness-val">{style.snapToLines ? "Raster" : `${style.fontSize}px`}</span>
       </div>
 
-      <div className="text-setting-label">AUSRICHTUNG & STIL</div>
-      <div className="text-style-row">
-        {alignments.map((item) => (
-          <button
-            key={item.id}
-            className={`text-style-btn ${style.textAlign === item.id ? "active" : ""}`}
-            data-testid={`text-align-${item.id}`}
-            onClick={() => onStyleChange({ textAlign: item.id })}
-          >
-            {item.icon}
-          </button>
-        ))}
+      <div className="text-row">
+        <span className="text-setting-label">STIL</span>
+        <select
+          className="text-select"
+          value={style.textAlign ?? "left"}
+          data-testid="text-align-select"
+          onChange={(e) => onStyleChange({ textAlign: e.target.value })}
+        >
+          {ALIGNMENTS.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
         <button
           className={`text-style-btn ${style.bold ? "active" : ""}`}
           data-testid="text-bold"
+          title="Fett"
           onClick={() => onStyleChange({ bold: !style.bold })}
         >
           <Bold size={14} />
@@ -276,14 +260,15 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
         <button
           className={`text-style-btn ${style.italic ? "active" : ""}`}
           data-testid="text-italic"
+          title="Kursiv"
           onClick={() => onStyleChange({ italic: !style.italic })}
         >
           <Italic size={14} />
         </button>
       </div>
 
-      <div className="text-setting-label">FARBE</div>
-      <div className="text-style-row">
+      <div className="text-row">
+        <span className="text-setting-label">FARBE</span>
         {TEXT_COLORS.map((swatch) => (
           <button
             key={swatch}
@@ -297,30 +282,25 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
         ))}
       </div>
 
-      <div className="text-setting-label">AUF LINIEN SCHREIBEN</div>
-      <button
-        className={`text-snap-toggle ${style.snapToLines ? "active" : ""}`}
-        data-testid="text-snap-toggle"
-        onClick={() => onStyleChange({ snapToLines: !style.snapToLines })}
-      >
-        <Baseline size={14} />
-        <span>{style.snapToLines ? `Rastet auf ${snapHint}` : "Frei platzieren"}</span>
-      </button>
-      {style.snapToLines && (
-        <div className="text-style-row" style={{ marginTop: 6 }}>
-          {[1, 2].map((step) => (
-            <button
-              key={step}
-              className={`text-style-btn ${style.lineStep === step ? "active" : ""}`}
-              data-testid={`text-line-step-${step}`}
-              onClick={() => onStyleChange({ lineStep: step })}
-              style={{ flex: 1 }}
-            >
-              {step === 1 ? "1 Zeile" : "2 Zeilen"}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="text-row">
+        <span className="text-setting-label">LAGE</span>
+        <select
+          className="text-select"
+          value={style.snapToLines ? String(Math.min(style.lineStep || 1, 2)) : "free"}
+          data-testid="text-snap-select"
+          onChange={(e) =>
+            onStyleChange(
+              e.target.value === "free"
+                ? { snapToLines: false }
+                : { snapToLines: true, lineStep: Number(e.target.value) },
+            )
+          }
+        >
+          <option value="free">Frei platzieren</option>
+          <option value="1">Auf {snapHint}, 1 Zeile</option>
+          <option value="2">Auf {snapHint}, 2 Zeilen</option>
+        </select>
+      </div>
 
       {!hasSelection && (
         <button className="text-insert-btn" data-testid="text-insert-btn" onClick={onInsert}>
@@ -3396,10 +3376,30 @@ export default function DocumentView({
           !isLassoMode &&
           !placingTool &&
           !isDesignToolsOpen;
-        const PenIcon = isMoveMode ? Move : PEN_TOOL_ICONS[tool] || PenLine;
+        const PenIcon = PEN_TOOL_ICONS[tool] || PenLine;
         return (
+          <>
           <button
-            className={`rail-btn pen-rail-btn ${isPenActive || isMoveMode ? "active" : ""}`}
+            className={`rail-btn ${isMoveMode ? "active" : ""}`}
+            onClick={() => {
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+              setIsBucketMode(false);
+              setIsLassoMode(false);
+              setLassoSelection(null);
+              setPlacingTool(null);
+              setIsDesignToolsOpen(false);
+              setIsPenSettingsOpen(false);
+              inkController?.setInputMode?.(isMoveMode ? "stylus" : "move");
+            }}
+            title="Bewegen (Seite verschieben)"
+            aria-pressed={isMoveMode}
+            data-testid="move-tool-btn"
+          >
+            <Hand size={18} />
+          </button>
+          <button
+            className={`rail-btn has-settings pen-rail-btn ${isPenActive ? "active" : ""}`}
             onPointerDown={(e) => {
               penLongPressFired.current = false;
               const buttonEl = e.currentTarget;
@@ -3416,32 +3416,36 @@ export default function DocumentView({
             }}
             onPointerUp={() => clearTimeout(penLongPressTimer.current)}
             onPointerLeave={() => clearTimeout(penLongPressTimer.current)}
-            onClick={() => {
+            onClick={(e) => {
               if (penLongPressFired.current) return;
-              const otherToolActive =
-                isEraser || isBucketMode || isSelectMode || isLassoMode || placingTool;
-              if (otherToolActive) {
-                setIsEraser?.(false);
-                setIsSelectMode?.(false);
-                setIsBucketMode(false);
-                setIsLassoMode(false);
-                setLassoSelection(null);
-                setPlacingTool(null);
-                if (isMoveMode) inkController?.setInputMode?.("stylus");
-              } else {
-                inkController?.setInputMode?.(isMoveMode ? "stylus" : "move");
+              if (isPenActive) {
+                anchorPopoverToButton(e.currentTarget);
+                setIsPenSettingsOpen((prev) => !prev);
+                setIsColorPickerOpen(false);
+                setIsEraserSettingsOpen(false);
+                setIsTextSettingsOpen(false);
+                return;
               }
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+              setIsBucketMode(false);
+              setIsLassoMode(false);
+              setLassoSelection(null);
+              setPlacingTool(null);
+              setIsDesignToolsOpen(false);
               setIsPenSettingsOpen(false);
+              if (isMoveMode) inkController?.setInputMode?.("stylus");
             }}
-            title="Stift: Klick = Bewegen, Halten = Einstellungen"
+            title="Stift: Nochmal tippen = Einstellungen"
             data-testid="pen-tool-btn"
           >
             <PenIcon size={18} />
           </button>
+          </>
         );
       })()}
       <button
-        className={`rail-btn eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
+        className={`rail-btn has-settings eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
         onClick={(e) => {
           if (isEraser && !isSelectMode) {
             anchorPopoverToButton(e.currentTarget);
@@ -3530,7 +3534,7 @@ export default function DocumentView({
         {isDesignPlacing ? placingTool.icon : <Shapes size={18} />}
       </button>
       <button
-        className={`rail-btn text-rail-btn ${
+        className={`rail-btn has-settings text-rail-btn ${
           isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
         }`}
         onPointerDown={(e) => {
@@ -3548,9 +3552,18 @@ export default function DocumentView({
         }}
         onPointerUp={() => clearTimeout(textLongPressTimer.current)}
         onPointerLeave={() => clearTimeout(textLongPressTimer.current)}
-        onClick={() => {
+        onClick={(e) => {
           if (textLongPressFired.current) return;
-          setPlacingTool((cur) => (cur?.id === "text" ? null : TEXT_TOOL));
+          if (placingTool?.id === "text") {
+            anchorPopoverToButton(e.currentTarget);
+            setIsTextSettingsOpen((prev) => !prev);
+            setIsDesignToolsOpen(false);
+            setIsPenSettingsOpen(false);
+            setIsEraserSettingsOpen(false);
+            setIsColorPickerOpen(false);
+            return;
+          }
+          setPlacingTool(TEXT_TOOL);
           setIsBucketMode(false);
           setIsLassoMode(false);
           setLassoSelection(null);
@@ -3560,8 +3573,8 @@ export default function DocumentView({
         }}
         title={
           placingTool?.id === "text"
-            ? "Text ziehen zum Platzieren (Klick zum Abbrechen)"
-            : "Text: Klick = Platzieren, Halten = Einstellungen"
+            ? "Text ziehen zum Platzieren, nochmal tippen = Einstellungen"
+            : "Text: Tippen = Platzieren"
         }
         data-testid="text-tool-btn"
       >
