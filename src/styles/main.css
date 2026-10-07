@@ -3886,6 +3886,96 @@ body::after {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
 }
 
+/* Formatting bar while a text box is being edited: pinned to the top of the
+   window, clear of whichever keyboard (native or the chemistry one) is up. */
+.rich-toolbar {
+  position: fixed;
+  /* Below the editor's top pills (title, actions), not over them. */
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2600;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  background: rgba(26, 24, 30, 0.94);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rich-toolbar-row,
+.rich-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rich-toolbar-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.rich-toolbar-group {
+  flex: none;
+}
+
+.rich-tool-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(233, 230, 223, 0.78);
+  font: 700 12px 'Manrope', sans-serif;
+  cursor: pointer;
+}
+
+.rich-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #F1EEE7;
+}
+
+.rich-tool-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #F1EEE7;
+}
+
+.rich-toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rich-swatch {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+}
+
+.rich-swatch-none {
+  background:
+    linear-gradient(135deg, transparent 46%, #D8615B 46% 54%, transparent 54%),
+    rgba(255, 255, 255, 0.06);
+}
+
 .text-snap-toggle {
   display: flex;
   align-items: center;

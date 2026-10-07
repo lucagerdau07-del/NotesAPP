@@ -132,3 +132,42 @@ describe("create_google_doc", () => {
     expect(String(await executeTool("create_google_doc", { title: "x", text: " " }))).toMatch(/text fehlt/);
   });
 });
+
+describe("existing Google Docs", () => {
+  const docUrl = "https://docs.google.com/document/d/abcdefghij/edit";
+  const stub = (reply) => {
+    const seen = [];
+    vi.stubGlobal("fetch", async (url, init) => {
+      seen.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify(reply), { status: 200 });
+    });
+    return seen;
+  };
+
+  it("lists and reads through the edit route", async () => {
+    let seen = stub({ files: [{ id: "abcdefghij", name: "Referat", modifiedTime: "2026-10-01" }] });
+    expect(await executeTool("find_google_docs", { query: "Ref" })).toEqual([{ id: "abcdefghij", title: "Referat", modified: "2026-10-01" }]);
+    expect(seen[0].url).toMatch(/\/api\/notes\/gdoc\/edit$/);
+    expect(seen[0].body).toEqual({ action: "list", query: "Ref" });
+    seen = stub({ text: "Hallo Welt" });
+    expect(await executeTool("read_google_doc", { id: "abcdefghij" })).toBe("Hallo Welt");
+    expect(seen[0].body).toEqual({ action: "read", id: "abcdefghij" });
+  });
+
+  it("edits with a card, and flags a replace that matched nothing", async () => {
+    const seen = stub({ title: "Referat", url: docUrl, changed: 2 });
+    const result = await executeTool("edit_google_doc", { id: "abcdefghij", mode: "replace", find: "alt", text: "neu" });
+    expect(seen[0].body).toMatchObject({ action: "replace", id: "abcdefghij", find: "alt", text: "neu" });
+    expect(result).toMatchObject({ replaced: 2, card: { kind: "gdoc", title: "Referat", url: docUrl } });
+
+    stub({ title: "Referat", url: docUrl, changed: 0 });
+    expect(String(await executeTool("edit_google_doc", { id: "abcdefghij", mode: "replace", find: "x", text: "y" }))).toMatch(/nicht vor/);
+    expect(String(await executeTool("edit_google_doc", { id: "abcdefghij", mode: "append", text: " " }))).toMatch(/text fehlt/);
+    expect(String(await executeTool("edit_google_doc", { id: "abcdefghij", mode: "zap" }))).toMatch(/mode muss/);
+  });
+
+  it("turns proxy errors into a Fehler string", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { message: "Insufficient Permission" } }), { status: 502 }));
+    expect(String(await executeTool("read_google_doc", { id: "abcdefghij" }))).toMatch(/^Fehler: Google Docs fehlgeschlagen \(Insufficient Permission\)/);
+  });
+});

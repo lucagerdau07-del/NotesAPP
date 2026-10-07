@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ExternalLink,
   Loader2,
@@ -17,7 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { hitTestObject, objectBounds, objectLayoutBounds, curveControlPoint, elbowBendX } from "../../ink/pageObjects.js";
-import { fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
+import { FLOW_MARGIN, baselineOffset, fontStackOf, snapTextToGrid } from "../../ink/textStyle.js";
 import { cropPatch, dragCropEdge, naturalSizeOf, rememberNaturalSize, sourceRect, visibleRect } from "../../ink/imageCrop.js";
 import {
   dashArrayFor,
@@ -29,8 +29,26 @@ import {
   roughArrowheadPaths,
 } from "../../ink/handDrawn.js";
 import { pagePointToViewport } from "../../ink/pageCoordinates.js";
+import {
+  applyAutoformat,
+  checkboxAt,
+  cutFrom,
+  markCaret,
+  placeCaret,
+  placeCaretAtPoint,
+  promptLink,
+  richHtmlOf,
+  runRichCommand,
+  sanitizeRichHtml,
+  shortcutCommand,
+  splitPointBelow,
+  toggleCheckbox,
+  untickNewItem,
+} from "../../ink/richText.js";
 import { renderInline } from "../Markdown.jsx";
 import { useChemKeyboardEnabled } from "../chemKeyboard/chemKeyboardState.js";
+import RichTextToolbar from "./RichTextToolbar.jsx";
+import "../../styles/richText.css";
 
 // AI-written text only: renders **bold**/_italic_/`code`/~~strike~~ instead of
 // showing the raw markdown syntax. User-typed text always stays literal.
@@ -50,6 +68,7 @@ const HANDLE = 14;
 // wider than a mouse cursor, so the hit area extends past it on all sides.
 const HANDLE_HIT = 36;
 const MIN_TEXT_WIDTH = 24;
+const TEXT_HIT_PAD = 10;
 const TEXT_WIDTH_BUFFER = 6;
 const PAGE_EDGE_MARGIN = 16;
 
@@ -65,23 +84,20 @@ const readText = (node) => node.innerText ?? node.textContent;
 // pinned by hand (autoWidth: false) wraps inside whatever width it already
 // has instead of growing to fit a long word or line.
 function measureTextBox(node, maxWidth, fixedWidth = null) {
-  const clone = document.createElement("div");
+  // A deep clone keeps the line breaks and the rich structure (headings,
+  // lists) that decide the height; its own inline styles bring the typography.
+  const clone = node.cloneNode(true);
   const computed = window.getComputedStyle(node);
+  clone.removeAttribute("contenteditable");
   clone.style.position = "absolute";
   clone.style.visibility = "hidden";
-  clone.style.font = computed.font;
-  clone.style.fontSize = computed.fontSize;
-  clone.style.fontFamily = computed.fontFamily;
-  clone.style.fontWeight = computed.fontWeight;
+  clone.style.height = "auto";
+  clone.style.overflow = "visible";
   clone.style.letterSpacing = computed.letterSpacing;
-  clone.style.lineHeight = computed.lineHeight;
-  clone.style.padding = computed.padding;
   // Matches the real box's own wrapping (see its overflowWrap) so a fixed
   // width that's narrower than one word measures the same broken height.
   clone.style.overflowWrap = "break-word";
-  // Must keep the breaks, or the clone measures one long line and the box
-  // never grows for the row Enter just added.
-  clone.textContent = readText(node) || " ";
+  if (!node.firstChild) clone.textContent = " ";
   let width;
   if (fixedWidth != null) {
     width = fixedWidth;
@@ -102,6 +118,20 @@ function measureTextBox(node, maxWidth, fixedWidth = null) {
   document.body.removeChild(clone);
   return { width, height };
 }
+
+// The size a text box needs for its content, hugging it (fixedWidth null) or
+// wrapped inside a given width. Snapped text keeps whole ruled rows; the row
+// height and baseline padding come off the field's own inline style.
+function fitTextBox(field, maxWidth, fixedWidth, snapToLines) {
+  const { width, height } = measureTextBox(field, maxWidth, fixedWidth);
+  if (!snapToLines) return { width, height };
+  const pad = parseFloat(field.style.paddingTop) || 0;
+  const line = parseFloat(field.style.lineHeight) || height;
+  return { width, height: Math.max(1, Math.round((height - pad) / line)) * line + pad };
+}
+
+const textFieldOf = (event) =>
+  event.currentTarget.closest('[data-testid="object-container"]')?.querySelector(".rich-text") ?? null;
 
 // Dragging writes to local state and commits once on release, so a move is one
 // undo step instead of one per pointermove.
@@ -427,34 +457,55 @@ function useDrag(onCommit) {
       // it stays put relative to the endpoints if they're later moved/resized.
       const baseT = typeof object.elbowBend === "number" ? object.elbowBend : 0.5;
       next = { ...object, elbowBend: object.width ? baseT + dx / object.width : baseT };
+    } else if (mode === "scale") {
+      // Canva corner: text, box and font grow together and the opposite
+      // corner stays put. The drag counts along the box's diagonal, so the
+      // wrapping (and with it the shape) never changes.
+      const { sx, sy } = active.extra;
+      const w = object.width;
+      const h = object.height;
+      const s = Math.max(
+        1 + (sx * dx * w + sy * dy * h) / (w * w + h * h || 1),
+        6 / object.fontSize,
+        MIN_TEXT_WIDTH / w,
+      );
+      next = {
+        ...object,
+        x: sx < 0 ? object.x + w * (1 - s) : object.x,
+        y: sy < 0 ? object.y + h * (1 - s) : object.y,
+        width: w * s,
+        height: h * s,
+        fontSize: Math.round(object.fontSize * s * 10) / 10,
+      };
+      if (object.lineHeight > 0) next.lineHeight = Math.round(object.lineHeight * s * 10) / 10;
+    } else if (mode === "side") {
+      // Canva side: only the width changes; the text rewraps and the box
+      // follows it down or up.
+      const { sx, field } = active.extra;
+      const width = Math.max(MIN_TEXT_WIDTH, object.width + sx * dx);
+      next = { ...object, width, x: sx < 0 ? object.x + object.width - width : object.x };
+      if (field) next.height = fitTextBox(field, width, width, object.snapToLines).height;
     } else if (object.type === "image" && object.width && object.height) {
       // A picture scales as a whole; making it another shape is what the edge
       // handles (crop) are for.
       const ratio = Math.max(0.05, (object.width + dx) / object.width, (object.height + dy) / object.height);
       next = { ...object, width: object.width * ratio, height: object.height * ratio };
     } else {
-      const nextHeight = object.height + dy;
-      next = {
-        ...object,
-        width: object.width + dx,
-        height: nextHeight,
-      };
-      // Stretching a text box is "make the text bigger", not "add blank
-      // space" — scale the font (and a custom line height, if set) with it.
-      // Ratio is against the height at drag start, not the previous frame's,
-      // so repeated moves during one drag don't compound rounding error.
-      if (object.type === "text" && object.height !== 0) {
-        const scale = Math.abs(nextHeight) / Math.abs(object.height);
-        next.fontSize = Math.max(6, Math.round(object.fontSize * scale));
-        if (object.lineHeight > 0) next.lineHeight = Math.round(object.lineHeight * scale);
-      }
+      next = { ...object, width: object.width + dx, height: object.height + dy };
     }
-    if (rad && (mode === "start" || mode === "end")) {
+    // Which corner of the box stays where it is, as a fraction of its size.
+    const anchor =
+      mode === "start" ? [1, 1]
+      : mode === "end" ? [0, 0]
+      : mode === "scale" ? [active.extra.sx < 0 ? 1 : 0, active.extra.sy < 0 ? 1 : 0]
+      : mode === "side" ? [active.extra.sx < 0 ? 1 : 0, 0]
+      : null;
+    if (rad && anchor) {
       // Resizing moves the rotation center, which would drag the opposite,
       // untouched corner/endpoint along — shift it back to where it was.
       const pinned = (o) => {
-        const px = mode === "start" ? o.x + o.width : o.x;
-        const py = mode === "start" ? o.y + o.height : o.y;
+        const px = o.x + anchor[0] * o.width;
+        const py = o.y + anchor[1] * o.height;
         const vx = px - (o.x + o.width / 2);
         const vy = py - (o.y + o.height / 2);
         return { x: o.x + o.width / 2 + vx * cos - vy * sin, y: o.y + o.height / 2 + vx * sin + vy * cos };
@@ -490,10 +541,19 @@ function useDrag(onCommit) {
         if (active.object.type === "text") {
           patch.fontSize = fontSize;
           if (active.object.lineHeight > 0) patch.lineHeight = lineHeight;
-          // A resize handle (not a plain move) is the user picking a width by
-          // hand — from here on, typing should wrap inside it rather than
-          // stretching it wider again.
-          if (active.mode === "start" || active.mode === "end") patch.autoWidth = false;
+          // A side handle is the user picking a width by hand — from here
+          // on, typing wraps inside it rather than stretching it wider again.
+          if (active.mode === "side") patch.autoWidth = false;
+          if (active.mode === "scale" && active.object.snapToLines === false) patch.snapToLines = false;
+          // Scaling only rounds its way to the right size; the field now
+          // shows the final font, so measure the exact box once.
+          const field = active.extra?.field;
+          if (active.mode === "scale" && field) {
+            const hug = active.object.autoWidth !== false;
+            const fitted = fitTextBox(field, Infinity, hug ? null : width, active.object.snapToLines);
+            patch.height = fitted.height;
+            if (hug) patch.width = fitted.width;
+          }
         }
         onCommitRef.current?.(active.object.id, patch);
       }
@@ -653,11 +713,290 @@ function TableContent({ object, editable, onResize, focusCell, onExitEdit }) {
   );
 }
 
-function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, pageWidth = 800, isProcessing = false, focusCell = null, onExitEdit }) {
-  const editableRef = useRef(null);
-  // Text length left of the caret, saved when an early commit is about to re-render the field.
-  const caretRestore = useRef(null);
+// Set right before a text box starts editing and read once by it: the tap
+// point the caret goes to. Module-level because that box may sit in the other
+// layer instance (above or below the ink) than the one that started the edit.
+let pendingCaret = null;
+
+// Aligning a whole box overrides the per-paragraph alignment typed in earlier
+// (inline text-align), or those paragraphs would keep their own and the
+// change would seem to do nothing.
+function alignWholeBox(object, textAlign) {
+  if (!object?.html) return { textAlign };
+  const html = sanitizeRichHtml(object.html);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.body.querySelectorAll("[style]").forEach((node) => {
+    node.style.removeProperty("text-align");
+    if (!node.getAttribute("style")) node.removeAttribute("style");
+  });
+  return { textAlign, html: doc.body.innerHTML };
+}
+
+const contentOf = (field) => ({ text: readText(field), html: sanitizeRichHtml(field.innerHTML) });
+
+// A text object: rich text (see richText.js) edited in place.
+function TextContent({ object, editable, resizing = false, paperStyle, pageWidth = 800, pageHeight, onResize, onCommitText, onOverflow, onOpenLink }) {
+  const fieldRef = useRef(null);
   const chemKeyboard = useChemKeyboardEnabled();
+  const bounds = objectLayoutBounds(object);
+  const snapped = object.snapToLines ? snapTextToGrid(object, paperStyle) : null;
+  const fontSize = snapped ? snapped.fontSize : object.fontSize;
+  const lineHeight = snapped
+    ? snapped.lineHeight
+    : object.lineHeight || Math.round(object.fontSize * 1.35);
+  // Snapped text is positioned by its baseline, not its box top: push the
+  // first line down so its baseline lands on the rule at the box bottom.
+  // snapTextToGrid already bakes this into the box's stored height — reusing
+  // its value here (rather than recomputing) keeps the two from drifting apart.
+  const paddingTop = snapped ? snapped.topPadding : 0;
+  // A heading's glyphs sit at another height in its line box than body text
+  // (bigger font, same line height), so it is nudged until its baseline is on
+  // the same ruling as the lines around it. See richText.css.
+  const bodyBaseline = baselineOffset(fontSize, lineHeight, object.fontFamily, object.bold);
+  const headingShifts = Object.fromEntries(
+    [["h1", 1.6, 2], ["h2", 1.25, 1], ["h3", 1.1, 1]].map(([tag, size, rows]) => {
+      const own = baselineOffset(fontSize * size, lineHeight * rows, object.fontFamily, true);
+      const target = bodyBaseline + Math.round((own - bodyBaseline) / lineHeight) * lineHeight;
+      return [`--rt-${tag}-shift`, `${Math.round((target - own) * 100) / 100}px`];
+    }),
+  );
+  // Snapped text still needs whole rows (plus the same baseline padding
+  // snapTextToGrid adds — see above) so the box lands back on a rule once
+  // this reaches the reducer; unsnapped text just takes the measured height.
+  const fitHeight = (measured) =>
+    snapped ? Math.max(1, Math.round((measured - paddingTop) / lineHeight)) * lineHeight + paddingTop : measured;
+
+  // What React writes into the field. Frozen for the whole edit session, so
+  // React never touches the field under the caret (or the browser's undo
+  // stack), and a little longer: the blur that saves an edit can land after
+  // the re-render that ends editing, and rewriting the field before it would
+  // drop what was typed. The next saved change thaws it. Frozen means the
+  // same object, not just the same string: React 19 rewrites innerHTML
+  // whenever the dangerouslySetInnerHTML object changes.
+  const contentKey = `${object.html}\u0000${object.text}`;
+  const session = useRef(null);
+  // Thawed before anything else: a box can get new content and start editing
+  // again in the same render (text flowing in from the page before), and must
+  // not carry on editing the old content then.
+  if (session.current?.endedAt != null && session.current.endedAt !== contentKey) session.current = null;
+  if (editable) {
+    session.current ??= { inner: { __html: richHtmlOf(object) }, endedAt: null };
+    session.current.endedAt = null;
+  } else if (session.current?.endedAt === null) {
+    session.current.endedAt = contentKey;
+  }
+  const viewInner = useMemo(() => (object.html ? { __html: sanitizeRichHtml(object.html) } : null), [object.html]);
+  const inner = session.current ? session.current.inner : viewInner;
+
+  // Entering edit mode opens the keyboard right where the box is: focus the
+  // field and put the caret under the tap (see pendingCaret), on the marker a
+  // continuation brought along (see markCaret), else at the end of the text.
+  useEffect(() => {
+    const field = fieldRef.current;
+    if (!editable || !field) return;
+    field.focus();
+    const point = pendingCaret?.objectId === object.id ? pendingCaret.point : null;
+    if (point) pendingCaret = null;
+    if (!point || !placeCaretAtPoint(field, point.x, point.y)) placeCaret(field);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editable]);
+
+  // A page-width box never runs past its page: what no longer fits above the
+  // bottom margin is cut off and continues on the next page. onOverflow
+  // decides whether it can take it and only then makes the cut, so a refusal
+  // (no page left to add) leaves the field untouched. Runs after every saved
+  // change: typing saves as the box grows, and text pushed in from the page
+  // before lands here the same way.
+  useLayoutEffect(() => {
+    const field = fieldRef.current;
+    if (!object.flow || object.rotation || !pageHeight || !onOverflow || !field) return;
+    const room = pageHeight - FLOW_MARGIN - object.y;
+    const height = fitHeight(measureTextBox(field, bounds.width, bounds.width).height);
+    if (height <= room + 0.5) {
+      // Text pushed in or cut away from outside still sizes the box.
+      if (Math.abs(height - bounds.height) > 0.5) onResize?.(object.id, { height });
+      return;
+    }
+    const rect = field.getBoundingClientRect();
+    const scale = field.offsetHeight ? rect.height / field.offsetHeight : 1;
+    const at = splitPointBelow(field, rect.top + room * scale);
+    if (!at) return;
+    onOverflow(object.id, () => {
+      // A live range: the caret marker going in next shifts it along.
+      const from = document.createRange();
+      from.setStart(at.node, at.offset);
+      const marker = editable ? markCaret(field) : null;
+      const moved = sanitizeRichHtml(cutFrom(field, from));
+      // Typing past the page bottom carries the caret over with the text.
+      const caret = Boolean(marker) && !field.contains(marker);
+      marker?.remove();
+      const rest = { ...contentOf(field), height: fitHeight(measureTextBox(field, bounds.width, bounds.width).height) };
+      return { rest, moved, caret };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentKey, object.flow, object.y, object.width, object.fontSize, object.lineHeight, pageHeight, editable]);
+
+  // The box hugs its content horizontally as you type — it only wraps (and
+  // grows downward instead) once it would run past the page's right edge.
+  // Enter also starts a new line outright. Either way the box needs to grow
+  // to reveal it, one row at a time so a snapped box's new lines stay on the
+  // ruling. Only fires (and only then saves the content, ahead of the usual
+  // on-blur save) when the size actually changes, so most keystrokes cause
+  // no re-render at all.
+  const sizePatch = (field) => {
+    const maxWidth = Math.max(MIN_TEXT_WIDTH, pageWidth - object.x - PAGE_EDGE_MARGIN);
+    // A hand-pinned width (see autoWidth on the object) wraps inside itself —
+    // that's the whole point of dragging a text box narrower — instead of
+    // growing back out to fit whatever was just typed.
+    const fixedWidth = object.autoWidth === false ? bounds.width : null;
+    const { width, height } = measureTextBox(field, maxWidth, fixedWidth);
+    const nextHeight = fitHeight(height);
+    const patch = {};
+    if (Math.abs(nextHeight - bounds.height) > 0.5) patch.height = nextHeight;
+    if (!fixedWidth && Math.abs(width - bounds.width) > 0.5) patch.width = width;
+    return Object.keys(patch).length > 0 ? patch : null;
+  };
+
+  const handleInput = (event) => {
+    const field = event.currentTarget;
+    const { inputType = "", data, isComposing } = event.nativeEvent;
+    if (!isComposing && inputType.startsWith("insert") && /\s$/.test(data ?? "")) applyAutoformat(field);
+    if (inputType === "insertParagraph") untickNewItem();
+    const patch = sizePatch(field);
+    if (patch) onResize?.(object.id, { ...patch, ...contentOf(field) });
+  };
+
+  // Like Canva, the box always hugs its text: a new width, font or style
+  // re-measures it, so the frame (and with it the grab area) never shows
+  // blank space or cuts text off. Not on mount — a stored box keeps its saved
+  // size — and not while a handle drag owns the size. Page-width boxes size
+  // themselves in the overflow effect above.
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    const field = fieldRef.current;
+    if (resizing || object.flow || !field) return;
+    const patch = sizePatch(field);
+    if (patch) onResize?.(object.id, patch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizing, object.width, object.autoWidth, fontSize, lineHeight, paddingTop, object.fontFamily, object.bold, object.italic]);
+
+  const handleKeyDown = (event) => {
+    const field = event.currentTarget;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      field.blur();
+      return;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      runRichCommand(event.shiftKey ? "outdent" : "indent", field);
+      return;
+    }
+    const command = shortcutCommand(event);
+    if (!command) return;
+    event.preventDefault();
+    if (command === "link") promptLink(field);
+    else runRichCommand(command, field);
+  };
+
+  // Web pages paste with their own colors, and black text vanishes on dark
+  // paper: keep the structure, drop the colors.
+  const handlePaste = (event) => {
+    const pastedHtml = event.clipboardData?.getData("text/html");
+    const pastedText = event.clipboardData?.getData("text/plain");
+    if (!pastedHtml && !pastedText) return;
+    event.preventDefault();
+    if (pastedHtml) document.execCommand("insertHTML", false, sanitizeRichHtml(pastedHtml, { colors: false }));
+    else document.execCommand("insertText", false, pastedText);
+  };
+
+  // Tapping a checklist box ticks it without moving the caret.
+  const handlePointerDown = (event) => {
+    const item = checkboxAt(event, event.currentTarget);
+    if (!item) return;
+    event.preventDefault();
+    toggleCheckbox(item);
+  };
+
+  const handleBlur = (event) => {
+    if (!session.current) return;
+    const field = event.currentTarget;
+    // The window losing focus (a native prompt, switching apps) blurs the
+    // field too while it stays the active element: save, but keep editing.
+    onCommitText(object.id, contentOf(field), document.activeElement !== field);
+  };
+
+  // A link in the text never navigates the app away: on the page it opens in
+  // the side browser, while editing a tap only places the caret.
+  const handleClick = (event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link) return;
+    event.preventDefault();
+    if (!editable) onOpenLink?.(link.getAttribute("href"));
+  };
+
+  return (
+    <div
+      ref={fieldRef}
+      className="rich-text"
+      contentEditable={editable}
+      inputMode={chemKeyboard ? "none" : undefined}
+      suppressContentEditableWarning
+      onInput={editable ? handleInput : undefined}
+      onKeyDown={editable ? handleKeyDown : undefined}
+      onPaste={editable ? handlePaste : undefined}
+      onPointerDown={editable ? handlePointerDown : undefined}
+      onBlur={handleBlur}
+      onClick={handleClick}
+      style={{
+        "--rt-line": `${lineHeight}px`,
+        ...headingShifts,
+        width: "100%",
+        height: "100%",
+        color: object.color,
+        fontSize,
+        lineHeight: `${lineHeight}px`,
+        paddingTop,
+        fontFamily: fontStackOf(object.fontFamily),
+        fontWeight: object.bold ? 700 : 400,
+        fontStyle: object.italic ? "italic" : "normal",
+        // currentColor + a thickness/offset tied to fontSize: the line always
+        // matches the text's own (theme-aware) color and sits close under the
+        // glyphs, instead of a hand-drawn shape guessing both.
+        textDecorationLine: object.underline ? "underline" : "none",
+        textDecorationColor: "currentColor",
+        textDecorationThickness: Math.max(1.5, fontSize * 0.06),
+        // Just enough clearance for descenders (g, y, p) to stay clear of the
+        // line — any more and the line reads as detached from the word above it.
+        textUnderlineOffset: Math.max(1, fontSize * 0.04),
+        textAlign: object.textAlign || "left",
+        // Renders stored newlines as real breaks (and still wraps long lines),
+        // so a hard break advances exactly one line-height — which is a whole
+        // rule, keeping the next line on the ruling.
+        whiteSpace: "pre-wrap",
+        // pre-wrap alone only wraps at spaces — a box dragged narrower than
+        // one word (or one big enough font) needs this to break mid-word
+        // instead of just overflowing past the edge.
+        overflowWrap: "break-word",
+        outline: "none",
+        // Hidden only mid-edit, where handleInput is about to grow the box to
+        // match — a finished box stays visible so a stale height estimate
+        // (insert_table/write_text) never crops real text at the bottom.
+        overflow: editable ? "hidden" : "visible",
+        cursor: editable ? "text" : "inherit",
+      }}
+      {...(inner
+        ? { dangerouslySetInnerHTML: inner }
+        : { children: object.aiGenerated ? renderAiText(object.text) : object.text })}
+    />
+  );
+}
+
+function ObjectContent({ object, editable, resizing = false, onCommitText, onResize, paperStyle, pageWidth = 800, pageHeight, onOverflow, onOpenLink, isProcessing = false, focusCell = null, onExitEdit }) {
   const bounds = objectLayoutBounds(object);
   const dashArray = dashArrayFor(object.strokeStyle);
   const opacity = (object.opacity ?? 100) / 100;
@@ -819,131 +1158,19 @@ function ObjectContent({ object, editable, onCommitText, onResize, paperStyle, p
     );
   }
 
-  const snapped = object.snapToLines ? snapTextToGrid(object, paperStyle) : null;
-  const fontSize = snapped ? snapped.fontSize : object.fontSize;
-  const lineHeight = snapped
-    ? snapped.lineHeight
-    : object.lineHeight || Math.round(object.fontSize * 1.35);
-  // Snapped text is positioned by its baseline, not its box top: push the
-  // first line down so its baseline lands on the rule at the box bottom.
-  // snapTextToGrid already bakes this into the box's stored height — reusing
-  // its value here (rather than recomputing) keeps the two from drifting apart.
-  const paddingTop = snapped ? snapped.topPadding : 0;
-
-  // Entering edit mode opens the keyboard right where the box was placed: focus
-  // the field and drop the caret at the end of whatever text it starts with
-  // (empty for a freshly clicked box, so the caret just blinks at the start).
-  // Growing the box (below) commits `text` early too, which re-renders this
-  // field from React's (now matching) state — that re-render would otherwise
-  // reset the caret to the start, so this also re-runs then to put it back.
-  useEffect(() => {
-    if (!editable || !editableRef.current) return;
-    const el = editableRef.current;
-    el.focus();
-    const selection = globalThis.getSelection?.();
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    // Early commit while typing/deleting: React rewrote the text node, which
-    // parks the caret at 0 — put it back where it was (see handleInput).
-    let left = caretRestore.current;
-    caretRestore.current = null;
-    if (left != null) {
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (left <= node.data.length) {
-          range.setStart(node, left);
-          range.collapse(true);
-          break;
-        }
-        left -= node.data.length;
-      }
-    }
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }, [editable, object.text]);
-
-  // The box hugs its content horizontally as you type — it only wraps (and
-  // grows downward instead) once it would run past the page's right edge.
-  // Enter also starts a new line outright. Either way the box needs to grow
-  // to reveal it, one row at a time so a snapped box's new lines stay on the
-  // ruling. Only fires (and only then commits `text`, ahead of the usual
-  // on-blur commit) when the size actually changes, so most keystrokes cause
-  // no re-render — and no caret disruption — at all.
-  const handleInput = (event) => {
-    const node = event.currentTarget;
-    const maxWidth = Math.max(MIN_TEXT_WIDTH, pageWidth - object.x - PAGE_EDGE_MARGIN);
-    // A hand-pinned width (see autoWidth on the object) wraps inside itself —
-    // that's the whole point of dragging a text box narrower — instead of
-    // growing back out to fit whatever was just typed.
-    const fixedWidth = object.autoWidth === false ? bounds.width : null;
-    const { width, height } = measureTextBox(node, maxWidth, fixedWidth);
-    // Snapped text still needs whole rows (plus the same baseline padding
-    // snapTextToGrid adds — see above) so the box lands back on a rule once
-    // this reaches the reducer; unsnapped text just takes the measured height.
-    const rows = Math.max(1, Math.round((height - paddingTop) / lineHeight));
-    const nextHeight = snapped ? rows * lineHeight + paddingTop : height;
-    const patch = {};
-    if (Math.abs(nextHeight - bounds.height) > 0.5) patch.height = nextHeight;
-    if (!fixedWidth && Math.abs(width - bounds.width) > 0.5) patch.width = width;
-    if (Object.keys(patch).length > 0) {
-      const selection = globalThis.getSelection?.();
-      if (selection?.rangeCount && node.contains(selection.anchorNode)) {
-        const head = document.createRange();
-        head.selectNodeContents(node);
-        head.setEnd(selection.anchorNode, selection.anchorOffset);
-        caretRestore.current = head.toString().length;
-      }
-      onResize?.(object.id, { ...patch, text: readText(node) });
-    }
-  };
-
   return (
-    <div
-      ref={editableRef}
-      contentEditable={editable}
-      inputMode={chemKeyboard ? "none" : undefined}
-      suppressContentEditableWarning
-      onInput={handleInput}
-      onBlur={(event) => onCommitText(object.id, readText(event.currentTarget))}
-      style={{
-        width: "100%",
-        height: "100%",
-        color: object.color,
-        fontSize,
-        lineHeight: `${lineHeight}px`,
-        paddingTop,
-        fontFamily: fontStackOf(object.fontFamily),
-        fontWeight: object.bold ? 700 : 400,
-        fontStyle: object.italic ? "italic" : "normal",
-        // currentColor + a thickness/offset tied to fontSize: the line always
-        // matches the text's own (theme-aware) color and sits close under the
-        // glyphs, instead of a hand-drawn shape guessing both.
-        textDecorationLine: object.underline ? "underline" : "none",
-        textDecorationColor: "currentColor",
-        textDecorationThickness: Math.max(1.5, fontSize * 0.06),
-        // Just enough clearance for descenders (g, y, p) to stay clear of the
-        // line — any more and the line reads as detached from the word above it.
-        textUnderlineOffset: Math.max(1, fontSize * 0.04),
-        textAlign: object.textAlign || "left",
-        // Renders stored newlines as real breaks (and still wraps long lines),
-        // so a hard break advances exactly one line-height — which is a whole
-        // rule, keeping the next line on the ruling.
-        whiteSpace: "pre-wrap",
-        // pre-wrap alone only wraps at spaces — a box dragged narrower than
-        // one word (or one big enough font) needs this to break mid-word
-        // instead of just overflowing past the edge.
-        overflowWrap: "break-word",
-        outline: "none",
-        // Hidden only mid-edit, where handleInput is about to grow the box to
-        // match — a finished box stays visible so a stale height estimate
-        // (insert_table/write_text) never crops real text at the bottom.
-        overflow: editable ? "hidden" : "visible",
-        cursor: editable ? "text" : "inherit",
-      }}
-    >
-      {!editable && object.aiGenerated ? renderAiText(object.text) : object.text}
-    </div>
+    <TextContent
+      object={object}
+      editable={editable}
+      resizing={resizing}
+      paperStyle={paperStyle}
+      pageWidth={pageWidth}
+      pageHeight={pageHeight}
+      onResize={onResize}
+      onCommitText={onCommitText}
+      onOverflow={onOverflow}
+      onOpenLink={onOpenLink}
+    />
   );
 }
 
@@ -956,9 +1183,10 @@ function counterScale(containerScale, transformOrigin = "center") {
   return { transform: `scale(${1 / containerScale})`, transformOrigin };
 }
 
-function Handle({ position, onPointerDown, containerScale = 1 }) {
+function Handle({ position, onPointerDown, containerScale = 1, cursor = "nwse-resize", testId }) {
   return (
     <div
+      data-testid={testId}
       onPointerDown={onPointerDown}
       style={{
         position: "absolute",
@@ -969,7 +1197,7 @@ function Handle({ position, onPointerDown, containerScale = 1 }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        cursor: "nwse-resize",
+        cursor,
         touchAction: "none",
         ...counterScale(containerScale),
       }}
@@ -987,8 +1215,9 @@ function Handle({ position, onPointerDown, containerScale = 1 }) {
   );
 }
 
-// Canva-style side handle: a pill on the middle of an edge. Dragging it crops.
-function EdgeHandle({ edge, bounds, zoom, onPointerDown, containerScale = 1 }) {
+// Canva-style side handle: a pill on the middle of an edge. Dragging it crops
+// an image or sets a text box's width.
+function EdgeHandle({ edge, bounds, zoom, onPointerDown, containerScale = 1, testId = `crop-edge-${edge}` }) {
   const vertical = edge === "e" || edge === "w";
   const long = 30;
   const short = 10;
@@ -996,7 +1225,7 @@ function EdgeHandle({ edge, bounds, zoom, onPointerDown, containerScale = 1 }) {
   const cy = edge === "n" ? 0 : edge === "s" ? bounds.height * zoom : (bounds.height * zoom) / 2;
   return (
     <div
-      data-testid={`crop-edge-${edge}`}
+      data-testid={testId}
       onPointerDown={onPointerDown}
       style={{
         position: "absolute",
@@ -1243,6 +1472,14 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   // Wider than penDrawsThrough: the text, lasso and fill tools must reach
   // the canvas through a locked object too, not just writing.
   lockedPassesThrough = penDrawsThrough,
+  // The text tool is armed: a tap on a text box types into it, caret under
+  // the finger, instead of selecting it.
+  textToolArmed = false,
+  // A page-width text box ran past its page (see TextContent). Gets the box
+  // id and a cut() to call once there is somewhere for the overflow to go;
+  // returns { id, caret }: the box that took it, and whether the caret went
+  // along.
+  onTextOverflow,
 }, forwardedRef) {
   const [layersMenuOpen, setLayersMenuOpen] = useState(false);
   const [croppingId, setCroppingId] = useState(null);
@@ -1285,6 +1522,9 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
   }), []);
 
   if (objects.length === 0) return null;
+  const toolbarTextId = objects.find(
+    (object) => object.type === "text" && (object.id === editingId || object.id === selectedId),
+  )?.id;
 
   return (
     <div
@@ -1308,6 +1548,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
       onPointerUp={drag.end}
       onPointerCancel={drag.end}
     >
+      {toolbarTextId && <RichTextToolbar objectId={toolbarTextId} onEdit={onEditingChange} onAlign={(id, textAlign) => onChange?.(id, alignWholeBox(objects.find((o) => o.id === id), textAlign))} />}
       <div
         data-glass-viewport="inner"
         style={{
@@ -1401,11 +1642,30 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 bounds.x + bounds.width / 2 + (event.clientX - (rect.left + rect.width / 2)) / pointerScale;
               const localY =
                 bounds.y + bounds.height / 2 + (event.clientY - (rect.top + rect.height / 2)) / pointerScale;
-              if (!hitTestObject(object, localX, localY)) return;
+              // Text grabs its whole box plus the margin around it (see the
+              // hit pad below), so it skips the exact-bounds test.
+              if (object.type !== "text" && !hitTestObject(object, localX, localY)) return;
               // Past this point the click is a genuine hit, not a fallthrough
               // — stop it here so the canvas underneath (ink draw, marquee
               // select) never also reacts to the same press.
               event.stopPropagation();
+              if (object.type === "text" && !object.locked && editingId !== object.id) {
+                // The text tool types where it taps, like a word processor.
+                if (textToolArmed) {
+                  pendingCaret = { objectId: object.id, point: { x: event.clientX, y: event.clientY } };
+                  onSelect?.(object.id);
+                  onEditingChange?.(object.id);
+                  return;
+                }
+                // A checklist box ticks right on the page, no edit mode needed.
+                const item = checkboxAt(event, event.currentTarget);
+                if (item) {
+                  const field = item.closest(".rich-text");
+                  toggleCheckbox(item);
+                  onChange?.(object.id, contentOf(field));
+                  return;
+                }
+              }
               // A ctrl/cmd-held click always goes through tapSelect to toggle
               // group membership, even on an already-selected object — plain
               // clicks alone start a move drag.
@@ -1434,6 +1694,7 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 pendingTableFocus.current = { objectId: object.id, row, col };
                 onEditingChange?.(object.id);
               } else if (object.type === "text") {
+                pendingCaret = { objectId: object.id, point: { x: event.clientX, y: event.clientY } };
                 onEditingChange?.(object.id);
               } else if (object.type === "image") {
                 setCroppingId(object.id);
@@ -1455,6 +1716,14 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
               zIndex: isSelected || croppingId === object.id ? 20 : 1,
             }}
           >
+            {/* A short word is a tiny target for a finger: like in Canva, the
+                text box is grabbable a little past its edges too. */}
+            {object.type === "text" && (
+              <div
+                aria-hidden
+                style={{ position: "absolute", inset: -TEXT_HIT_PAD / containerScale }}
+              />
+            )}
             {/* Content is authored in page units and scaled as a whole, so one
                 zoom factor covers strokes, text and images alike. */}
             <div
@@ -1470,18 +1739,33 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                 onResize={onChange}
                 paperStyle={paperStyle}
                 pageWidth={pageLayout?.pageWidth}
+                pageHeight={pageLayout?.pageLayouts?.find((page) => page.id === object.pageId)?.height}
                 editable={editingId === object.id}
+                resizing={object === drag.draft}
                 isProcessing={processingObjectId === object.id}
                 focusCell={
                   pendingTableFocus.current?.objectId === object.id ? pendingTableFocus.current : null
                 }
-                onCommitText={(id, text) => {
-                  onEditingChange?.(null);
+                onOpenLink={onOpenLink}
+                onOverflow={
+                  onTextOverflow &&
+                  ((id, cut) => {
+                    // The typing moved on to the next page: so does the edit.
+                    const next = onTextOverflow(id, cut);
+                    if (!next?.caret) return;
+                    onSelect?.(next.id);
+                    onEditingChange?.(next.id);
+                  })
+                }
+                onCommitText={(id, content, leaving) => {
+                  // A box that lost editing to another (its continuation)
+                  // only saves; the edit itself carries on over there.
+                  if (leaving && editingId === id) onEditingChange?.(null);
                   // An empty text box has nothing to show and nothing to
                   // select later — leaving it would just be an invisible
                   // click trap sitting on the page forever.
-                  if (!text.trim()) onDelete?.(id);
-                  else onChange?.(id, { text });
+                  if (leaving && !content.text.trim()) onDelete?.(id);
+                  else onChange?.(id, content);
                 }}
                 onExitEdit={() => onEditingChange?.(null)}
               />
@@ -1551,14 +1835,62 @@ const PageObjectLayer = forwardRef(function PageObjectLayer({
                         containerScale={containerScale}
                       />
                     )}
-                    <Handle
-                      position={{
-                        left: (object.x + object.width - bounds.x) * zoom,
-                        top: (object.y + object.height - bounds.y) * zoom,
-                      }}
-                      onPointerDown={(event) => drag.start(event, object, "end", pointerScale)}
-                      containerScale={containerScale}
-                    />
+                    {object.type !== "text" && (
+                      <Handle
+                        position={{
+                          left: (object.x + object.width - bounds.x) * zoom,
+                          top: (object.y + object.height - bounds.y) * zoom,
+                        }}
+                        onPointerDown={(event) => drag.start(event, object, "end", pointerScale)}
+                        containerScale={containerScale}
+                      />
+                    )}
+                    {/* Text sizes like in Canva: corners scale it, sides set
+                        its width. A page-width box takes its width from the
+                        page, so it has neither. Sides go last: on a one-line
+                        box their grab area wins over the corners'. */}
+                    {object.type === "text" && !object.flow && (
+                      <>
+                        {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sy]) => (
+                          <Handle
+                            key={`${sx}${sy}`}
+                            testId="text-corner-handle"
+                            cursor={sx === sy ? "nwse-resize" : "nesw-resize"}
+                            position={{ left: sx < 0 ? 0 : bounds.width * zoom, top: sy < 0 ? 0 : bounds.height * zoom }}
+                            onPointerDown={(event) => {
+                              const field = textFieldOf(event);
+                              // Text on the ruling takes its size from the
+                              // lines; scaling it frees it, from the size it
+                              // shows right now.
+                              const from =
+                                object.snapToLines && field
+                                  ? {
+                                      ...object,
+                                      snapToLines: false,
+                                      fontSize: parseFloat(field.style.fontSize),
+                                      lineHeight: parseFloat(field.style.lineHeight),
+                                    }
+                                  : object;
+                              drag.start(event, from, "scale", pointerScale, null, { sx, sy, field });
+                            }}
+                            containerScale={containerScale}
+                          />
+                        ))}
+                        {[-1, 1].map((sx) => (
+                          <EdgeHandle
+                            key={sx}
+                            edge={sx < 0 ? "w" : "e"}
+                            testId={`text-edge-${sx < 0 ? "w" : "e"}`}
+                            bounds={bounds}
+                            zoom={zoom}
+                            containerScale={containerScale}
+                            onPointerDown={(event) =>
+                              drag.start(event, object, "side", pointerScale, null, { sx, field: textFieldOf(event) })
+                            }
+                          />
+                        ))}
+                      </>
+                    )}
                     {object.type === "image" && !object.rotation && object.width > 0 && object.height > 0 &&
                       ["n", "e", "s", "w"].map((edge) => (
                         <EdgeHandle

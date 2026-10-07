@@ -78,6 +78,9 @@ export function createPageObject(input = {}) {
     color: text(source.color, "#3E7BD8"),
     strokeWidth: Math.max(0.1, finite(source.strokeWidth, 3)),
     text: text(source.text),
+    // Text-only: the formatted version of `text` (see richText.js), which
+    // stays the plain-text mirror everything else reads. Empty = plain text.
+    html: text(source.html),
     href: text(source.href),
     src: text(source.src),
     fontSize: Math.max(6, finite(source.fontSize, 16)),
@@ -87,7 +90,7 @@ export function createPageObject(input = {}) {
     // Text typography. fontFamily is a FONT_STACKS id, not a CSS stack, so a
     // stored document never pins down the actual fonts a device has.
     fontFamily: text(source.fontFamily, "sans"),
-    textAlign: ["left", "center", "right"].includes(source.textAlign)
+    textAlign: ["left", "center", "right", "justify"].includes(source.textAlign)
       ? source.textAlign
       : "left",
     bold: source.bold === true,
@@ -100,6 +103,9 @@ export function createPageObject(input = {}) {
     // pinned the width by hand, so typing wraps within it and only grows the
     // box downward instead of also stretching it wider.
     autoWidth: source.autoWidth !== false,
+    // Text-only: a page-width document block. What no longer fits above the
+    // page's bottom margin continues on the next page (see DocumentView).
+    flow: source.flow === true,
     lineStep: Math.max(1, Math.round(finite(source.lineStep, 1))),
     // Set by the bucket tool on a rect/ellipse it clicked inside: stroke and
     // fill are the same object then, so moving/resizing/deleting it carries

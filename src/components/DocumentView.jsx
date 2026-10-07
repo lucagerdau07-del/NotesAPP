@@ -53,7 +53,8 @@ import { resolveInkLayerIndex } from "../ink/inkDocument";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { isPdfFile, pdfPageCommands, readPdfPages } from "../ink/pdfObject";
 import { removeImageBackground } from "../ink/imageBackground";
-import { FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
+import { FLOW_MARGIN, FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
+import { plainTextOf, richHtmlOf } from "../ink/richText";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
 import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
 import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
@@ -166,7 +167,7 @@ const ALIGNMENTS = [
 
 // Edits the selected text object when there is one, otherwise the defaults the
 // next insert will use — same controls either way.
-export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose, top = 120 }) {
+export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose, top = 120, canFlow = false }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
@@ -300,6 +301,22 @@ export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert
           <option value="2">Auf {snapHint}, 2 Zeilen</option>
         </select>
       </div>
+
+      {canFlow && (
+        <div className="text-row">
+          <span className="text-setting-label">BREITE</span>
+          <select
+            className="text-select"
+            value={style.flow ? "page" : "free"}
+            data-testid="text-width-select"
+            title="Seitenbreite: Text, der unten nicht mehr passt, läuft auf der nächsten Seite weiter"
+            onChange={(e) => onStyleChange({ flow: e.target.value === "page" })}
+          >
+            <option value="free">Frei</option>
+            <option value="page">Seitenbreite</option>
+          </select>
+        </div>
+      )}
 
       {!hasSelection && (
         <button className="text-insert-btn" data-testid="text-insert-btn" onClick={onInsert}>
@@ -1260,6 +1277,7 @@ export default function DocumentView({
     snapToLines: true,
     lineStep: 1,
     color: "#EFECE4",
+    flow: false,
   });
   const [selectedObjectId, setSelectedObjectId] = useState(null);
   // Copy/cut/paste clipboard for page objects, same convention as the
@@ -1277,6 +1295,10 @@ export default function DocumentView({
   // Set while a design-tool button is armed: the next drag on the page draws
   // that object instead of an ink stroke. draftPlacement tracks that drag.
   const [placingTool, setPlacingTool] = useState(null);
+  // Typing into a box ends the text tool's turn, same as placing one does.
+  useEffect(() => {
+    if (editingObjectId) setPlacingTool((tool) => (tool?.id === "text" ? null : tool));
+  }, [editingObjectId]);
   const [draftPlacement, setDraftPlacement] = useState(null);
   // Kommentare sind nur im Kommentar-Modus sichtbar (siehe CommentLayer).
   const [isCommentMode, setIsCommentMode] = useState(false);
@@ -1606,7 +1628,7 @@ export default function DocumentView({
   const handleObjectChange = (objectId, changes) => {
     const target = pageObjects.find((o) => o.id === objectId);
     const next =
-      target?.type === "text" && (target.snapToLines || changes.snapToLines)
+      target?.type === "text" && (changes.snapToLines ?? target.snapToLines)
         ? { ...changes, ...snapTextToGrid({ ...target, ...changes }, paperStyle) }
         : changes;
     inkController?.updateObject?.(objectId, next);
@@ -1618,9 +1640,69 @@ export default function DocumentView({
   const selectedShapeObject =
     pageObjects.find((o) => o.id === selectedObjectId && SHAPE_TYPES.includes(o.type)) || null;
 
+  // A page-width box spans its page between the margins; leaving that mode
+  // lets the box hug its text again.
+  const flowGeometry = (flow, pageId) => {
+    if (!flow) return { autoWidth: true };
+    const page = documentMetrics.pageLayouts.find((layout) => layout.id === pageId);
+    return { x: FLOW_MARGIN, width: (page?.width ?? baseWidth) - 2 * FLOW_MARGIN, autoWidth: false };
+  };
   const handleTextStyleChange = (patch) => {
     setTextStyle((prev) => ({ ...prev, ...patch }));
-    if (selectedTextObject) handleObjectChange(selectedTextObject.id, patch);
+    if (selectedTextObject)
+      handleObjectChange(
+        selectedTextObject.id,
+        "flow" in patch ? { ...patch, ...flowGeometry(patch.flow, selectedTextObject.pageId) } : patch,
+      );
+  };
+
+  // A page-width text box ran past its page (see PageObjectLayer). What no
+  // longer fits continues at the top of the next page: in the box already
+  // continuing it there, else in a new one, on a page of its own when the
+  // next page holds something else. One undo step for all of it. Returns
+  // where the moved text went, or null (nothing cut) when no page is left.
+  // ponytail: text only ever flows forward; deleting on page 1 leaves a gap
+  // instead of pulling the next page's text back up.
+  const handleTextOverflow = (objectId, cut) => {
+    const doc = inkController?.getDocument?.();
+    const objects = pageObjectsOf(doc);
+    const source = objects.find((object) => object.id === objectId);
+    const index = source ? doc.pages.findIndex((page) => page.id === source.pageId) : -1;
+    if (index < 0 || !inkController?.applyCommands) return null;
+    const next = doc.pages[index + 1];
+    const onNext = next ? objects.filter((object) => object.pageId === next.id) : [];
+    const continuation = onNext
+      .filter((object) => object.type === "text" && object.flow && object.y < FLOW_MARGIN * 1.5)
+      .sort((a, b) => a.y - b.y)[0];
+    const freshPage =
+      !continuation && (!next || onNext.length > 0 || doc.strokes.some((stroke) => stroke.pageId === next.id));
+    if (freshPage && doc.pages.length >= maxPages) return null;
+
+    const { rest, moved, caret } = cut();
+    const commands = [
+      rest.text.trim()
+        ? { type: "update-object", objectId, changes: rest }
+        : { type: "remove-objects", objectIds: [objectId] },
+    ];
+    let pageId = next?.id;
+    if (freshPage) {
+      pageId = `${doc.documentId}-page-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+      const order = doc.pages.map((page) => page.id);
+      order.splice(index + 1, 0, pageId);
+      commands.push({ type: "add-page", page: { id: pageId } }, { type: "reorder-pages", pageIds: order });
+    }
+    let id = continuation?.id;
+    if (continuation) {
+      const html = moved + richHtmlOf(continuation);
+      commands.push({ type: "update-object", objectId: id, changes: { html, text: plainTextOf(html) } });
+    } else {
+      id = globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`;
+      const object = { ...source, id, pageId, y: FLOW_MARGIN, html: moved, text: plainTextOf(moved) };
+      if (object.snapToLines) Object.assign(object, snapTextToGrid(object, paperStyle));
+      commands.push({ type: "add-object", object });
+    }
+    inkController.applyCommands(commands);
+    return { id, caret };
   };
   const handleShapeStyleChange = (patch) => {
     if (selectedShapeObject) handleObjectChange(selectedShapeObject.id, patch);
@@ -2312,7 +2394,9 @@ export default function DocumentView({
     // A click never starts on an object — those stop propagation before it
     // reaches here — so any page pointerdown means "away", clearing selection.
     setSelectedObjectId(null);
-    // A tap that only dismisses a selection must not also leave an ink dot.
+    // A tap that only dismisses a selection must not also leave an ink dot —
+    // nor one that ends a text edit (the blur it causes closes the keyboard).
+    if (editingObjectId) return;
     if (selectedObjectId && e.pointerType !== "touch") return;
 
     if (isBucketMode) {
@@ -2345,6 +2429,11 @@ export default function DocumentView({
     }
 
     if (placingTool) {
+      // The text box placed on release takes focus (and the keyboard) then; a
+      // touch would follow up with a compat mousedown that moves focus off it
+      // again, closing the keyboard and dropping the empty box. Cancelling
+      // the pointerdown suppresses those mouse events.
+      if (placingTool.id === "text" && e.pointerType !== "mouse") e.preventDefault();
       inkPointer.onPointerDown(e, { preventDraw: true });
       const point = mapViewportPoint(
         pageLayout,
@@ -2513,7 +2602,13 @@ export default function DocumentView({
         strokeWidth: rawLineWidth ?? lineWidth ?? 3,
         // A dragged box gets a "Text" placeholder so its size stays visible;
         // a plain click starts empty since the caret appears there right away.
-        ...(draftPlacement.type === "text" ? { text: dragged ? "Text" : "", ...textStyle } : {}),
+        ...(draftPlacement.type === "text"
+          ? {
+              text: dragged ? "Text" : "",
+              ...textStyle,
+              ...(textStyle.flow ? flowGeometry(true, draftPlacement.pageId) : null),
+            }
+          : {}),
       };
       if (object.type === "text" && object.snapToLines)
         Object.assign(object, snapTextToGrid(object, paperStyle));
@@ -2688,7 +2783,9 @@ export default function DocumentView({
       x: event.clientX, y: event.clientY, downX: event.clientX, downY: event.clientY, startedOnPage,
     });
 
-    if (activePointers.current.size === 1 && (!startedOnPage || (isMoveMode && !placingTool))) {
+    // A finger on an object drags that object in move mode, not the page.
+    const onObject = Boolean(event.target?.closest?.('[data-testid="object-container"]'));
+    if (activePointers.current.size === 1 && (!startedOnPage || (isMoveMode && !placingTool && !onObject))) {
       gutterPanData.current = startPan(event);
     }
 
@@ -3728,6 +3825,7 @@ export default function DocumentView({
           onStyleChange={handleTextStyleChange}
           paperStyle={paperStyle}
           hasSelection={Boolean(selectedTextObject)}
+          canFlow={note?.kind !== "imported"}
           onInsert={() => {
             setPlacingTool(TEXT_TOOL);
             setIsTextSettingsOpen(false);
@@ -4037,6 +4135,8 @@ export default function DocumentView({
             onGestureStart={handleGestureStart}
             panMode={isSpaceDown}
             penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
+            textToolArmed={placingTool?.id === "text"}
+            onTextOverflow={handleTextOverflow}
           />
           {note?.kind !== 'imported' && (
             <canvas
@@ -4077,6 +4177,8 @@ export default function DocumentView({
             onGestureStart={handleGestureStart}
             panMode={isSpaceDown}
             penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
+            textToolArmed={placingTool?.id === "text"}
+            onTextOverflow={handleTextOverflow}
           />
           {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
             <svg

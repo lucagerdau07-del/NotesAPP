@@ -28,6 +28,10 @@ export const PAPER_RHYTHM = {
   blank: { spacing: 34, offset: 92 },
 };
 
+// Page margins of a page-width ("flow") text box, in page units: about 2 cm
+// on an A4 page 800 units wide.
+export const FLOW_MARGIN = 72;
+
 export function rhythmOf(paperStyle) {
   return PAPER_RHYTHM[paperStyle] || PAPER_RHYTHM.lined;
 }

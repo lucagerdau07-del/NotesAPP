@@ -259,6 +259,9 @@ function applyInkCommand(document, command) {
       if (index < 0 || !command.changes) return document;
       const next = createPageObject({
         ...objects[index],
+        // New text without new formatting (the agent's edit_text) replaces
+        // the formatted version too, or the stale one would keep showing.
+        ...("text" in command.changes && !("html" in command.changes) ? { html: "" } : null),
         ...command.changes,
         id: objects[index].id,
       });

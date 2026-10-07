@@ -260,3 +260,30 @@ export async function requestGoogleDoc({ title, docx, signal, config = loadAgent
   if (!/^https:\/\/(docs|drive)\.google\.com\//.test(data?.url || "")) throw new Error("Keine Dokument-Adresse erhalten.");
   return { id: data.id, title: String(data.title || title), url: data.url };
 }
+
+// Bestehende Google Docs: action list {query} | read {id} | replace {id, find,
+// text} | append {id, text}. Gibt das JSON des Space zurück.
+export async function requestGoogleDocEdit({ signal, config = loadAgentConfig(), ...body }) {
+  const baseUrl = String(config.baseUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) throw new Error("Keine Backend-Adresse eingestellt.");
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/gdoc/edit`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.accessKey ? { "X-App-Key": config.accessKey } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw new Error("Server nicht erreichbar.");
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error?.message || `Fehler ${response.status}`);
+  return data || {};
+}

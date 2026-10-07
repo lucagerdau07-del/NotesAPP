@@ -5,7 +5,7 @@ import { browserFolderRepository, folderWithDescendants } from "../storage/folde
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 import { readSource, searchSources } from "../knowledge/sources.js";
-import { requestGoogleDoc, requestSearch, requestWolfram } from "./agentClient.js";
+import { requestGoogleDoc, requestGoogleDocEdit, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
@@ -820,6 +820,48 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "find_google_docs",
+      description:
+        "Listet Google Docs aus dem Drive des Nutzers (neueste zuerst), optional gefiltert nach Titel. Liefert id, Titel und Änderungsdatum. Nimm es, bevor du ein bestehendes Google Doc liest oder bearbeitest.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string", description: "Teil des Titels, leer = die neuesten" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_google_doc",
+      description: "Liest den Text eines bestehenden Google Docs (ohne Formatierung). id kommt aus find_google_docs oder create_google_doc-Link.",
+      parameters: {
+        type: "object",
+        properties: { id: { type: "string", description: "Dokument-ID" } },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_google_doc",
+      description:
+        "Ändert ein bestehendes Google Doc, Formatierung bleibt erhalten. mode replace: ersetzt jede Stelle, die exakt find entspricht (Groß-/Kleinschreibung zählt), durch text. mode append: hängt text als neuen Absatz ans Ende. Lies das Doc vorher mit read_google_doc, damit find exakt stimmt. Im Chat erscheint automatisch eine Karte zum Öffnen.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Dokument-ID" },
+          mode: { type: "string", enum: ["replace", "append"] },
+          find: { type: "string", description: "Nur bei replace: exakter Text, der ersetzt wird" },
+          text: { type: "string", description: "Neuer Text (bei replace darf er leer sein, um zu löschen)" },
+        },
+        required: ["id", "mode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -833,6 +875,9 @@ export const AGENT_TOOLS = [
 
 const READ_ONLY_TOOL_NAMES = new Set([
   "create_google_doc",
+  "find_google_docs",
+  "read_google_doc",
+  "edit_google_doc",
   "read_document",
   "see_document",
   "list_folders",
@@ -854,6 +899,9 @@ export const AGENT_READ_TOOLS = AGENT_TOOLS.filter((tool) =>
 
 const NO_DOCUMENT_TOOL_NAMES = new Set([
   "create_google_doc",
+  "find_google_docs",
+  "read_google_doc",
+  "edit_google_doc",
   "list_folders",
   "list_notes",
   "search_sources",
@@ -1007,6 +1055,12 @@ export function describeToolCall(name, args = {}) {
       return `Datei erstellen: ${String(args.title || args.format || "").slice(0, 40)}`;
     case "create_google_doc":
       return `Google Doc erstellen: ${String(args.title || "").slice(0, 40)}`;
+    case "find_google_docs":
+      return args.query ? `Google Docs suchen: ${String(args.query).slice(0, 40)}` : "Google Docs auflisten";
+    case "read_google_doc":
+      return "Google Doc lesen";
+    case "edit_google_doc":
+      return "Google Doc bearbeiten";
     case "done":
       return "Fertig";
     default:
@@ -1115,6 +1169,54 @@ async function makeGoogleDoc(args) {
   }
 }
 
+const gdocError = (error) => `Fehler: Google Docs fehlgeschlagen (${error.message}).`;
+
+async function findGoogleDocs(args) {
+  try {
+    const { files = [] } = await requestGoogleDocEdit({ action: "list", query: String(args.query || "").trim() });
+    if (!files.length) return "Keine Google Docs gefunden.";
+    return files.map((f) => ({ id: f.id, title: f.name, modified: f.modifiedTime }));
+  } catch (error) {
+    return gdocError(error);
+  }
+}
+
+async function readGoogleDoc(args) {
+  try {
+    const { text = "" } = await requestGoogleDocEdit({ action: "read", id: String(args.id || "") });
+    return text || "Das Dokument ist leer.";
+  } catch (error) {
+    return gdocError(error);
+  }
+}
+
+// result.card geht wie bei create_google_doc nicht ans Modell, sondern in den Chat.
+async function editGoogleDoc(args) {
+  const mode = args.mode;
+  if (mode !== "replace" && mode !== "append") return "Fehler: mode muss replace oder append sein.";
+  if (mode === "replace" && !String(args.find || "")) return "Fehler: find fehlt.";
+  if (mode === "append" && !String(args.text || "").trim()) return "Fehler: text fehlt.";
+  try {
+    const { title, url, changed } = await requestGoogleDocEdit({
+      action: mode,
+      id: String(args.id || ""),
+      find: args.find,
+      text: String(args.text ?? ""),
+    });
+    // replaceAllText succeeds with 0 hits when find does not match exactly.
+    if (mode === "replace" && !changed) return "Fehler: find kommt im Dokument nicht vor. Lies es mit read_google_doc und kopiere die Stelle exakt.";
+    if (!/^https:\/\/(docs|drive)\.google\.com\//.test(url || "")) return "Fehler: Google Docs fehlgeschlagen (Keine Dokument-Adresse erhalten).";
+    return {
+      edited: title,
+      ...(mode === "replace" ? { replaced: changed } : {}),
+      hint: "Der Nutzer sieht im Chat eine Karte zum Öffnen.",
+      card: { kind: "gdoc", title, url },
+    };
+  } catch (error) {
+    return gdocError(error);
+  }
+}
+
 // Executes one tool call against the live document. Never throws on bad model
 // arguments: the error text goes back to the model as the tool result so it can
 // correct itself, and the run continues.
@@ -1127,6 +1229,9 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "wolfram_alpha") return askWolfram(args.query);
   if (name === "create_file") return makeFile(args, api);
   if (name === "create_google_doc") return makeGoogleDoc(args);
+  if (name === "find_google_docs") return findGoogleDocs(args);
+  if (name === "read_google_doc") return readGoogleDoc(args);
+  if (name === "edit_google_doc") return editGoogleDoc(args);
   if (name === "done") return { summary: String(args.summary || "") };
 
   if (name === "list_folders") {

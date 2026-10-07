@@ -3,6 +3,8 @@ import { resolveInkLayerIndex } from "../ink/inkDocument.js";
 import { objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { renderInkStroke } from "../ink/renderInk.js";
 import { fontStackOf } from "../ink/textStyle.js";
+import { sanitizeRichHtml } from "../ink/richText.js";
+import richTextCss from "../styles/richText.css?raw";
 
 const THUMB_WIDTH = 320;
 const THUMB_HEIGHT = 150;
@@ -29,6 +31,8 @@ function firstPageOf(inkDoc) {
 // want the image to appear once it's ready subscribe via
 // subscribeToPreviewImages and re-render.
 const imageCache = new Map();
+// src -> its decode in flight, for callers that must wait (preparePreviewImages).
+const imageLoads = new Map();
 const imageReadyListeners = new Set();
 // Counts renders that had to skip a still-decoding image, so a thumbnail made
 // that way is not remembered as final (see renderNotePreviewDataUrl).
@@ -54,14 +58,86 @@ function getCachedPreviewImage(src) {
   if (cached === "pending") return null;
   imageCache.set(src, "pending");
   const image = new Image();
-  image.onload = () => {
-    imageCache.set(src, image);
-    decodedImages += 1;
-    notifyPreviewImages();
-  };
-  image.onerror = () => imageCache.set(src, "error");
+  imageLoads.set(
+    src,
+    new Promise((resolve) => {
+      image.onload = () => {
+        imageCache.set(src, image);
+        decodedImages += 1;
+        notifyPreviewImages();
+        resolve();
+      };
+      image.onerror = () => {
+        imageCache.set(src, "error");
+        resolve();
+      };
+    }),
+  );
   image.src = src;
   return null;
+}
+
+// Formatted text can't be laid out by hand on a canvas, so it is drawn the
+// way the page shows it: the box's HTML in an SVG <foreignObject>, decoded as
+// an image through the same cache as pictures. Plain text keeps wrapText.
+// Objects are immutable per edit, so each one builds its markup once.
+const richTextSrcs = new WeakMap();
+
+function richTextImageSrc(object) {
+  let src = richTextSrcs.get(object);
+  if (src) return src;
+  const width = Math.max(1, Math.abs(object.width));
+  const height = Math.max(1, Math.abs(object.height));
+  const lineHeight = object.lineHeight || Math.round(object.fontSize * 1.35);
+  // A box snapped to the ruling is whole rows plus the padding that drops its
+  // first baseline onto a rule (see snapTextToGrid): that padding is the rest.
+  const paddingTop = object.snapToLines ? height % lineHeight : 0;
+  const { body } = new DOMParser().parseFromString(sanitizeRichHtml(object.html), "text/html");
+  const root = body.ownerDocument.createElement("div");
+  root.className = "rich-text";
+  root.setAttribute(
+    "style",
+    [
+      `width:${width}px`,
+      `padding-top:${paddingTop}px`,
+      "box-sizing:border-box",
+      `color:${object.color}`,
+      `font-size:${object.fontSize}px`,
+      `line-height:${lineHeight}px`,
+      `--rt-line:${lineHeight}px`,
+      `font-family:${fontStackOf(object.fontFamily)}`,
+      `font-weight:${object.bold ? 700 : 400}`,
+      `font-style:${object.italic ? "italic" : "normal"}`,
+      `text-decoration-line:${object.underline ? "underline" : "none"}`,
+      `text-align:${object.textAlign || "left"}`,
+      "white-space:pre-wrap",
+      "overflow-wrap:break-word",
+    ].join(";"),
+  );
+  root.append(...body.childNodes);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<foreignObject width="100%" height="100%"><style><![CDATA[${richTextCss}]]></style>` +
+    `${new XMLSerializer().serializeToString(root)}</foreignObject></svg>`;
+  src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  richTextSrcs.set(object, src);
+  return src;
+}
+
+// Exports draw in one synchronous pass, which skips whatever is still
+// decoding: start every picture and formatted text first and wait for them
+// (capped, so one image that never decodes can't hold the export forever).
+export function preparePreviewImages(inkDoc) {
+  const srcs = pageObjectsOf(inkDoc).map((object) =>
+    object.type === "image" || object.type === "fill"
+      ? object.src
+      : object.type === "text" && object.html
+        ? richTextImageSrc(object)
+        : null,
+  );
+  srcs.forEach((src) => src && getCachedPreviewImage(src));
+  const loads = Promise.all(srcs.map((src) => imageLoads.get(src)));
+  return Promise.race([loads, new Promise((resolve) => setTimeout(resolve, 4000))]);
 }
 
 // The library card's thumbnail needs the note's real paper color behind the
@@ -249,6 +325,12 @@ function drawPreviewObject(context, object) {
 
   if (object.type === "text") {
     if (!object.text.trim()) {
+      if (object.rotation) context.restore();
+      return;
+    }
+    const rich = object.html ? getCachedPreviewImage(richTextImageSrc(object)) : null;
+    if (rich) {
+      context.drawImage(rich, left, top, w, h);
       if (object.rotation) context.restore();
       return;
     }

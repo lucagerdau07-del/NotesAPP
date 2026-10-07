@@ -7,6 +7,7 @@ import {
   contentBoundsOf,
   flatBackdropColor,
   CONTENT_PADDING,
+  preparePreviewImages,
 } from "./notePreview.js";
 
 const EXPORT_MAX_DIMENSION = 2000;
@@ -115,6 +116,7 @@ function exportPagesOf(inkDoc, options) {
 
 // One page, full resolution, as a PNG - cropped to its own drawn content.
 export async function exportPageAsPng(inkDoc, pageId, filenameBase) {
+  await preparePreviewImages(inkDoc);
   const pages = exportPagesOf(inkDoc, {
     maxDimension: EXPORT_MAX_DIMENSION,
     mimeType: "image/png",
@@ -142,6 +144,7 @@ export async function exportPageAsPng(inkDoc, pageId, filenameBase) {
 // Starting from A4 means that normalization is a no-op. The image is fit
 // inside (not stretched to fill) and centered, like CSS object-fit: contain.
 export async function exportDocumentAsPdf(inkDoc, filenameBase) {
+  await preparePreviewImages(inkDoc);
   const allPages = exportPagesOf(inkDoc, {
     maxDimension: EXPORT_MAX_DIMENSION,
     mimeType: "image/jpeg",

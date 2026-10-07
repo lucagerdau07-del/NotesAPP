@@ -115,6 +115,10 @@ export default function WhiteboardEditor({
   const [draftPlacement, setDraftPlacement] = useState(null);
   const [selectedObjectId, setSelectedObjectId] = useState(null);
   const [editingObjectId, setEditingObjectId] = useState(null);
+  // Typing into a box ends the text tool's turn, same as placing one does.
+  useEffect(() => {
+    if (editingObjectId) setPlacingTool((tool) => (tool?.id === "text" ? null : tool));
+  }, [editingObjectId]);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
   const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
   const [textStyle, setTextStyle] = useState({
@@ -337,6 +341,10 @@ export default function WhiteboardEditor({
       return;
     }
     if (placingTool) {
+      // A touch's follow-up compat mousedown would move focus off the text box
+      // placed on release, closing its keyboard: cancelling this pointerdown
+      // suppresses it.
+      if (placingTool.id === "text" && event.pointerType !== "mouse") event.preventDefault();
       const point = mapPoint(event);
       if (!point) return;
       setDraftPlacement({ type: placingTool.id, pointerId: event.pointerId, startX: point.x, startY: point.y, width: 0, height: 0 });
@@ -1320,6 +1328,7 @@ export default function WhiteboardEditor({
     panMode: isSpaceDown,
     penDrawsThrough: !isMoveMode && !isLassoMode && !placingTool,
     lockedPassesThrough: !isMoveMode,
+    textToolArmed: placingTool?.id === "text",
   };
 
   // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the bottom layer.
