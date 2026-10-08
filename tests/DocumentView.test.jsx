@@ -1206,3 +1206,27 @@ test('toggles Canva LayerDrawer open and closed from left rail button', () => {
   expect(screen.queryByTestId('layer-drawer')).toBeNull();
 });
 
+
+test('places an arrow from the design tools as an ink stroke, not a selectable object', () => {
+  const addObject = vi.fn();
+  const commitStroke = vi.fn();
+  render(
+    <DocumentView inkController={createControllerDouble({ addObject, commitStroke })} toolbarState={toolState()} />,
+  );
+  const page = screen.getByTestId('document-page');
+  mockRect(page, { left: 0, top: 0, width: 800, height: 1200 });
+
+  fireEvent.click(screen.getByTestId('design-tools-btn'));
+  fireEvent.click(screen.getByTestId('insert-arrow'));
+  fireEvent.pointerDown(page, { pointerId: 1, pointerType: 'pen', clientX: 100, clientY: 100 });
+  fireEvent.pointerMove(page, { pointerId: 1, pointerType: 'pen', clientX: 300, clientY: 100 });
+  fireEvent.pointerUp(page, { pointerId: 1, pointerType: 'pen', clientX: 300, clientY: 100 });
+
+  expect(addObject).not.toHaveBeenCalled();
+  expect(commitStroke).toHaveBeenCalledTimes(1);
+  const stroke = commitStroke.mock.calls[0][0];
+  expect(stroke).toEqual(expect.objectContaining({ tool: 'pen', pageId: 'page-1' }));
+  const xs = stroke.points.map((p) => p.x);
+  expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(100);
+  expect(document.querySelector('[data-object-id]')).toBeNull();
+});
