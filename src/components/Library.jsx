@@ -24,6 +24,7 @@ import {
   Sparkle,
   Plus,
   Mic,
+  Square,
   SlidersHorizontal,
   Sparkles as SparklesIcon,
   FileUp,
@@ -3187,6 +3188,7 @@ export default function Library({
     documentId: "library",
     noteTitle: selectedSubject?.name,
     subject: selectedSubject?.name,
+    library: true,
   });
   const agentDisplayedTokens = useCountUp(agent.tokens);
 
@@ -3770,6 +3772,26 @@ export default function Library({
             caretColor: theme.accent,
           }}
         />
+
+        {agent.isRunning && (
+          <button
+            onClick={agent.stop}
+            data-testid="agent-stop-btn"
+            title="Agent stoppen"
+            style={{
+              background: "none",
+              border: "none",
+              color: "#FFFFFF",
+              padding: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Square size={16} strokeWidth={2.4} fill="currentColor" />
+          </button>
+        )}
 
         {/* Microphone Icon */}
         <button
@@ -4507,6 +4529,15 @@ export default function Library({
                   <span className="rail-chat-status-meta">
                     {formatElapsed(agent.elapsedMs)} · {formatTokens(agentDisplayedTokens)} Tokens
                   </span>
+                  <button
+                    type="button"
+                    className="agent-close"
+                    onClick={agent.stop}
+                    title="Abbrechen"
+                    data-testid="agent-cancel-btn"
+                  >
+                    <Square size={12} fill="currentColor" />
+                  </button>
                 </div>
               );
             })()}

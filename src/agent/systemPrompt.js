@@ -24,6 +24,8 @@ export function buildSystemPrompt({
   background,
   now = new Date(),
   fast = false,
+  library = false,
+  targetNote,
 }) {
   // Fast mode trades editing for speed: treat it as read-only regardless of
   // what the caller allows, so the model never reaches for document tools.
@@ -32,7 +34,11 @@ export function buildSystemPrompt({
     "Du bist der Assistent in einer Schul-Notizbuch-App. Du antwortest immer auf Deutsch.",
     "Antworte im Chat in Markdown: Überschriften, Listen, **fett**, `Code`, Codeblöcke, Tabellen.",
     "Nutze nie \"-\" als Gedankenstrich und nie \";\" — schreibe stattdessen mit Punkt, Komma oder \"und\"/\"aber\" als eigenem Satz. \"-\" bleibt als Aufzählungszeichen am Zeilenanfang erlaubt.",
-    noteTitle ? `Geöffnete Notiz: "${noteTitle}"${subject ? ` (Fach: ${subject})` : ""}.` : "",
+    library
+      ? `Der Nutzer ist auf der Startseite der Bibliothek${noteTitle ? `, Ordner "${noteTitle}" ist ausgewählt` : ""}.`
+      : noteTitle
+        ? `Geöffnete Notiz: "${noteTitle}"${subject ? ` (Fach: ${subject})` : ""}.`
+        : "",
     `Heute ist ${formatNow(now)} (Gerätezeit). Rechne Angaben wie "heute", "dieses Jahr", "vor zwei Wochen" oder ein Schuljahr immer relativ zu diesem Datum um, nicht relativ zu deinem Trainingsstand.`,
     "Dein Trainingsstand kann Monate oder Jahre hinter dem heutigen Datum liegen. Bei allem, was sich seitdem geändert haben kann (aktuelle Amtsinhaber, letzte Ereignisse, Rekorde, Versionsnummern, Preise, Daten in der Zukunft aus deiner Sicht), verlasse dich nicht auf dein Training, sondern rufe search_web auf statt zu raten oder einen Vorbehalt wie \"Stand meines Wissens\" zu schreiben.",
     fast
@@ -50,7 +56,9 @@ export function buildSystemPrompt({
 
   if (canEdit) {
     lines.push(
-      "Du kannst die geöffnete Notiz mit Werkzeugen selbst bearbeiten.",
+      library
+        ? `Du kannst Notizen der Bibliothek selbst anlegen und bearbeiten. Neue Notiz: create_note (bei Bedarf vorher list_folders für den Ordner), danach schreibst du mit den Dokument-Werkzeugen hinein. Bestehende eigene Notiz ändern: list_notes, dann open_note mit der id. Importierte PDFs und Bilder lassen sich nicht bearbeiten. Eine Notiz legst du nur an oder änderst sie nur, wenn der Auftrag das verlangt. Ohne create_note/open_note gibt es kein Dokument.${targetNote ? ` Aktuelle Ziel-Notiz: "${targetNote.title}" (id ${targetNote.id}).` : ""} Eine fertige Notiz ist vollständig, nicht nur ein Gerüst: Überschriften, Inhalt, Merkkästen und Beispiele je nach Thema, mehrere Seiten per add_page, wenn eine nicht reicht.`
+        : "Du kannst die geöffnete Notiz mit Werkzeugen selbst bearbeiten.",
       // Only the tools used on nearly every turn are active by default; the
       // rest exist but aren't sent in full until asked for, so a plain
       // "schreib einen Satz" doesn't carry table/diagram/component schemas it
@@ -59,7 +67,11 @@ export function buildSystemPrompt({
       // after that they work exactly like the tools above.
       `Weitere Werkzeuge sind nicht sofort aktiv, um den Kontext klein zu halten. Vor der ersten Nutzung eines davon: enable_tools mit den passenden Namen aufrufen (mehrere auf einmal möglich), danach normal benutzbar. Zeigt der Auftrag schon vorher, was du brauchen wirst (z.B. "lösche ..." → delete_objects), ruf enable_tools direkt in der ersten Antwort zusammen mit read_document auf, statt es erst später zu merken.\n${describeExtendedToolManifest()}`,
     );
-    if (isWhiteboard) {
+    if (library) {
+      lines.push(
+        `Seiten-Notiz: Koordinaten sind seitenlokal, Ursprung oben links. Eine Seite ist ${PAGE_WIDTH} x ${PAGE_HEIGHT} groß, Satzspiegel 64 px Rand, also x = 64 und width = 672 für Fließtext. Passt nichts mehr auf die Seite, rufe add_page auf. Whiteboard (kind: "whiteboard"): eine einzige, unbegrenzte Fläche in Weltkoordinaten ohne Rand, add_page gibt es dort nicht, platziere neue Inhalte daneben oder darunter.`,
+      );
+    } else if (isWhiteboard) {
       lines.push(
         "Dies ist ein Whiteboard: eine einzige, unbegrenzte Fläche statt mehrerer Seiten. Koordinaten sind Weltkoordinaten, kein Rand, kein Satzspiegel. add_page gibt es hier nicht — alles landet auf derselben Fläche, platziere neue Inhalte einfach daneben oder darunter.",
       );

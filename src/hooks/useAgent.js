@@ -3,6 +3,7 @@ import { requestCompletion } from "../agent/agentClient.js";
 import { VISION_MODEL_CHAIN } from "../agent/agentSettings.js";
 import {
   AGENT_CORE_TOOLS,
+  AGENT_LIBRARY_TOOLS,
   AGENT_READ_TOOLS,
   AGENT_NO_DOCUMENT_TOOLS,
   AGENT_EXTENDED_BY_NAME,
@@ -11,6 +12,7 @@ import {
   executeTool,
 } from "../agent/tools.js";
 import { buildSystemPrompt } from "../agent/systemPrompt.js";
+import { createLibraryNoteSession } from "../agent/libraryNote.js";
 
 const MAX_STEPS = 30;
 const MAX_HISTORY = 40;
@@ -108,6 +110,16 @@ function conversationHasImage(conversation) {
   );
 }
 
+// Names the model asked for via enable_tools join the base set, minus any the
+// base already carries (the start screen sends search_sources & co. up front).
+function withExtras(base, enabledExtra) {
+  const have = new Set(base.map((tool) => tool.function.name));
+  return [
+    ...base,
+    ...[...enabledExtra].filter((name) => !have.has(name)).map((name) => AGENT_EXTENDED_BY_NAME.get(name)),
+  ];
+}
+
 function parseArguments(raw) {
   try {
     return JSON.parse(raw || "{}");
@@ -139,7 +151,9 @@ function wireMessages(messages) {
  * document, and the document lives here. Every tool call is applied
  * immediately, as one undo step, so the user watches the work happen.
  */
-export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model, fast }) {
+// library: the start screen has no open note, so the agent gets create_note/
+// open_note and edits the stored notes through a headless session instead.
+export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model, fast, library = false }) {
   const [sessions, setSessions] = useState(() => loadSessions(documentId));
   const [activeId, setActiveId] = useState(() => sessions[0]?.id ?? newSessionId());
   const [messages, setMessages] = useState(() => sessions[0]?.messages ?? []);
@@ -150,6 +164,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   const [elapsedMs, setElapsedMs] = useState(0);
   const [streamText, setStreamText] = useState("");
   const abortRef = useRef(null);
+  const librarySessionRef = useRef(null);
   const loadedFor = useRef(documentId);
   const startTimeRef = useRef(null);
 
@@ -200,6 +215,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   // history since the effect above already persisted it.
   const startNew = useCallback(() => {
     stop();
+    librarySessionRef.current = null;
     setActiveId(newSessionId());
     setMessages([]);
     setSteps([]);
@@ -210,6 +226,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   // fresh blank one.
   const clear = useCallback(() => {
     stop();
+    librarySessionRef.current = null;
     setSessions((current) => {
       const updated = current.filter((s) => s.id !== activeId);
       saveSessions(documentId, updated);
@@ -226,6 +243,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       const session = sessions.find((s) => s.id === id);
       if (!session) return;
       stop();
+      librarySessionRef.current = null;
       setActiveId(id);
       setMessages(session.messages);
       setSteps([]);
@@ -272,11 +290,15 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       const task = String(text || "").trim();
       if (!task || status === "running") return;
 
+      // The session outlives one send, so "ergänze das noch" keeps its note.
+      const librarySession = library
+        ? (librarySessionRef.current ??= createLibraryNoteSession())
+        : null;
       const controllerAtStart = inkControllerRef?.current;
-      const canRead = Boolean(controllerAtStart?.getDocument);
+      const canRead = library || Boolean(controllerAtStart?.getDocument);
       // Fast mode trades editing for speed — the tools sent to the model
       // never include document-writing ones, same as buildSystemPrompt's gate.
-      const canEdit = !fast && editDocument && Boolean(controllerAtStart?.applyCommands);
+      const canEdit = !fast && editDocument && (library || Boolean(controllerAtStart?.applyCommands));
       const isWhiteboard = controllerAtStart?.document?.pages?.[0]?.kind === "whiteboard";
       const background = controllerAtStart?.document?.pages?.[0]?.background;
       const controller = new AbortController();
@@ -295,12 +317,14 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
 
       // Read through the ref on every call: the controller object is replaced
       // on each render of the editor, and a run outlives many of them.
-      const api = {
-        getDocument: () => inkControllerRef.current.getDocument(),
-        apply: (commands) => inkControllerRef.current.applyCommands(commands),
-        getColor: () => inkControllerRef.current.color,
-        getPaperStyle: () => inkControllerRef.current.paperStyle,
-      };
+      const api = librarySession
+        ? librarySession.api
+        : {
+            getDocument: () => inkControllerRef.current.getDocument(),
+            apply: (commands) => inkControllerRef.current.applyCommands(commands),
+            getColor: () => inkControllerRef.current.color,
+            getPaperStyle: () => inkControllerRef.current.paperStyle,
+          };
 
       let currentSteps = [];
       // The persisted/displayed message stays plain text either way (its
@@ -323,6 +347,8 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             subject,
             canEdit,
             canRead,
+            library,
+            targetNote: librarySession?.target,
             isWhiteboard,
             background,
             fast,
@@ -344,8 +370,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
           const { message: reply, usage } = await requestCompletion({
             model,
             messages: wireMessages(conversation),
-            tools: canEdit
-              ? [...AGENT_CORE_TOOLS, ...[...enabledExtra].map((name) => AGENT_EXTENDED_BY_NAME.get(name))]
+            tools: library && canEdit
+              ? withExtras(AGENT_LIBRARY_TOOLS, enabledExtra)
+              : canEdit
+              ? withExtras(AGENT_CORE_TOOLS, enabledExtra)
               : canRead
                 ? AGENT_READ_TOOLS
                 : AGENT_NO_DOCUMENT_TOOLS,
@@ -540,7 +568,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         abortRef.current = null;
       }
     },
-    [activeId, documentId, fast, inkControllerRef, messages, model, noteTitle, status, subject],
+    [activeId, documentId, fast, inkControllerRef, library, messages, model, noteTitle, status, subject],
   );
 
   return {

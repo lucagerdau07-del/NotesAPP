@@ -919,6 +919,42 @@ export const AGENT_NO_DOCUMENT_TOOLS = AGENT_TOOLS.filter((tool) =>
   NO_DOCUMENT_TOOL_NAMES.has(tool.function.name),
 );
 
+// Start screen with write access: no editor is open, so the agent first picks
+// a target note (create_note / open_note, handled by the session in
+// libraryNote.js); the ordinary document tools then act on that note.
+const LIBRARY_NOTE_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "create_note",
+      description:
+        "Legt eine neue, leere Notiz in der Bibliothek an und macht sie zum Ziel der Dokument-Werkzeuge (write_text, insert_* ...). Gibt noteId und pageIds zurück. Eine Notiz entsteht nur auf ausdrücklichen Wunsch, nicht für reine Fragen.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Titel der Notiz" },
+          folder: { type: "string", description: "Ordner (id oder Name) aus list_folders, optional" },
+          kind: { type: "string", enum: ["page", "whiteboard"], description: "page (Standard, Seiten) oder whiteboard (unbegrenzte Fläche)" },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "open_note",
+      description:
+        "Wählt eine bestehende eigene Notiz (noteId aus list_notes) als Ziel zum Lesen und Bearbeiten. Importierte PDFs und Bilder gehen nicht.",
+      parameters: {
+        type: "object",
+        properties: { noteId: { type: "string" } },
+        required: ["noteId"],
+      },
+    },
+  },
+];
+
 // Edit mode splits into a core the model reaches for on nearly every turn
 // (full schema, always sent) and an extended set it only names occasionally -
 // full table/diagram/component builders run 300-950 chars each, and most
@@ -968,6 +1004,16 @@ export const ENABLE_TOOLS_TOOL = {
 export const AGENT_CORE_TOOLS = [
   ...AGENT_TOOLS.filter((tool) => CORE_TOOL_NAMES.has(tool.function.name)),
   ENABLE_TOOLS_TOOL,
+];
+
+// Union by name: some tools (list_notes, ...) sit in both source sets.
+export const AGENT_LIBRARY_TOOLS = [
+  ...new Map(
+    [...AGENT_CORE_TOOLS, ...AGENT_NO_DOCUMENT_TOOLS, ...LIBRARY_NOTE_TOOLS].map((tool) => [
+      tool.function.name,
+      tool,
+    ]),
+  ).values(),
 ];
 
 const AGENT_EXTENDED_TOOLS = AGENT_TOOLS.filter(
@@ -1061,6 +1107,10 @@ export function describeToolCall(name, args = {}) {
       return "Google Doc lesen";
     case "edit_google_doc":
       return "Google Doc bearbeiten";
+    case "create_note":
+      return `Notiz anlegen: ${String(args.title || "").slice(0, 40)}`;
+    case "open_note":
+      return "Notiz öffnen";
     case "done":
       return "Fertig";
     default:
@@ -1233,6 +1283,8 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "read_google_doc") return readGoogleDoc(args);
   if (name === "edit_google_doc") return editGoogleDoc(args);
   if (name === "done") return { summary: String(args.summary || "") };
+  if (name === "create_note") return api?.createNote ? api.createNote(args) : "Fehler: Notizen anlegen geht nur auf der Startseite.";
+  if (name === "open_note") return api?.openNote ? api.openNote(args) : "Fehler: Notizen wechseln geht nur auf der Startseite.";
 
   if (name === "list_folders") {
     const folders = browserFolderRepository.listFolders();
@@ -1297,6 +1349,8 @@ export async function executeTool(name, rawArgs, api) {
   const inkColor = color(api?.getColor?.(), "#1A1A1A");
   const document = api?.getDocument ? api.getDocument() : null;
   if (!document) {
+    if (api?.createNote)
+      return `Fehler: Noch keine Notiz als Ziel für "${name}". Rufe zuerst create_note oder open_note auf.`;
     return `Fehler: Kein Dokument geöffnet für "${name}".`;
   }
   const pageIds = document.pages.map((page) => page.id);
