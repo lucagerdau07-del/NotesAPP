@@ -276,6 +276,33 @@ export default function WhiteboardEditor({
     );
   };
 
+  // Counts a finger toward the two-finger pinch/pan. A second finger arms it.
+  const trackTouch = (event) => {
+    touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touchesRef.current.size !== 2) return;
+    // The drawing contact can be either finger — whichever landed first —
+    // so every id in the pair has to be offered, not just this one. It is
+    // a no-op for whichever finger was never drawing (see abortActiveStroke).
+    for (const pointerId of touchesRef.current.keys()) {
+      inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
+    }
+    // Once here, at the start of the pinch; every frame of it then reuses
+    // this via containerRectRef.
+    const rect = refreshContainerRect();
+    const [a, b] = Array.from(touchesRef.current.values());
+    const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
+    pinchRef.current = {
+      pointerIds: Array.from(touchesRef.current.keys()),
+      startDistance: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
+      startScale: camera.scale,
+      startCenter: centerScreen,
+      worldCenter: screenToWorld(camera, centerScreen),
+      pending: null,
+      ticking: false,
+      frameId: null,
+    };
+  };
+
   const handlePointerDown = (event) => {
     if (isSpaceDown && event.pointerType === "mouse" && event.button === 0) {
       panPointerRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
@@ -306,32 +333,8 @@ export default function WhiteboardEditor({
     if (lassoSelection?.objectIds?.length) setLassoSelection(null);
     if (editingObjectId) setEditingObjectId(null);
     if (event.pointerType === "touch") {
-      touchesRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      if (touchesRef.current.size === 2) {
-        // The drawing contact can be either finger — whichever landed first —
-        // so every id in the pair has to be offered, not just this one. It is
-        // a no-op for whichever finger was never drawing (see abortActiveStroke).
-        for (const pointerId of touchesRef.current.keys()) {
-          inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
-        }
-        // Once here, at the start of the pinch; every frame of it then reuses
-        // this via containerRectRef.
-        const rect = refreshContainerRect();
-        const [a, b] = Array.from(touchesRef.current.values());
-        const centerScreen = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
-        pinchRef.current = {
-          pointerIds: Array.from(touchesRef.current.keys()),
-          startDistance: Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1),
-          startScale: camera.scale,
-          startCenter: centerScreen,
-          worldCenter: screenToWorld(camera, centerScreen),
-          pending: null,
-          ticking: false,
-          frameId: null,
-        };
-        return;
-      }
-      if (touchesRef.current.size > 2) return;
+      trackTouch(event);
+      if (touchesRef.current.size >= 2) return;
     }
     // A tap that only dismisses a selection must not also leave an ink dot.
     if (hadSelection) return;
@@ -1326,6 +1329,10 @@ export default function WhiteboardEditor({
     onShiftOrder: inkController.shiftLayerOrder,
     onOpenLayers: openLayers,
     panMode: isSpaceDown,
+    // A finger that lands on an object (an opened PDF, most often) never
+    // bubbles its pointerdown up here, so the object hands it over directly:
+    // otherwise a pinch or pan starting on the PDF has only one finger.
+    onGestureStart: trackTouch,
     penDrawsThrough: !isMoveMode && !isLassoMode && !placingTool,
     lockedPassesThrough: !isMoveMode,
     textToolArmed: placingTool?.id === "text",
