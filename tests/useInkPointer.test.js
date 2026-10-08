@@ -604,7 +604,18 @@ describe('hold-to-convert', () => {
     return sides;
   }
 
-  it('turns a held rectangle-shaped draft into a shape object instead of ink', () => {
+  // The clean replacement a hold commits: one pen stroke, never an object.
+  function heldShapeStroke(commitStroke) {
+    const stroke = commitStroke.mock.calls[commitStroke.mock.calls.length - 1][0];
+    const xs = stroke.points.map((p) => p.x);
+    const ys = stroke.points.map((p) => p.y);
+    return {
+      stroke,
+      box: { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) },
+    };
+  }
+
+  it('redraws a held rectangle-shaped draft as one clean ink stroke, not a shape object', () => {
     vi.useFakeTimers();
     try {
       const addObject = vi.fn();
@@ -614,19 +625,24 @@ describe('hold-to-convert', () => {
       drawPoints(result, points);
       act(() => vi.advanceTimersByTime(500));
 
-      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'rect', x: 0, y: 0, width: 100, height: 60,
-      }));
+      expect(addObject).not.toHaveBeenCalled();
+      expect(commitStroke).toHaveBeenCalledOnce();
+      const { stroke, box } = heldShapeStroke(commitStroke);
+      expect(stroke).toMatchObject({ tool: 'pen', pageId: 'p1' });
+      expect(box.x).toBeCloseTo(0);
+      expect(box.y).toBeCloseTo(0);
+      expect(box.width).toBeCloseTo(100);
+      expect(box.height).toBeCloseTo(60);
       expect(result.current.draftStroke).toBeNull();
 
       act(() => result.current.onPointerUp(pointer(7, 'pen', points[points.length - 1].x, points[points.length - 1].y)));
-      expect(commitStroke).not.toHaveBeenCalled();
+      expect(commitStroke).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('merges a rectangle drawn as four separate held strokes into one shape object', () => {
+  it('merges a rectangle drawn as four separate held strokes into one clean stroke', () => {
     vi.useFakeTimers();
     try {
       const addObject = vi.fn();
@@ -643,8 +659,9 @@ describe('hold-to-convert', () => {
       drawPoints(result, left);
       act(() => vi.advanceTimersByTime(500));
 
-      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'rect' }));
-      expect(commitStroke).toHaveBeenCalledTimes(3);
+      expect(addObject).not.toHaveBeenCalled();
+      expect(commitStroke).toHaveBeenCalledTimes(4);
+      expect(heldShapeStroke(commitStroke).box.width).toBeCloseTo(100);
       expect(removeStrokes).toHaveBeenCalledWith(expect.arrayContaining(mergedIds));
       expect(result.current.draftStroke).toBeNull();
     } finally {
@@ -655,8 +672,7 @@ describe('hold-to-convert', () => {
   it('still fires the hold while a resting tip keeps jittering', () => {
     vi.useFakeTimers();
     try {
-      const addObject = vi.fn();
-      const { result } = renderInkPointer({ addObject });
+      const { result, commitStroke } = renderInkPointer();
       const points = rectPoints(0, 0, 100, 60);
       drawPoints(result, points);
       // A pen held on the glass keeps reporting 1-2px moves every frame.
@@ -664,7 +680,8 @@ describe('hold-to-convert', () => {
         act(() => vi.advanceTimersByTime(16));
         act(() => result.current.onPointerMove(pointer(7, 'pen', (i % 3) - 1, (i % 2) * 2)));
       }
-      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'rect' }));
+      expect(commitStroke).toHaveBeenCalledOnce();
+      expect(heldShapeStroke(commitStroke).box.height).toBeCloseTo(60);
     } finally {
       vi.useRealTimers();
     }
@@ -693,7 +710,8 @@ describe('hold-to-convert', () => {
       drawPoints(result, straightLine(100, 0, 160, 0));
       act(() => vi.advanceTimersByTime(500));
 
-      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'line' }));
+      expect(addObject).not.toHaveBeenCalled();
+      expect(commitStroke).toHaveBeenCalledTimes(2);
       expect(removeStrokes).not.toHaveBeenCalled();
       expect(removeStrokes).not.toHaveBeenCalledWith(expect.arrayContaining([unrelatedId]));
     } finally {
@@ -718,7 +736,8 @@ describe('hold-to-convert', () => {
       drawPoints(result, straightLine(65, 0, 125, 0));
       act(() => vi.advanceTimersByTime(500));
 
-      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'line' }));
+      expect(addObject).not.toHaveBeenCalled();
+      expect(commitStroke).toHaveBeenCalledTimes(2);
       expect(removeStrokes).not.toHaveBeenCalledWith(expect.arrayContaining([unrelatedId]));
     } finally {
       vi.useRealTimers();

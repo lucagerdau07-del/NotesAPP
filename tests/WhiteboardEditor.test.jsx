@@ -370,9 +370,10 @@ describe('WhiteboardEditor', () => {
     });
   });
 
-  it('inserts a shape via the design-tools popover, placed at world coordinates', () => {
+  it('places a shape from the design-tools popover as an ink stroke at world coordinates', () => {
     const addObject = vi.fn();
-    render(<WhiteboardEditor inkController={createControllerDouble({ addObject })} />);
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ addObject, commitStroke })} />);
     const surface = screen.getByTestId('whiteboard-surface');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
 
@@ -382,12 +383,31 @@ describe('WhiteboardEditor', () => {
     fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
     fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
 
-    expect(addObject).toHaveBeenCalledTimes(1);
-    const object = addObject.mock.calls[0][0];
-    expect(object.type).toBe('rect');
-    expect(object.pageId).toBe('wb-1-page-1');
-    expect(object.width).toBeCloseTo(200);
-    expect(object.height).toBeCloseTo(150);
+    // Baked into ink: no object (so no hitbox or handles), just a pen stroke.
+    expect(addObject).not.toHaveBeenCalled();
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+    const stroke = commitStroke.mock.calls[0][0];
+    expect(stroke.tool).toBe('pen');
+    expect(stroke.pageId).toBe('wb-1-page-1');
+    const xs = stroke.points.map((p) => p.x);
+    const ys = stroke.points.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(200);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(150);
+  });
+
+  it('still places a text box from the text tool as an object', () => {
+    const addObject = vi.fn();
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ addObject, commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTestId('text-tool-btn'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+
+    expect(commitStroke).not.toHaveBeenCalled();
+    expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'text' }));
   });
 
   it('bucket-fills inside a closed loop of strokes at the clicked world point', () => {

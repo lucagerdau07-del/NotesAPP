@@ -9,6 +9,7 @@ import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
 import { screenToWorld, worldToScreen } from "../ink/whiteboardCoordinates.js";
 import { strokesInLasso, objectsInLasso, selectionBounds } from "../ink/lasso.js";
 import { createPageObject, objectBounds, pageObjectsOf, isPointInsideObject } from "../ink/pageObjects.js";
+import { shapeToInkStroke } from "../ink/shapeInk.js";
 import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill.js";
 import { readImageObjectSource } from "../ink/imageObject.js";
 import {
@@ -497,6 +498,15 @@ export default function WhiteboardEditor({
             }
           : {}),
       });
+      // A placed rect/ellipse/line/arrow becomes ink, not an object: no
+      // hitbox or handles, erased like a hand-drawn stroke.
+      const shapeStroke = inkController.inkLayerLocked ? null : shapeToInkStroke(object, object.id);
+      if (shapeStroke) {
+        inkController.commitStroke?.(shapeStroke);
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
       inkController.addObject?.(object);
       setSelectedObjectId(object.id);
       // A mouse user who clicked or dragged the text tool wants to type next,
