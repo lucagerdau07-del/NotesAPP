@@ -8,7 +8,7 @@ import {
 import { findIntersectingObjectIds, findIntersectingStrokeIds, getToolStyle } from "../ink/inkDocument.js";
 import { loadPalmProfile, markPenSeen } from "../ink/palmSettings.js";
 import { recognizeShape } from "../ink/shapeRecognizer.js";
-import { createPageObject } from "../ink/pageObjects.js";
+import { shapeToInkStroke } from "../ink/shapeInk.js";
 
 // Shorter than Library.jsx's useLongPress: that gesture opens a menu on
 // static content, this one is a drawing pause mid-stroke and has to feel
@@ -224,7 +224,7 @@ export default function useInkPointer(options) {
   }, [releaseCapture, clearHoldTimer]);
 
   // Fires when the pen has sat still for HOLD_MS: a rect/ellipse/line/arrow
-  // guess becomes a real page object immediately (ladder: recognizer owns
+  // guess is redrawn as one clean ink stroke immediately (ladder: recognizer owns
   // the confidence bar, so an ordinary drawing pause just keeps drawing).
   // Anything else that was held just gets flagged for finalizeDraft to offer
   // to onHoldWithoutShape once it commits as normal ink.
@@ -263,14 +263,14 @@ export default function useInkPointer(options) {
       if (!shape) shape = recognizeShape(draft.points);
 
       if (shape) {
-        if (typeof current.addObject === "function") {
-          current.addObject(
-            createPageObject({
-              ...shape,
-              pageId: draft.pageId,
-              color: draft.color,
-              strokeWidth: draft.width,
-            }),
+        if (typeof current.commitStroke === "function") {
+          // The clean shape replaces the wobbly one as ink again, not as a
+          // page object: placed shapes behave like hand-drawn strokes.
+          current.commitStroke(
+            shapeToInkStroke(
+              { ...shape, pageId: draft.pageId, color: draft.color, strokeWidth: draft.width },
+              createStrokeId(),
+            ),
           );
           if (usedMerge) {
             const mergedIds = new Set(merged.map((entry) => entry.id));

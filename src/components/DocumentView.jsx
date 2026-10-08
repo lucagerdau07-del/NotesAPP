@@ -49,6 +49,7 @@ import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
 import { pageObjectsOf, isPointInsideObject, createPageObject } from "../ink/pageObjects";
+import { shapeToInkStroke } from "../ink/shapeInk.js";
 import { resolveInkLayerIndex } from "../ink/inkDocument";
 import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
 import { isPdfFile, pdfPageCommands, readPdfPages } from "../ink/pdfObject";
@@ -2612,6 +2613,15 @@ export default function DocumentView({
       };
       if (object.type === "text" && object.snapToLines)
         Object.assign(object, snapTextToGrid(object, paperStyle));
+      // A placed rect/ellipse/line/arrow becomes ink, not an object: no
+      // hitbox or handles, erased like a hand-drawn stroke.
+      const shapeStroke = inkController?.inkLayerLocked ? null : shapeToInkStroke(object, object.id);
+      if (shapeStroke) {
+        inkController?.commitStroke?.(shapeStroke);
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
       inkController?.addObject?.(object);
       setSelectedObjectId(object.id);
       if (object.type === "text" && !dragged) setEditingObjectId(object.id);
