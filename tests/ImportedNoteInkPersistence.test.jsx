@@ -48,9 +48,9 @@ test('persists every stroke drawn on a directly-opened imported file, not just t
       start: { x: 10 + i, y: 10 + i },
       end: { x: 20 + i, y: 20 + i },
     });
-    // Flush the debounced save (saveDelay defaults to 120ms) after each stroke,
+    // Flush the debounced save (saveDelay defaults to 600ms) after each stroke,
     // the way a real user pausing between strokes would.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 150)));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 700)));
   }
 
   const saved = browserInkRepository.loadHistory('imported-note-1');
@@ -78,7 +78,7 @@ test('persists many rapid strokes drawn back-to-back on an imported file', async
       end: { x: 20 + (i % 50), y: 20 + (i % 50) },
     });
   }
-  await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 700)));
 
   const saved = browserInkRepository.loadHistory('imported-note-2');
   expect(saved?.present.strokes).toHaveLength(76);

@@ -29,7 +29,7 @@ describe('liquid glass control surfaces', () => {
   })
 
   it('gives enhanced controls a visible focus ring since the flattened border/shadow no longer show one', () => {
-    expect(mainCss).toContain('[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]:focus-within')
+    expect(mainCss).toContain('[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]:has(button:focus-visible)')
   })
 
   it('matches any direct canvas child, not just the first one', () => {

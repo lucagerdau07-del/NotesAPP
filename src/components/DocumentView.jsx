@@ -2,21 +2,14 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Eraser,
-  MessageSquare,
-  Undo2,
-  Redo2,
-  Lasso,
-  LassoSelect,
   Highlighter,
   PenLine,
-  Layers,
   X,
   Palette,
   Sliders,
   PenTool,
   Pencil,
   Plus,
-  Hand,
   ArrowUpRight,
   Minus,
   Square,
@@ -25,7 +18,6 @@ import {
   Image as ImageIcon,
   Link2,
   Shapes,
-  PaintBucket,
   Bold,
   Italic,
   ScanSearch,
@@ -40,7 +32,7 @@ import useScrollbarGrip, { useLeftHandScrubber } from "./document/useScrollbarGr
 import { calculateDocumentMetrics } from "../documents/documentLayout";
 import { renderRegionFromDocument } from "../documents/notePreview.js";
 import { INPUT_MODES } from "../ink/inputPolicy";
-import { tryRecognizeLink } from "../ink/linkRecognizer.js";
+import { inkWriteOptions, resolveInkTool } from "../ink/pointerOptions.js";
 import DocumentPage from "./document/DocumentPage";
 import PageObjectLayer from "./document/PageObjectLayer";
 import CommentLayer, { CommentFlash } from "./document/CommentLayer";
@@ -48,6 +40,8 @@ import useComments from "../hooks/useComments";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import LassoSelectionLayer from "./document/LassoSelectionLayer";
 import WhiteboardEditor from "./WhiteboardEditor.jsx";
+import useEraserRing, { eraserRingStyle } from "../hooks/useEraserRing";
+import ToolRail, { TEXT_TOOL } from "./ToolRail.jsx";
 import { pageObjectsOf, isPointInsideObject, createPageObject } from "../ink/pageObjects";
 import { shapeToInkStroke } from "../ink/shapeInk.js";
 import { resolveInkLayerIndex } from "../ink/inkDocument";
@@ -73,19 +67,6 @@ export const DESIGN_TOOLS = [
   { id: "link", name: "Link", icon: <Link2 size={15} />, width: 230, height: 30 },
 ];
 
-// The text tool is armed from its own rail button, not from the shapes
-// popover, so it keeps its settings visible while placing.
-// A plain click starts this small and grows to fit as you type — no reason
-// to seed it with a wide placeholder box first. A dragged box keeps whatever
-// size the drag defined instead (see draftPlacement handling below).
-export const TEXT_TOOL = {
-  id: "text",
-  name: "Text",
-  icon: <Type size={15} />,
-  width: 24,
-  height: 34,
-};
-
 // Circle-to-search: an armed placingTool exactly like the shape tools (same
 // drag-a-box mechanic, already wired for pointerDown/Move/Up) — only its
 // pointerUp handling differs, see the draftPlacement branch below.
@@ -100,15 +81,6 @@ const CIRCLE_SEARCH_TOOL = {
 // as "sent to the assistant", not as an actual shape.
 const SEARCH_MARK_COLOR = "#FF7A33";
 const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality: 0.82 };
-
-// Rail button icon mirrors whichever pen type is currently picked, so the
-// standalone marker button (now folded into the pen popover) isn't missed.
-export const PEN_TOOL_ICONS = {
-  pen: PenLine,
-  fountain: PenTool,
-  highlighter: Highlighter,
-  pencil: Pencil,
-};
 
 export function DesignToolsPopover({ onInsert, onClose, top = 120 }) {
   const popoverRef = useRef(null);
@@ -960,60 +932,6 @@ export function ColorWheelPopover({
   );
 }
 
-export function ColorSlot({
-  colorValue,
-  index,
-  isActive,
-  isEraser,
-  onSelect,
-  onOpenPicker,
-}) {
-  const isLongPressRef = useRef(false);
-  const timerRef = useRef(null);
-
-  const handlePointerDown = (e) => {
-    isLongPressRef.current = false;
-    const wrapperEl = e.currentTarget;
-    timerRef.current = setTimeout(() => {
-      isLongPressRef.current = true;
-      onOpenPicker?.(wrapperEl);
-    }, 450);
-  };
-
-  const handlePointerUp = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  const handleClick = (e) => {
-    if (isLongPressRef.current) {
-      isLongPressRef.current = false;
-      return;
-    }
-    onSelect(e.currentTarget);
-  };
-
-  return (
-    <div
-      className={`rail-color-wrapper ${isActive && !isEraser ? "active" : ""}`}
-      title="Klicken zum Auswählen, gedrückt halten für Farbrad"
-      style={{ touchAction: "none" }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onClick={handleClick}
-      data-testid={`color-slot-${index}`}
-    >
-      <div
-        className={`rail-color ${index === 0 ? "rail-color-light" : ""}`}
-        style={{ backgroundColor: colorValue, pointerEvents: "none" }}
-      />
-    </div>
-  );
-}
-
 export const baseWidth = 800;
 export const pageHeight = baseWidth * 1.414;
 const PAGE_GAP = 28;
@@ -1238,10 +1156,6 @@ export default function DocumentView({
   const [activePickerIndex, setActivePickerIndex] = useState(0);
   const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
-  const penLongPressTimer = useRef(null);
-  const penLongPressFired = useRef(false);
-  const textLongPressTimer = useRef(null);
-  const textLongPressFired = useRef(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
   const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
@@ -1544,12 +1458,7 @@ export default function DocumentView({
     ? inkController.inputMode
     : "stylus";
   const isMoveMode = inputMode === "move";
-  const isDesignPlacing = Boolean(placingTool) && placingTool.id !== "text";
-  const inkTool = isEraser
-    ? inkController?.eraserMode === "stroke"
-      ? "stroke-eraser"
-      : "pixel-eraser"
-    : tool || "pen";
+  const inkTool = resolveInkTool({ isEraser, eraserMode: inkController?.eraserMode, tool });
   // Paint only the newly appended segment of the live stroke straight onto the
   // canvas that already renders that page. No React render, no full redraw.
   const drawDraftSegment = (draft, appendedFrom) => {
@@ -2194,15 +2103,14 @@ export default function DocumentView({
     mapPoint: (event) =>
       mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
     document: inkDocument,
-    commitStroke: inkController?.inkLayerLocked ? () => {} : inkController?.commitStroke,
-    removeStrokes: inkController?.inkLayerLocked ? () => {} : inkController?.removeStrokes,
-    removeObjects: inkController?.inkLayerLocked ? () => {} : inkController?.removeObjects,
-    addObject: inkController?.inkLayerLocked ? undefined : inkController?.addObject,
-    onHoldWithoutShape: inkController?.inkLayerLocked
-      ? undefined
-      : (stroke) => tryRecognizeLink(stroke, inkController),
+    ...inkWriteOptions(inkController),
     onDraftAppend: drawDraftSegment,
   });
+  const eraserRingRef = useEraserRing(
+    containerRef,
+    Boolean(isEraser && !isSelectMode),
+    (eraserWidth || 15) * zoom,
+  );
   const redrawInkCanvasRef = useRef(null);
   redrawInkCanvasRef.current = () => {
     const canvas = inkCanvasRef.current;
@@ -3466,308 +3374,45 @@ export default function DocumentView({
   // direct child of the Liquid Glass root and can be a glass control. Without a
   // slot (tests, standalone use) it renders in place as before.
   const railContent = (
-    <>
-      <button
-        className="rail-btn"
-        onClick={handleUndo}
-        disabled={!canUndo}
-        style={{ opacity: canUndo ? 1 : 0.35 }}
-        title="Rückgängig"
-      >
-        <Undo2 size={19} />
-      </button>
-      <button
-        className="rail-btn"
-        onClick={handleRedo}
-        disabled={!canRedo}
-        style={{ opacity: canRedo ? 1 : 0.35 }}
-        title="Wiederholen"
-      >
-        <Redo2 size={19} />
-      </button>
-      <div className="rail-divider" />
-      {(() => {
-        const isPenActive =
-          Boolean(PEN_TOOL_ICONS[tool]) &&
-          !isEraser &&
-          !isSelectMode &&
-          !isMoveMode &&
-          !isBucketMode &&
-          !isLassoMode &&
-          !placingTool &&
-          !isDesignToolsOpen;
-        const PenIcon = PEN_TOOL_ICONS[tool] || PenLine;
-        return (
-          <>
-          <button
-            className={`rail-btn ${isMoveMode ? "active" : ""}`}
-            onClick={() => {
-              setIsEraser?.(false);
-              setIsSelectMode?.(false);
-              setIsBucketMode(false);
-              setIsLassoMode(false);
-              setLassoSelection(null);
-              setPlacingTool(null);
-              setIsDesignToolsOpen(false);
-              setIsPenSettingsOpen(false);
-              inkController?.setInputMode?.(isMoveMode ? "stylus" : "move");
-            }}
-            title="Bewegen (Seite verschieben)"
-            aria-pressed={isMoveMode}
-            data-testid="move-tool-btn"
-          >
-            <Hand size={18} />
-          </button>
-          <button
-            className={`rail-btn has-settings pen-rail-btn ${isPenActive ? "active" : ""}`}
-            onPointerDown={(e) => {
-              penLongPressFired.current = false;
-              const buttonEl = e.currentTarget;
-              penLongPressTimer.current = setTimeout(() => {
-                penLongPressFired.current = true;
-                anchorPopoverToButton(buttonEl);
-                setIsPenSettingsOpen(true);
-                setIsBucketMode(false);
-                setIsLassoMode(false);
-                setLassoSelection(null);
-                setIsColorPickerOpen(false);
-                setIsEraserSettingsOpen(false);
-              }, 500);
-            }}
-            onPointerUp={() => clearTimeout(penLongPressTimer.current)}
-            onPointerLeave={() => clearTimeout(penLongPressTimer.current)}
-            onClick={(e) => {
-              if (penLongPressFired.current) return;
-              if (isPenActive) {
-                anchorPopoverToButton(e.currentTarget);
-                setIsPenSettingsOpen((prev) => !prev);
-                setIsColorPickerOpen(false);
-                setIsEraserSettingsOpen(false);
-                setIsTextSettingsOpen(false);
-                return;
-              }
-              setIsEraser?.(false);
-              setIsSelectMode?.(false);
-              setIsBucketMode(false);
-              setIsLassoMode(false);
-              setLassoSelection(null);
-              setPlacingTool(null);
-              setIsDesignToolsOpen(false);
-              setIsPenSettingsOpen(false);
-              if (isMoveMode) inkController?.setInputMode?.("stylus");
-            }}
-            title="Stift: Nochmal tippen = Einstellungen"
-            data-testid="pen-tool-btn"
-          >
-            <PenIcon size={18} />
-          </button>
-          </>
-        );
-      })()}
-      <button
-        className={`rail-btn has-settings eraser-rail-btn ${isEraser && !isSelectMode ? "active" : ""}`}
-        onClick={(e) => {
-          if (isEraser && !isSelectMode) {
-            anchorPopoverToButton(e.currentTarget);
-            setIsEraserSettingsOpen((prev) => !prev);
-          } else {
-            setIsEraser?.(true);
-            setIsSelectMode?.(false);
-            setIsPenSettingsOpen(false);
-            setIsColorPickerOpen(false);
-            if (isMoveMode) inkController?.setInputMode?.("stylus");
-          }
-          setIsBucketMode(false);
-          setIsLassoMode(false);
-          setLassoSelection(null);
-        }}
-        title="Radiergummi"
-      >
-        <Eraser size={18} />
-      </button>
-      <button
-        className={`rail-btn ${isBucketMode ? "active" : ""}`}
-        onClick={() => {
-          setIsBucketMode((prev) => {
-            const next = !prev;
-            if (next && isMoveMode) inkController?.setInputMode?.("stylus");
-            return next;
-          });
-          setPlacingTool(null);
-          setIsEraser?.(false);
-          setIsSelectMode?.(false);
-          setIsPenSettingsOpen(false);
-          setIsEraserSettingsOpen(false);
-          setIsColorPickerOpen(false);
-          setIsLassoMode(false);
-          setLassoSelection(null);
-        }}
-        title="Eimer (Fläche füllen)"
-        data-testid="bucket-tool-btn"
-      >
-        <PaintBucket size={18} />
-      </button>
-      <button
-        className={`rail-btn ${isLassoMode ? "active" : ""}`}
-        onClick={() => {
-          const next = !isLassoMode;
-          setIsLassoMode(next);
-          if (!next) setLassoSelection(null);
-          setPlacingTool(null);
-          setIsBucketMode(false);
-          setIsEraser?.(false);
-          setIsSelectMode?.(false);
-          setIsPenSettingsOpen(false);
-          setIsEraserSettingsOpen(false);
-          setIsColorPickerOpen(false);
-        }}
-        title="Lasso (markieren, verschieben, vergrößern)"
-        data-testid="lasso-tool-btn"
-      >
-        <LassoSelect size={18} />
-      </button>
-      <button
-        ref={designButtonRef}
-        className={`rail-btn design-rail-btn ${isDesignToolsOpen || isDesignPlacing ? "active" : ""}`}
-        onClick={(e) => {
-          if (isDesignPlacing) {
-            setPlacingTool(null);
-            return;
-          }
-          setPlacingTool(null);
-          anchorPopoverToButton(e.currentTarget);
-          setIsDesignToolsOpen((prev) => !prev);
-          setIsPenSettingsOpen(false);
-          setIsEraserSettingsOpen(false);
-          setIsColorPickerOpen(false);
-          setIsBucketMode(false);
-          setIsLassoMode(false);
-          setLassoSelection(null);
-        }}
-        title={
-          isDesignPlacing
-            ? `${placingTool.name} ziehen zum Platzieren (Klick zum Abbrechen)`
-            : "Pfeile, Formen, Bilder & Links einfügen"
-        }
-        data-testid="design-tools-btn"
-      >
-        {isDesignPlacing ? placingTool.icon : <Shapes size={18} />}
-      </button>
-      <button
-        className={`rail-btn has-settings text-rail-btn ${
-          isTextSettingsOpen || placingTool?.id === "text" ? "active" : ""
-        }`}
-        onPointerDown={(e) => {
-          textLongPressFired.current = false;
-          const buttonEl = e.currentTarget;
-          textLongPressTimer.current = setTimeout(() => {
-            textLongPressFired.current = true;
-            anchorPopoverToButton(buttonEl);
-            setIsTextSettingsOpen(true);
-            setIsDesignToolsOpen(false);
-            setIsPenSettingsOpen(false);
-            setIsEraserSettingsOpen(false);
-            setIsColorPickerOpen(false);
-          }, 500);
-        }}
-        onPointerUp={() => clearTimeout(textLongPressTimer.current)}
-        onPointerLeave={() => clearTimeout(textLongPressTimer.current)}
-        onClick={(e) => {
-          if (textLongPressFired.current) return;
-          if (placingTool?.id === "text") {
-            anchorPopoverToButton(e.currentTarget);
-            setIsTextSettingsOpen((prev) => !prev);
-            setIsDesignToolsOpen(false);
-            setIsPenSettingsOpen(false);
-            setIsEraserSettingsOpen(false);
-            setIsColorPickerOpen(false);
-            return;
-          }
-          setPlacingTool(TEXT_TOOL);
-          setIsBucketMode(false);
-          setIsLassoMode(false);
-          setLassoSelection(null);
-          setIsEraser?.(false);
-          setIsSelectMode?.(false);
-          setIsTextSettingsOpen(false);
-        }}
-        title={
-          placingTool?.id === "text"
-            ? "Text ziehen zum Platzieren, nochmal tippen = Einstellungen"
-            : "Text: Tippen = Platzieren"
-        }
-        data-testid="text-tool-btn"
-      >
-        <Type size={18} />
-      </button>
-      {!isFullMode && (
-        <button
-          className={`rail-btn ${isSelectMode ? "active" : ""}`}
-          onClick={() => {
-            const newMode = !isSelectMode;
-            setIsSelectMode?.(newMode);
-            setIsEraser?.(false);
-            setIsBucketMode(false);
-            setIsLassoMode(false);
-            setLassoSelection(null);
-            if (newMode) {
-              focusBoxState?.setFocusBox(null);
-            }
-          }}
-          title="Fokus Box ziehen"
-          data-testid="select-mode-btn"
-        >
-          <Lasso size={18} />
-        </button>
-      )}
-      <div className="rail-divider" />
-      {customColors.map((c, index) => (
-        <ColorSlot
-          key={index}
-          index={index}
-          colorValue={c}
-          isActive={penColor === c && !isEraser && !isSelectMode}
-          isEraser={isEraser}
-          onSelect={(buttonEl) => {
-            if (penColor === c && !isEraser && !isSelectMode) {
-              anchorPopoverToButton(buttonEl);
-              setIsColorPickerOpen((prev) => !prev);
-              setActivePickerIndex(index);
-            } else {
-              applyPenColor(c);
-              setIsEraser?.(false);
-              setIsSelectMode?.(false);
-              setActivePickerIndex(index);
-            }
-            setIsPenSettingsOpen(false);
-          }}
-          onOpenPicker={(buttonEl) => {
-            anchorPopoverToButton(buttonEl);
-            setActivePickerIndex(index);
-            setIsColorPickerOpen(true);
-            setIsPenSettingsOpen(false);
-          }}
-        />
-      ))}
-      <div className="rail-divider" />
-      <button
-        className={`rail-btn ${isCommentMode ? "active" : ""}`}
-        title="Kommentar"
-        aria-pressed={isCommentMode}
-        data-testid="comment-btn"
-        onClick={() => setIsCommentMode((on) => !on)}
-      >
-        <MessageSquare size={18} />
-      </button>
-      <button
-        className={`rail-btn ${isLayersOpen ? "active" : ""}`}
-        title="Ebenen"
-        data-testid="layers-toggle-btn"
-        onClick={toggleLayers}
-      >
-        <Layers size={19} />
-      </button>
-    </>
+    <ToolRail
+      onUndo={handleUndo}
+      onRedo={handleRedo}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      tool={tool}
+      setInputMode={inkController?.setInputMode}
+      isMoveMode={isMoveMode}
+      isEraser={isEraser}
+      setIsEraser={setIsEraser}
+      isSelectMode={isSelectMode}
+      setIsSelectMode={setIsSelectMode}
+      isBucketMode={isBucketMode}
+      setIsBucketMode={setIsBucketMode}
+      isLassoMode={isLassoMode}
+      setIsLassoMode={setIsLassoMode}
+      setLassoSelection={setLassoSelection}
+      placingTool={placingTool}
+      setPlacingTool={setPlacingTool}
+      isDesignToolsOpen={isDesignToolsOpen}
+      setIsDesignToolsOpen={setIsDesignToolsOpen}
+      designButtonRef={designButtonRef}
+      isTextSettingsOpen={isTextSettingsOpen}
+      setIsTextSettingsOpen={setIsTextSettingsOpen}
+      setIsPenSettingsOpen={setIsPenSettingsOpen}
+      setIsEraserSettingsOpen={setIsEraserSettingsOpen}
+      setIsColorPickerOpen={setIsColorPickerOpen}
+      anchorPopoverToButton={anchorPopoverToButton}
+      customColors={customColors}
+      penColor={penColor}
+      applyPenColor={applyPenColor}
+      setActivePickerIndex={setActivePickerIndex}
+      showFocusBoxButton={!isFullMode}
+      onFocusBoxArm={() => focusBoxState?.setFocusBox(null)}
+      isCommentMode={isCommentMode}
+      setIsCommentMode={setIsCommentMode}
+      isLayersOpen={isLayersOpen}
+      toggleLayers={toggleLayers}
+    />
   );
 
   return (
@@ -3968,6 +3613,7 @@ export default function DocumentView({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
         >
+          <div ref={eraserRingRef} data-testid="eraser-ring" style={eraserRingStyle} />
           {sourceLoading && (
             <div
               style={{

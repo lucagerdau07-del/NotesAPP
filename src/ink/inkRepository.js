@@ -1,3 +1,4 @@
+import { externalizeImages, hydrateImages } from "./imageStore.js";
 import { isInkDocument } from "./inkDocument.js";
 import { INPUT_MODES } from "./inputPolicy.js";
 
@@ -107,7 +108,7 @@ function isValidHistory(value, documentId) {
 }
 
 const serializeHistory = (history) =>
-  JSON.stringify({ present: history.present, limit: history.limit });
+  JSON.stringify({ present: externalizeImages(history.present), limit: history.limit });
 
 // Devices that ran the build which persisted whole histories still carry
 // megabytes of past/future snapshots for notes nobody has reopened since. That
@@ -138,6 +139,8 @@ function reclaimLegacyHistorySpace(storage) {
   return reclaimed;
 }
 
+const warnedFull = new Set();
+
 export function createInkRepository(storage) {
   return {
     // The raw, unparsed blob - lets a caller (the library preview cache) tell
@@ -154,7 +157,8 @@ export function createInkRepository(storage) {
         if (!isValidHistory(stored, id)) return null;
         // Blobs written before the quota fix carry past/future snapshots too;
         // they load fine, and the next save rewrites them compactly.
-        return { past: [], present: stored.present, future: [], limit: stored.limit };
+        // Images that live in IndexedDB come back as stubs until loadImages ran.
+        return { past: [], present: hydrateImages(stored.present), future: [], limit: stored.limit };
       } catch {
         return null;
       }
@@ -176,8 +180,15 @@ export function createInkRepository(storage) {
           return true;
         } catch (error) {
           // This used to fail silently, so a note could look saved while
-          // nothing was written. Keep it visible.
+          // nothing was written. Keep it visible, once per note per session.
           console.warn("[ink] saveHistory failed", error);
+          if (!warnedFull.has(id)) {
+            warnedFull.add(id);
+            globalThis.alert?.(
+              "Speicher voll: diese Notiz konnte nicht gespeichert werden. " +
+                "Große Bilder oder PDFs entfernen oder alte Notizen löschen.",
+            );
+          }
           return false;
         }
       }

@@ -508,6 +508,15 @@ export default function useInkPointer(options) {
         draft.points.push(inkPoint(point));
       }
       current.onDraftAppend?.(draft, appendedFrom);
+      if (strokeEraserRef.current) {
+        // Erase as the ring passes, not on pen-up. Overlap with the previous
+        // sample keeps a fast swipe from skipping a stroke between samples.
+        const swept = draft.points.slice(Math.max(0, appendedFrom - 1));
+        const strokeIds = findIntersectingStrokeIds(current.document, draft.pageId, swept, draft.width / 2);
+        if (strokeIds.length > 0) current.removeStrokes?.(strokeIds);
+        const objectIds = findIntersectingObjectIds(current.document, draft.pageId, swept, draft.width / 2);
+        if (objectIds.length > 0) current.removeObjects?.(objectIds);
+      }
       if (movedPastHoldSlop(event)) armHoldTimer();
     },
     [abortDraft, discardDraft, finalizeDraft, route, armHoldTimer, movedPastHoldSlop],

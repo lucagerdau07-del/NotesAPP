@@ -338,7 +338,7 @@ export function CopyButton({ text }) {
   );
 }
 
-export function ModelSelector({ selectedModel, onSelectModel }) {
+export function ModelSelector({ selectedModel, onSelectModel, variant }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -361,7 +361,7 @@ export function ModelSelector({ selectedModel, onSelectModel }) {
   }, [open]);
 
   return (
-    <div className="rail-chat-model-selector" ref={menuRef}>
+    <div className={`rail-chat-model-selector${variant ? ` ${variant}` : ""}`} ref={menuRef}>
       <button
         type="button"
         className="rail-chat-model-btn"

@@ -6,7 +6,9 @@ import {
   useState,
 } from "react";
 import useInkPointer from "../hooks/useInkPointer";
+import useEraserRing, { eraserRingStyle } from "../hooks/useEraserRing";
 import { mapFocusPoint } from "../ink/pageCoordinates";
+import { resolveInkTool } from "../ink/pointerOptions";
 import { renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
 
 const emptyDocument = { pages: [], strokes: [] };
@@ -39,11 +41,7 @@ export default function WritingZone({
     paperStyle = "blank",
     showPageBreaks,
   } = toolbarState || {};
-  const inkTool = isEraser
-    ? inkController?.eraserMode === "stroke"
-      ? "stroke-eraser"
-      : "pixel-eraser"
-    : tool || "pen";
+  const inkTool = resolveInkTool({ isEraser, eraserMode: inkController?.eraserMode, tool });
 
   const mapPoint = useCallback(
     (event) => {
@@ -92,6 +90,12 @@ export default function WritingZone({
     removeStrokes: inkController?.removeStrokes,
     onDraftAppend: drawDraftSegment,
   });
+
+  const eraserRingRef = useEraserRing(
+    canvasRef,
+    Boolean(isEraser),
+    (eraserWidth || 15) * (canvasSize.width / (focusBox?.width > 0 ? focusBox.width : 1)),
+  );
 
   redrawInkCanvasRef.current = () => {
     const canvas = canvasRef.current;
@@ -303,6 +307,7 @@ export default function WritingZone({
               touchAction: "none",
             }}
           />
+          <div ref={eraserRingRef} data-testid="eraser-ring" style={eraserRingStyle} />
         </div>
       </div>
     </div>

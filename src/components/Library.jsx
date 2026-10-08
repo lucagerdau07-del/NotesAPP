@@ -41,7 +41,9 @@ import { iservAvailable, pickLocalFiles } from "../documents/iservFiles";
 
 const ISERV_BUTTON_SIZE = 52;
 import useAgent from "../hooks/useAgent";
+import { loadChatModel, saveChatModel } from "../agent/agentSettings";
 import {
+  ModelSelector,
   StepList,
   CopyButton,
   HistoryMenu,
@@ -69,6 +71,7 @@ import useKnowledge from "../hooks/useKnowledge.js";
 import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserFolderRepository } from "../storage/folderRepository.js";
+import { hydrateImages, loadImages } from "../ink/imageStore.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "../documents/exportDocument.js";
 import { FOLDER_ICONS } from "./folderIcons.js";
@@ -1939,10 +1942,12 @@ function NoteDetailPanel({ note, onClose, onOpen }) {
 
   const handleExport = async (kind) => {
     setIsExportMenuOpen(false);
-    const inkDoc = browserInkRepository.loadHistory(note.id)?.present;
+    let inkDoc = browserInkRepository.loadHistory(note.id)?.present;
     if (!inkDoc) return;
     setIsExporting(true);
     try {
+      await loadImages(inkDoc);
+      inkDoc = hydrateImages(inkDoc);
       if (kind === "pdf") {
         await exportDocumentAsPdf(inkDoc, note.title);
       } else {
@@ -3184,10 +3189,12 @@ export default function Library({
     if (dy > DROP_COMMIT_PX * 0.4) setAgentOpen(true);
   };
 
+  const [agentModel, setAgentModel] = useState(() => loadChatModel());
   const agent = useAgent({
     documentId: "library",
     noteTitle: selectedSubject?.name,
     subject: selectedSubject?.name,
+    model: agentModel,
     library: true,
   });
   const agentDisplayedTokens = useCountUp(agent.tokens);
@@ -4449,14 +4456,14 @@ export default function Library({
       >
         <div className="lib-glass agent-panel-card">
           <div className="agent-panel-head">
-            <span
-              style={{
-                font: "700 15px \"Bricolage Grotesque\",sans-serif",
-                color: "#FFFFFF",
+            <ModelSelector
+              variant="agent-model-select"
+              selectedModel={agentModel}
+              onSelectModel={(id) => {
+                setAgentModel(id);
+                saveChatModel(id);
               }}
-            >
-              KI-Assistent
-            </span>
+            />
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
               <HistoryMenu
                 sessions={agent.sessions}

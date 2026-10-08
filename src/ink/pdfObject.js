@@ -3,10 +3,9 @@ import { MAX_EDGE } from "./imageObject.js";
 import { resolveInkLayerIndex, whiteboardInkLayerIndex } from "./inkDocument.js";
 import { createPageObject, pageObjectsOf } from "./pageObjects.js";
 
-// ponytail: every page becomes a JPEG data URL inside the note, and notes live
-// in localStorage (~5MB for everything), so long PDFs are cut off here. Keep the
-// PDF in IndexedDB and render pages on demand if this needs to grow.
-export const MAX_PDF_PAGES = 30;
+// Pages are stored as images in IndexedDB (see imageStore.js), so this only
+// bounds memory: every page of the open note is held as a data URL.
+export const MAX_PDF_PAGES = 200;
 
 export const isPdfFile = (file) =>
   file?.type === "application/pdf" || /\.pdf$/i.test(file?.name || "");

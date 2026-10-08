@@ -233,22 +233,21 @@ test('select mode draws draft focus box and updates focus box state', () => {
   expect(setIsSelectMode).toHaveBeenCalledWith(false);
 });
 
-test('routes undo, redo, and clear only to the shared controller', () => {
+test('routes undo and redo only to the shared controller', () => {
   const controller = createControllerDouble();
 
   render(<DocumentView inkController={controller} toolbarState={toolState()} />);
 
   const undoBtn = screen.getByTitle('Rückgängig');
   const redoBtn = screen.getByTitle('Wiederholen');
-  const clearBtn = screen.getByTitle('Leeren');
 
   fireEvent.click(undoBtn);
   fireEvent.click(redoBtn);
   expect(controller.undo).toHaveBeenCalledOnce();
   expect(controller.redo).toHaveBeenCalledOnce();
 
-  fireEvent.click(clearBtn);
-  expect(controller.clearDocument).toHaveBeenCalledOnce();
+  // Clearing lives in App's "Mehr" menu, not in the editor rail.
+  expect(controller.clearDocument).not.toHaveBeenCalled();
 });
 
 test('does not commit touch ink in stylus mode but commits page-local pen ink', () => {
@@ -521,7 +520,7 @@ test('keeps the surviving finger inert until every touch is released', () => {
   expect(controller.commitStroke).toHaveBeenCalledOnce();
 });
 
-test('cycles the input mode through stylus, finger and move', () => {
+test('hand tool toggles move mode and back to stylus', () => {
   function StatefulDocumentView() {
     const [inputMode, setInputMode] = useState('stylus');
     const controller = createControllerDouble({ inputMode, setInputMode });
@@ -529,14 +528,12 @@ test('cycles the input mode through stylus, finger and move', () => {
   }
 
   render(<StatefulDocumentView />);
-  const modeButton = () => screen.getByRole('button', { name: /^Eingabe: / });
-  expect(modeButton()).toHaveAccessibleName('Eingabe: Stift');
-  fireEvent.click(modeButton());
-  expect(modeButton()).toHaveAccessibleName('Eingabe: Finger');
-  fireEvent.click(modeButton());
-  expect(modeButton()).toHaveAccessibleName('Eingabe: Bewegen');
-  fireEvent.click(modeButton());
-  expect(modeButton()).toHaveAccessibleName('Eingabe: Stift');
+  const handButton = () => screen.getByTestId('move-tool-btn');
+  expect(handButton()).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(handButton());
+  expect(handButton()).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(handButton());
+  expect(handButton()).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('move mode pans instead of drawing, with pen and with one finger', () => {
@@ -690,7 +687,7 @@ test('opens color wheel popover and updates color', () => {
 
   // Click the active first color slot to open the color popover
   const colorSlots = document.querySelectorAll('.rail-color-wrapper');
-  expect(colorSlots.length).toBe(5);
+  expect(colorSlots.length).toBe(3);
 
   fireEvent.click(colorSlots[0]);
 

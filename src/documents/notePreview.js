@@ -1,3 +1,4 @@
+import { isStoredImage, resolveImageSrc } from "../ink/imageStore.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { resolveInkLayerIndex } from "../ink/inkDocument.js";
 import { objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
@@ -73,7 +74,8 @@ function getCachedPreviewImage(src) {
       };
     }),
   );
-  image.src = src;
+  if (isStoredImage(src)) resolveImageSrc(src).then((url) => (image.src = url));
+  else image.src = src;
   return null;
 }
 

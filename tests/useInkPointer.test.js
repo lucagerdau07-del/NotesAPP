@@ -203,7 +203,8 @@ describe('useInkPointer', () => {
     act(() => result.current.onPointerMove(pointer(7, 'pen', 53, 13, target)));
     act(() => result.current.onPointerUp(pointer(7, 'pen', 54, 13, target)));
 
-    expect(removeStrokes).toHaveBeenCalledOnce();
+    // Erases live while moving; the static mock document is never updated, so
+    // the pen-up re-test hits the same stroke again.
     expect(removeStrokes).toHaveBeenCalledWith(['line']);
     expect(commitStroke).not.toHaveBeenCalled();
     expect(result.current.draftStroke).toBeNull();
@@ -346,7 +347,6 @@ describe('useInkPointer', () => {
     act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13)));
     act(() => result.current.onPointerUp(pointer(7, 'pen', 52, 13)));
 
-    expect(removeStrokes).toHaveBeenCalledOnce();
     expect(removeStrokes).toHaveBeenCalledWith(['line']);
     expect(commitStroke).not.toHaveBeenCalled();
   });
@@ -500,6 +500,8 @@ describe('useInkPointer', () => {
 
     act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13, target)));
     act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13, target)));
+    // Stroke eraser already erased live on the move; only later writes count.
+    removeStrokes.mockClear();
     rerender({
       tool,
       eraserMode,
@@ -535,6 +537,8 @@ describe('useInkPointer', () => {
 
     act(() => result.current.onPointerDown(pointer(7, 'pen', 50, 13, target)));
     act(() => result.current.onPointerMove(pointer(7, 'pen', 52, 13, target)));
+    // Stroke eraser already erased live on the move; only later writes count.
+    removeStrokes.mockClear();
     rerender({
       tool,
       eraserMode,

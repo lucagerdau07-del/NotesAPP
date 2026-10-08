@@ -303,14 +303,15 @@ describe('full-document ink workspace', () => {
   it('persists toolbar changes and restores them after an editor reload', async () => {
     const view = render(<SplitLayout activeTab="smartCanvas" documentId="preference-note" />);
 
-    fireEvent.click(screen.getByTitle('Stift & Einstellungen'));
+    fireEvent.click(screen.getByTestId('pen-tool-btn'));
     fireEvent.click(screen.getByText('Marker'));
     fireEvent.click(screen.getByTitle('24px'));
     fireEvent.click(screen.getByTestId('color-slot-1'));
-    fireEvent.click(screen.getByRole('button', { name: /^Eingabe: / }));
     fireEvent.click(screen.getByTitle('Radiergummi'));
     fireEvent.click(screen.getByTitle('Radiergummi'));
     fireEvent.click(screen.getByText('Strich'));
+    // The old input-mode cycle button is gone; the hand tool arms move mode.
+    fireEvent.click(screen.getByTestId('move-tool-btn'));
 
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem('notes-app:ink-preferences:preference-note'));
@@ -320,7 +321,7 @@ describe('full-document ink workspace', () => {
         color: '#3E7BD8',
         penWidth: 24,
         eraserWidth: 15,
-        inputMode: 'finger',
+        inputMode: 'move',
         eraserMode: 'stroke',
       });
     });
@@ -331,7 +332,7 @@ describe('full-document ink workspace', () => {
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-color', '#3E7BD8');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-pen-width', '24');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-width', '15');
-    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'finger');
+    expect(screen.getByTestId('document-view')).toHaveAttribute('data-input-mode', 'move');
     expect(screen.getByTestId('document-view')).toHaveAttribute('data-eraser-mode', 'stroke');
   });
 

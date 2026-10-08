@@ -7,6 +7,7 @@ import {
   redoInkHistory,
   undoInkHistory,
 } from "../ink/inkDocument.js";
+import { hydrateImages, loadImages } from "../ink/imageStore.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { INPUT_MODES } from "../ink/inputPolicy.js";
 
@@ -319,6 +320,30 @@ export default function useInkDocument({
   if (baselineRef.current.id !== activeDocumentId) {
     baselineRef.current = { id: activeDocumentId, history };
   }
+
+  // A note opened cold has its big images (an opened PDF) as IndexedDB stubs;
+  // fetch them, then swap them into the live history without counting it as an
+  // edit. Undo snapshots get the same swap or undo would bring stubs back.
+  useEffect(() => {
+    let live = true;
+    loadImages(historyRef.current.present).then((fetched) => {
+      const current = historyRef.current;
+      if (!live || !fetched || current.present.documentId !== activeDocumentId) return;
+      const next = {
+        ...current,
+        past: current.past.map(hydrateImages),
+        present: hydrateImages(current.present),
+        future: current.future.map(hydrateImages),
+      };
+      if (current === baselineRef.current.history)
+        baselineRef.current = { id: activeDocumentId, history: next };
+      historyRef.current = next;
+      setHistory(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [activeDocumentId]);
 
   // When the oldest change not on disk yet was made; null once saved.
   const unsavedSinceRef = useRef(null);
