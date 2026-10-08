@@ -395,6 +395,33 @@ describe('WhiteboardEditor', () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(150);
   });
 
+  it('circle-to-search crops the dragged region, hands it up and leaves the board untouched', () => {
+    const addObject = vi.fn();
+    const commitStroke = vi.fn();
+    const onCircleToSearch = vi.fn();
+    const onArmCircleSearchHandled = vi.fn();
+    render(
+      <WhiteboardEditor
+        inkController={createControllerDouble({ addObject, commitStroke })}
+        armCircleSearchRequest={{ id: 'arm-1' }}
+        onArmCircleSearchHandled={onArmCircleSearchHandled}
+        onCircleToSearch={onCircleToSearch}
+      />,
+    );
+    expect(onArmCircleSearchHandled).toHaveBeenCalledWith('arm-1');
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+
+    expect(onCircleToSearch).toHaveBeenCalledTimes(1);
+    expect(onCircleToSearch.mock.calls[0][0]).toMatch(/^data:image\//);
+    expect(addObject).not.toHaveBeenCalled();
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
   it('still places a text box from the text tool as an object', () => {
     const addObject = vi.fn();
     const commitStroke = vi.fn();

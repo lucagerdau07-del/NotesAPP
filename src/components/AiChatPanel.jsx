@@ -18,7 +18,9 @@ import {
   Zap,
   FileText,
   ExternalLink,
+  Paperclip,
 } from "lucide-react";
+import { ATTACHMENT_ACCEPT, readAgentAttachment } from "../agent/attachments";
 import Markdown, { renderInline } from "./Markdown";
 import useAgent from "../hooks/useAgent";
 import { CHAT_MODELS, loadChatModel, saveChatModel, loadFastMode, saveFastMode } from "../agent/agentSettings";
@@ -490,14 +492,46 @@ export default function AiChatPanel({
     if (node) node.scrollTop = node.scrollHeight;
   }, [messages, steps, isRunning]);
 
+  // Uploaded files (Bild / PDF / Text), kept until the next message is sent.
+  const [attachments, setAttachments] = useState([]);
+  const [attachError, setAttachError] = useState("");
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFiles = async (event) => {
+    const picked = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (picked.length === 0) return;
+    setAttachError("");
+    setIsReadingFile(true);
+    for (const file of picked) {
+      try {
+        const attachment = await readAgentAttachment(file);
+        setAttachments((current) => [...current, { id: `${Date.now()}-${Math.random()}`, ...attachment }]);
+      } catch (e) {
+        setAttachError(e.message || "Datei konnte nicht gelesen werden.");
+      }
+    }
+    setIsReadingFile(false);
+  };
+
   const submit = (event) => {
     event?.preventDefault();
     const text = draft.trim();
-    if (!text || isRunning) return;
+    if (!text || isRunning || isReadingFile) return;
     setDraft("");
-    const image = pendingImage?.dataUrl;
+    const images = [
+      ...(pendingImage ? [pendingImage.dataUrl] : []),
+      ...attachments.flatMap((a) => a.images),
+    ];
     if (pendingImage) onPendingImageHandled?.();
-    send(text, { image });
+    send(text, {
+      images,
+      files: attachments.filter((a) => a.text),
+      names: attachments.map((a) => a.name),
+    });
+    setAttachments([]);
+    setAttachError("");
   };
 
   const onKeyDown = (event) => {
@@ -623,6 +657,30 @@ export default function AiChatPanel({
           </button>
         </div>
       )}
+      {attachments.map((attachment) => (
+        <div key={attachment.id} className="rail-chat-attachment">
+          {attachment.images[0] && <img src={attachment.images[0]} alt="" />}
+          <span className="rail-chat-attachment-label">
+            {!attachment.images[0] && <FileText size={12} />}
+            {attachment.name}
+            {attachment.images.length > 1 ? ` (${attachment.images.length} Seiten)` : ""}
+          </span>
+          <button
+            type="button"
+            className="rail-chat-attachment-remove"
+            title="Anhang entfernen"
+            onClick={() => setAttachments((current) => current.filter((a) => a.id !== attachment.id))}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+      {(isReadingFile || attachError) && (
+        <div className={attachError ? "rail-chat-error" : "rail-chat-status"}>
+          {attachError ? <AlertTriangle size={13} /> : <Loader2 size={13} className="rail-chat-spin" />}
+          <span>{attachError || "Datei wird gelesen…"}</span>
+        </div>
+      )}
       <form className="rail-chat-input" onSubmit={submit}>
         <textarea
           ref={inputRef}
@@ -635,6 +693,22 @@ export default function AiChatPanel({
         />
         <div className="rail-chat-input-controls">
           <div className="rail-chat-input-tools">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACHMENT_ACCEPT}
+              style={{ display: "none" }}
+              onChange={handleFiles}
+            />
+            <button
+              type="button"
+              className="rail-chat-circle-search"
+              title="Bild, PDF oder Datei anhängen"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip size={15} />
+            </button>
             <button
               type="button"
               className="rail-chat-circle-search"

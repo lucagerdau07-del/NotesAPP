@@ -70,7 +70,7 @@ export const DESIGN_TOOLS = [
 // Circle-to-search: an armed placingTool exactly like the shape tools (same
 // drag-a-box mechanic, already wired for pointerDown/Move/Up) — only its
 // pointerUp handling differs, see the draftPlacement branch below.
-const CIRCLE_SEARCH_TOOL = {
+export const CIRCLE_SEARCH_TOOL = {
   id: "circleSearch",
   name: "Bereich",
   icon: <ScanSearch size={15} />,
@@ -79,8 +79,8 @@ const CIRCLE_SEARCH_TOOL = {
 };
 // Its visible mark: a bright, unmistakably-not-user-drawn accent so it reads
 // as "sent to the assistant", not as an actual shape.
-const SEARCH_MARK_COLOR = "#FF7A33";
-const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality: 0.82 };
+export const SEARCH_MARK_COLOR = "#FF7A33";
+export const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality: 0.82 };
 
 export function DesignToolsPopover({ onInsert, onClose, top = 120 }) {
   const popoverRef = useRef(null);
@@ -1106,6 +1106,9 @@ export default function DocumentView({
         setPanelMode={setPanelMode}
         openRequest={openRequest}
         onOpenHandled={onOpenHandled}
+        onCircleToSearch={onCircleToSearch}
+        armCircleSearchRequest={armCircleSearchRequest}
+        onArmCircleSearchHandled={onArmCircleSearchHandled}
         isActive={isActive}
       />
     );

@@ -286,7 +286,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
   );
 
   const send = useCallback(
-    async (text, { editDocument = true, image } = {}) => {
+    async (text, { editDocument = true, images = [], files = [], names = [] } = {}) => {
       const task = String(text || "").trim();
       if (!task || status === "running") return;
 
@@ -330,15 +330,18 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
       // The persisted/displayed message stays plain text either way (its
       // renderer only ever handles a string) — the image rides along only
       // on the wire turn, same principle as see_document's synthetic message.
-      const userTurn = image
+      // Text files are inlined into the wire turn; the shown message only
+      // lists their names.
+      const wireText = [task, ...files.map((f) => `[Datei: ${f.name}]\n${f.text}`)].join("\n\n");
+      const userTurn = images.length
         ? {
             role: "user",
             content: [
-              { type: "text", text: task },
-              { type: "image_url", image_url: { url: image } },
+              { type: "text", text: wireText },
+              ...images.map((url) => ({ type: "image_url", image_url: { url } })),
             ],
           }
-        : { role: "user", content: task };
+        : { role: "user", content: wireText };
       let conversation = [
         {
           role: "system",
@@ -357,7 +360,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         ...messages,
         userTurn,
       ];
-      setMessages((current) => [...current, { role: "user", content: task }]);
+      setMessages((current) => [
+        ...current,
+        { role: "user", content: names.length ? `${task}\n\n📎 ${names.join(", ")}` : task },
+      ]);
 
       // Table/diagram/component builders etc. only join the payload once the
       // model calls enable_tools for them (see describeExtendedToolManifest

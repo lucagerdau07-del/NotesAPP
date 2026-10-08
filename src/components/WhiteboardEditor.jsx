@@ -28,7 +28,11 @@ import CommentLayer, { CommentFlash } from "./document/CommentLayer.jsx";
 import useComments from "../hooks/useComments.js";
 import LayerDrawer from "./document/LayerDrawer.jsx";
 import ToolRail, { TEXT_TOOL } from "./ToolRail.jsx";
+import { renderRegionFromDocument } from "../documents/notePreview.js";
 import {
+  CIRCLE_SEARCH_TOOL,
+  SEARCH_CROP_OPTIONS,
+  SEARCH_MARK_COLOR,
   DESIGN_TOOLS,
   ColorWheelPopover,
   DesignToolsPopover,
@@ -66,6 +70,9 @@ export default function WhiteboardEditor({
   setPanelMode,
   openRequest,
   onOpenHandled,
+  onCircleToSearch,
+  armCircleSearchRequest,
+  onArmCircleSearchHandled,
   isActive = true,
 }) {
   const containerRef = useRef(null);
@@ -126,6 +133,20 @@ export default function WhiteboardEditor({
     lineStep: 1,
     color: "#EFECE4",
   });
+  // Armed from the chat input's circle-to-search button (see AiChatPanel).
+  useEffect(() => {
+    if (!armCircleSearchRequest) return;
+    setPlacingTool(CIRCLE_SEARCH_TOOL);
+    setIsBucketMode(false);
+    setIsEraser(false);
+    setIsLassoMode(false);
+    setLassoSelection(null);
+    setIsPenSettingsOpen(false);
+    setIsEraserSettingsOpen(false);
+    setIsColorPickerOpen(false);
+    setIsDesignToolsOpen(false);
+    onArmCircleSearchHandled?.(armCircleSearchRequest.id);
+  }, [armCircleSearchRequest]);
   const [processingImageId, setProcessingImageId] = useState(null);
   const imageInputRef = useRef(null);
   const { camera, panBy, zoomBy, focusWorldPointAtScreen } = useWhiteboardCamera();
@@ -456,7 +477,26 @@ export default function WhiteboardEditor({
     }
     if (draftPlacement && draftPlacement.pointerId === event.pointerId) {
       const tool = placingTool;
-      const dragged = Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
+      if (tool.id === "circleSearch") {
+        // Crop only: nothing persisted, the dashed draft box is all the feedback.
+        const x = Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width);
+        const y = Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height);
+        const width = Math.abs(draftPlacement.width);
+        const height = Math.abs(draftPlacement.height);
+        if (width >= 12 && height >= 12) {
+          const dataUrl = renderRegionFromDocument(
+            document,
+            pageId,
+            { minX: x, minY: y, maxX: x + width, maxY: y + height },
+            { ...SEARCH_CROP_OPTIONS, paintBackground: true },
+          );
+          if (dataUrl) onCircleToSearch?.(dataUrl);
+        }
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
+      const dragged =Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
       const object = createPageObject({
         pageId,
         type: draftPlacement.type,
@@ -1220,8 +1260,8 @@ export default function WhiteboardEditor({
                   top: screen.y,
                   width: width * camera.scale,
                   height: height * camera.scale,
-                  border: "1.5px dashed #3E7BD8",
-                  background: "rgba(62,123,216,0.08)",
+                  border: draftPlacement.type === "circleSearch" ? `2px dashed ${SEARCH_MARK_COLOR}` : "1.5px dashed #3E7BD8",
+                  background: draftPlacement.type === "circleSearch" ? "rgba(255,122,51,0.12)" : "rgba(62,123,216,0.08)",
                   pointerEvents: "none",
                 }}
               />
