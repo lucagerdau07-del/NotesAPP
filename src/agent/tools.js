@@ -739,7 +739,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "search_sources",
       description:
-        "Volltextsuche in den Quellen der Bibliothek: importierte Bücher und PDFs, gescannte Buchseiten, Arbeitsblätter und getippter Text eigener Notizen. Liefert die besten Stellen mit Auszug, noteId, page und Zitierangabe cite.",
+        "Volltextsuche in den Quellen der Bibliothek: importierte Bücher und PDFs, gescannte Buchseiten, Arbeitsblätter und eigene Mitschriften, getippt wie handschriftlich. Liefert die besten Stellen mit Auszug, noteId, page und Zitierangabe cite.",
       parameters: {
         type: "object",
         properties: {
@@ -772,7 +772,7 @@ export const AGENT_TOOLS = [
           image: {
             type: "boolean",
             description:
-              "Seiten eines importierten Dokuments als Bild statt Text, wenn Abbildung, Tabelle oder Layout genau zählen. Teurer als Text.",
+              "Seiten als Bild statt Text, wenn Abbildung, Skizze, Tabelle, Rechenweg oder Layout genau zählen. Teurer als Text.",
           },
         },
         required: ["noteId", "page"],
@@ -1044,6 +1044,10 @@ export const CORE_TOOL_NAMES = new Set([
   "wolfram_alpha",
   "list_folders",
   "list_notes",
+  // Solving an exercise starts with the class material (see systemPrompt), so
+  // the source tools are needed on the first turn, not after enable_tools.
+  "search_sources",
+  "read_source",
   "done",
 ]);
 

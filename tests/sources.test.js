@@ -3,6 +3,7 @@ import {
   citeOf,
   parseOcrReply,
   queryTerms,
+  queueHandwritingIndexing,
   rankPages,
   readSource,
   searchSources,
@@ -103,6 +104,50 @@ describe("source search", () => {
     expect(result.hits[0]).toMatchObject({ hasVisual: true });
     const read = await readSource({ noteId: "arbeitsblatt-1", page: 1 }, scope, repository);
     expect(read.pages[0]).toMatchObject({ hasVisual: true });
+  });
+
+  it("transcribes only changed handwritten pages of own notes and makes them searchable", async () => {
+    const stored = new Map();
+    const repository = {
+      listOcrPages: async (noteId) => [...stored.values()].filter((record) => record.noteId === noteId),
+      saveOcrPage: async (noteId, pageIndex, page) =>
+        stored.set(`${noteId}:${pageIndex}`, { ...page, noteId, pageIndex }),
+    };
+    let inkDoc = {
+      pages: [{ id: "p1" }, { id: "p2" }, { id: "p3" }],
+      strokes: [
+        { id: "s1", pageId: "p1", points: [{}, {}] },
+        { id: "s2", pageId: "p2", points: [{}] },
+      ],
+      objects: [],
+    };
+    const rendered = [];
+    const options = {
+      repository,
+      load: () => inkDoc,
+      render: (_doc, pages) => {
+        rendered.push(...pages.map((page) => page.id));
+        return pages.map((page) => ({ src: `img-${page.id}` }));
+      },
+      complete: async ({ messages }) => ({
+        message: {
+          content: `SEITE: -\nABBILDUNG: nein\nHandschrift ${messages[1].content[1].image_url.url} Mitochondrien`,
+        },
+      }),
+    };
+    const note = { id: "bio", title: "Zellbiologie", updatedAt: 1 };
+
+    await queueHandwritingIndexing([note], options);
+    // p3 has no ink and costs no call.
+    expect(rendered).toEqual(["p1", "p2"]);
+
+    // Unchanged pages aren't read again, a new stroke on p2 is.
+    inkDoc = { ...inkDoc, strokes: [...inkDoc.strokes, { id: "s3", pageId: "p2", points: [{}] }] };
+    await queueHandwritingIndexing([note], options);
+    expect(rendered).toEqual(["p1", "p2", "p2"]);
+
+    const result = await searchSources("Mitochondrien", { notes: [{ ...note, updatedAt: 2 }] }, repository, options.load);
+    expect(result.hits.map((hit) => hit.page)).toEqual(expect.arrayContaining([1, 2]));
   });
 
   it("searches stored pages, reports sources still being read, and refuses unread pages", async () => {

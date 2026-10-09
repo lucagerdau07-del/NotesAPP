@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserDocumentImporter } from "../documents/documentImporter.js";
 import { renderImportedThumbnail } from "../documents/importedThumbnail.js";
-import { queueSourceIndexing } from "../knowledge/sources.js";
+import { queueHandwritingIndexing, queueSourceIndexing } from "../knowledge/sources.js";
+import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 
 export default function useDocumentLibrary({
   repository = browserDocumentRepository,
   importer = browserDocumentImporter,
   indexSources = queueSourceIndexing,
+  indexHandwriting = queueHandwritingIndexing,
+  noteRepository = browserNoteRepository,
   thumbnailer = renderImportedThumbnail,
 } = {}) {
   const [importedNotes, setImportedNotes] = useState([]);
@@ -24,6 +27,9 @@ export default function useDocumentLibrary({
         // Turns imports into searchable text for the agent, picking up
         // wherever the last pass stopped (see knowledge/sources.js).
         indexSources(notes, { repository });
+        // Then the handwriting of the user's own notes, so the agent can
+        // search class notes as well as books.
+        indexHandwriting(noteRepository.listNotes(), { repository });
       })
       .catch((cause) => {
         if (!disposed) setError(cause);
@@ -34,7 +40,7 @@ export default function useDocumentLibrary({
     return () => {
       disposed = true;
     };
-  }, [repository, indexSources]);
+  }, [repository, indexSources, indexHandwriting, noteRepository]);
 
   // Card previews: imports made before thumbnails existed (and any new one)
   // get theirs rendered once, one at a time, and stored on the note.
