@@ -307,18 +307,6 @@ function BookTile({ book, onOpen, onLongPress }) {
   );
 }
 
-function AddBookTile({ onOpen, busy }) {
-  return (
-    <button type="button" className="lib-book lib-book-add" data-testid="book-tile-add" onClick={onOpen} disabled={busy}>
-      <span className="lib-book-cover">
-        <Plus size={22} color="#FFFFFF" />
-        <span className="lib-book-add-label">{busy ? "WIRD IMPORTIERT…" : "SCHULBUCH"}</span>
-      </span>
-      <span className="lib-book-title">&nbsp;</span>
-    </button>
-  );
-}
-
 function ThematicSubjectHeader({ subject, onClearFilter, onNewNote }) {
   if (subject.id === "mathe") {
     return (
@@ -2748,11 +2736,11 @@ export default function Library({
   const handleOpenFolder = (folder) => setSelectedSubject(folder);
 
   // Android back: close the topmost overlay, else step up one folder level.
-  useBackHandler(selectedSubject !== null, () =>
+  const goUpFolder = () =>
     setSelectedSubject(
       browserFolderRepository.listFolders().find((f) => f.id === selectedSubject.parentId) || null,
-    ),
-  );
+    );
+  useBackHandler(selectedSubject !== null, goUpFolder);
   useBackHandler(Boolean(detailNote), () => setDetailNote(null));
   useBackHandler(agentOpen && !detailNote, () => setAgentOpen(false));
   useBackHandler(overviewPeek && !overviewDocked && !agentOpen && !detailNote, () => setOverviewPeek(false));
@@ -3654,8 +3642,8 @@ export default function Library({
             }}
           >
             <button
-              onClick={() => setSelectedSubject(null)}
-              title="Zurück zur Übersicht"
+              onClick={goUpFolder}
+              title="Zurück"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -3717,27 +3705,20 @@ export default function Library({
             >
               <Trash2 size={16} />
             </button>
-            <button
-              type="button"
-              className="lib-add-folder"
-              onClick={() => setFolderDialog({ mode: "create", parentId: selectedSubject.id })}
-              aria-label="Neuer Ordner"
-              title="Neuer Ordner"
-            >
-              <Plus size={18} />
-            </button>
           </div>
         )}
 
-        {selectedSubject && subFolders.length > 0 && (
+        {selectedSubject && (
           <div
             className="lib-tile-row"
             style={{
               display: "flex",
-              flexWrap: "wrap",
+              flexWrap: "nowrap",
+              overflowX: "auto",
               gap: 18,
-              margin: "0 0 28px",
+              margin: "0 0 20px",
               padding: "6px 4px 6px 0",
+              zoom: 0.7,
             }}
           >
             {subFolders.map((folder) => (
@@ -3752,6 +3733,16 @@ export default function Library({
                 onOpen={() => handleOpenFolder(folder)}
               />
             ))}
+            <button
+              type="button"
+              className="lib-add-folder"
+              style={{ flex: "none", alignSelf: "center", width: 64, height: 64 }}
+              onClick={() => setFolderDialog({ mode: "create", parentId: selectedSubject.id })}
+              aria-label="Neuer Ordner"
+              title="Neuer Ordner"
+            >
+              <Plus size={36} />
+            </button>
           </div>
         )}
 
@@ -3764,6 +3755,18 @@ export default function Library({
               </span>
             </h3>
             <div className="lib-shelf" data-testid="book-shelf">
+              <button
+                type="button"
+                className="lib-add-folder"
+                data-testid="book-tile-add"
+                onClick={importBook}
+                disabled={documentLibrary.isImporting}
+                aria-label="Buch hinzufügen"
+                title={documentLibrary.isImporting ? "Wird importiert…" : "Buch hinzufügen"}
+                style={{ flex: "none", alignSelf: "center", width: 45, height: 45, margin: 0 }}
+              >
+                <Plus size={25} />
+              </button>
               {folderBooks.map((book) => (
                 <BookTile
                   key={book.id}
@@ -3772,7 +3775,6 @@ export default function Library({
                   onLongPress={setDetailNote}
                 />
               ))}
-              <AddBookTile onOpen={importBook} busy={documentLibrary.isImporting} />
             </div>
           </>
         )}
@@ -3809,8 +3811,8 @@ export default function Library({
             {sortedRecent.length === 1 ? "NOTIZ" : "NOTIZEN"}{" "}
             {selectedSubject
               ? `IN ${selectedSubject.name.toUpperCase()}`
-              : "DIESE WOCHE"}{" "}
-            · {viewMode === "masonry" ? "MOODBOARD-RASTER" : "LISTENANSICHT"}
+              : "DIESE WOCHE"}
+            {viewMode !== "masonry" && " · LISTENANSICHT"}
           </span>
         </div>
 
@@ -3859,7 +3861,7 @@ export default function Library({
           </div>
           <div className="agent-panel-body">
             <UpcomingCard
-              events={knowledge.openEvents}
+              events={knowledge.openEvents.slice(0, 2)}
               sourceNoteTitles={sourceNoteTitles}
               onToggle={knowledge.setEventDone}
             />
