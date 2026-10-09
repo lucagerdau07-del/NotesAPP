@@ -59,7 +59,7 @@ let queue = Promise.resolve();
 // Kleinschreibung, Akzente weg (ä → a, é → e, ñ → n). Auf NFC-Text bleibt die
 // Länge gleich, Fundstellen im gefalteten Text zeigen also auf dieselbe Stelle
 // im Original.
-function fold(text) {
+export function fold(text) {
   return String(text ?? "")
     .toLowerCase()
     .normalize("NFD")

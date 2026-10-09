@@ -88,7 +88,7 @@ export function buildSystemPrompt({
     );
   } else {
     lines.push(
-      "Es ist keine Notiz geöffnet. Wenn nach einer bestimmten Notiz oder einem Thema gefragt wird, rufe zuerst list_folders auf, um die Ordnerstruktur zu sehen, dann list_notes (bei Bedarf mit folderId oder query) statt zu raten — das ist günstiger als alle Notizen einzeln zu durchsuchen. Nenne am Ende Titel und Ordner der passenden Notiz.",
+      "Es ist keine Notiz geöffnet. Wenn nach einer bestimmten Notiz gefragt wird, rufe direkt list_notes mit query auf (bei bekanntem Fach auch folderId), statt zu raten; list_folders nur, wenn die Ordnerstruktur selbst gefragt ist. Geht es um Inhalt statt Titel, search_sources. Nenne am Ende Titel und Ordner der passenden Notiz.",
     );
   }
 
