@@ -1,6 +1,7 @@
 import { requestCompletion } from "../agent/agentClient.js";
 import { openImage } from "../documents/imageRuntime.js";
 import { fitInside } from "../ink/imageObject.js";
+import { renderPagesFromDocument } from "../documents/notePreview.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { pageObjectsOf } from "../ink/pageObjects.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
@@ -43,7 +44,7 @@ const WORD = /[\p{L}\p{N}]+/gu;
 // Arbeitsblatt oft mehr Inhalt als die Sätze dazwischen, und die Beschreibung
 // einer Abbildung macht sie über search_sources auffindbar.
 export const OCR_PROMPT = [
-  "Du überträgst eine Seite aus einem Buch, Schulbuch oder Arbeitsblatt in Markdown, so dass man ohne das Bild alles Wichtige versteht.",
+  "Du überträgst eine Seite aus einem Buch, Schulbuch, Arbeitsblatt oder einer handschriftlichen Mitschrift in Markdown, so dass man ohne das Bild alles Wichtige versteht.",
   "Erste Zeile deiner Antwort: SEITE: und die auf der Seite gedruckte Seitenzahl, oder SEITE: - wenn keine zu sehen ist.",
   "Zweite Zeile: ABBILDUNG: ja, wenn die Seite ein Foto, ein Diagramm, eine Karte, eine Grafik, eine farbige Markierung oder ein Layout enthält, das deine Markdown-Version nicht vollständig wiedergibt, sonst ABBILDUNG: nein.",
   "Text wortgetreu und vollständig in Lesereihenfolge, Spalten nacheinander. Nichts zusammenfassen, nichts ergänzen, nichts korrigieren. Unleserliches als [unleserlich].",
@@ -59,7 +60,7 @@ let queue = Promise.resolve();
 // Kleinschreibung, Akzente weg (ä → a, é → e, ñ → n). Auf NFC-Text bleibt die
 // Länge gleich, Fundstellen im gefalteten Text zeigen also auf dieselbe Stelle
 // im Original.
-function fold(text) {
+export function fold(text) {
   return String(text ?? "")
     .toLowerCase()
     .normalize("NFD")
@@ -377,28 +378,116 @@ async function pagesOfImported(note, repository) {
   return pages;
 }
 
-// Eigene Notizen tragen getippten Text als Textobjekte, der ist ohne
-// Texterkennung lesbar. Handschrift bleibt außen vor.
-function pagesOfNote(note) {
+// Fingerabdruck der Handschrift einer Seite: ändert sich, sobald ein Strich
+// dazukommt, wegradiert oder geteilt wird. Leer heißt keine Handschrift.
+export function inkStamp(inkDoc, pageId) {
+  const strokes = (inkDoc?.strokes || []).filter((stroke) => stroke.pageId === pageId);
+  if (strokes.length === 0) return "";
+  const points = strokes.reduce((sum, stroke) => sum + (stroke.points?.length || 0), 0);
+  return `${strokes.length}:${points}:${strokes[strokes.length - 1].id}`;
+}
+
+const loadInk = (noteId) => browserInkRepository.loadHistory(noteId)?.present;
+
+// Ausgewählte Seiten einer eigenen Notiz als JPEG, im Stil der ersten Seite
+// wie in renderPagesFromDocument.
+function renderInkPages(inkDoc, pages, edge = OCR_EDGE) {
+  return renderPagesFromDocument(
+    { ...inkDoc, pages: pages.map((page) => ({ ...inkDoc.pages[0], ...page })) },
+    { maxDimension: edge, mimeType: "image/jpeg", quality: 0.8 },
+  );
+}
+
+// Handschrift eigener Notizen landet wie ein Buchscan in ocrPages, aber unter
+// "noteId:pageId" statt der Seitennummer: Seiten lassen sich umsortieren, ohne
+// dass ihre Abschrift die Seite wechselt. stamp merkt sich die Striche, die
+// gelesen wurden, nur geänderte Seiten gehen erneut ans Vision-Modell.
+// ponytail: Abschriften gelöschter Seiten und Notizen bleiben liegen. Wird
+// ocrPages zu groß, beim Löschen mit aufräumen.
+async function indexHandwriting(note, { repository, complete, load, render }) {
+  const inkDoc = load(note.id);
+  if (!inkDoc?.pages?.length) return;
+  const records = new Map(
+    (await repository.listOcrPages(note.id)).map((record) => [String(record.pageIndex), record]),
+  );
+  const stale = inkDoc.pages.filter((page) => {
+    const stamp = inkStamp(inkDoc, page.id);
+    const record = records.get(String(page.id));
+    return record ? record.stamp !== stamp : stamp !== "";
+  });
+  if (stale.length === 0) return;
+  // Alles wegradiert: leere Abschrift ohne Modellaufruf.
+  const inked = stale.filter((page) => inkStamp(inkDoc, page.id));
+  for (const page of stale.filter((entry) => !inked.includes(entry)))
+    await repository.saveOcrPage(note.id, page.id, { text: "", stamp: "", method: "ink" });
+  const images = inked.length ? await render(inkDoc, inked) : [];
+  for (const [index, page] of inked.entries()) {
+    if (!images[index]?.src) continue;
+    const reply = await transcribe(images[index].src, complete);
+    await repository.saveOcrPage(note.id, page.id, {
+      ...reply,
+      stamp: inkStamp(inkDoc, page.id),
+      method: "ink",
+    });
+  }
+  pageCache.delete(note.id);
+}
+
+// Eigene Notizen ziehen nach den Importen in dieselbe Warteschlange, damit
+// nie zwei Läufe gleichzeitig Vision-Aufrufe schicken.
+export function queueHandwritingIndexing(
+  notes,
+  {
+    repository = browserDocumentRepository,
+    complete = requestCompletion,
+    load = loadInk,
+    render = renderInkPages,
+  } = {},
+) {
+  queue = queue
+    .then(async () => {
+      for (const note of notes) {
+        try {
+          await indexHandwriting(note, { repository, complete, load, render });
+        } catch (error) {
+          lastIndexError = error?.message || "Handschrifterkennung fehlgeschlagen.";
+        }
+      }
+    })
+    .catch(() => {});
+  return queue;
+}
+
+// Eigene Notizen: getippter Text der Textobjekte, dazu die Abschrift der
+// Handschrift, sobald queueHandwritingIndexing die Seite gelesen hat. Die
+// Abschrift enthält getippten Text oft noch einmal, das hebt ihn im Ranking
+// nur leicht, BM25 sättigt.
+async function pagesOfNote(note, repository, load) {
   const cached = pageCache.get(note.id);
   if (cached?.stamp === note.updatedAt) return cached.pages;
-  const inkDoc = browserInkRepository.loadHistory(note.id)?.present;
+  const inkDoc = load(note.id);
   const texts = pageObjectsOf(inkDoc).filter(
     (object) => object.type === "text" && object.text?.trim(),
   );
-  const pages = (inkDoc?.pages || []).map((page, index) =>
-    toPage({
+  const records = new Map(
+    (await repository.listOcrPages(note.id)).map((record) => [String(record.pageIndex), record]),
+  );
+  const pages = (inkDoc?.pages || []).map((page, index) => {
+    const handwriting = records.get(String(page.id));
+    const typed = texts
+      .filter((object) => object.pageId === page.id)
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .map((object) => object.text)
+      .join("\n");
+    return toPage({
       noteId: note.id,
       title: note.title || "Notiz",
       kind: "note",
       index,
-      text: texts
-        .filter((object) => object.pageId === page.id)
-        .sort((a, b) => a.y - b.y || a.x - b.x)
-        .map((object) => object.text)
-        .join("\n"),
-    }),
-  );
+      text: [typed, handwriting?.text].filter(Boolean).join("\n"),
+      hasVisual: !!handwriting?.hasVisual,
+    });
+  });
   pageCache.set(note.id, { stamp: note.updatedAt, pages });
   return pages;
 }
@@ -407,11 +496,13 @@ export async function searchSources(
   query,
   { notes = [], imported = [] },
   repository = browserDocumentRepository,
+  load = loadInk,
 ) {
-  const importedPages = await Promise.all(
-    imported.map((note) => pagesOfImported(note, repository)),
-  );
-  const hits = rankPages([...notes.flatMap(pagesOfNote), ...importedPages.flat()], query).map(
+  const [notePages, importedPages] = await Promise.all([
+    Promise.all(notes.map((note) => pagesOfNote(note, repository, load))),
+    Promise.all(imported.map((note) => pagesOfImported(note, repository))),
+  ]);
+  const hits = rankPages([...notePages.flat(), ...importedPages.flat()], query).map(
     ({ page, excerpt }) => ({
       noteId: page.noteId,
       page: page.page,
@@ -442,12 +533,13 @@ export async function readSource(
   { noteId, page, count, image },
   { notes = [], imported = [] },
   repository = browserDocumentRepository,
+  load = loadInk,
 ) {
   const own = notes.find((note) => note.id === noteId);
   const importedNote = imported.find((note) => note.id === noteId);
   if (!own && !importedNote)
     return `Fehler: Quelle "${noteId}" gibt es nicht. noteId aus search_sources übernehmen.`;
-  const pages = own ? pagesOfNote(own) : await pagesOfImported(importedNote, repository);
+  const pages = own ? await pagesOfNote(own, repository, load) : await pagesOfImported(importedNote, repository);
   const first = Math.max(1, Math.floor(Number(page)) || 1);
   const span = Math.min(MAX_READ_PAGES, Math.max(1, Math.floor(Number(count)) || 1));
   const wanted = pages.filter((entry) => entry.page >= first && entry.page < first + span);
@@ -456,14 +548,21 @@ export async function readSource(
       ? `Fehler: Seite ${first} ist nicht lesbar. Lesbar sind ${pages.length} Seiten, von ${pages[0].page} bis ${pages[pages.length - 1].page}.`
       : "Fehler: Diese Quelle ist noch nicht gelesen, die Texterkennung läuft im Hintergrund.";
   }
-  // ponytail: nur importierte Dokumente als Bild. Eigene Notizen zeigt
-  // see_document, sobald sie geöffnet sind.
-  if (image && importedNote) {
-    const images = await pageImages(
-      importedNote,
-      wanted.map((entry) => entry.page - 1),
-      repository,
-    );
+  if (image) {
+    // Eigene Notizen direkt aus dem Ink-Dokument, damit Skizzen und
+    // Rechenwege aus der Mitschrift auch ohne geöffnete Notiz sichtbar sind.
+    const inkDoc = own ? load(own.id) : null;
+    const images = own
+      ? renderInkPages(
+          inkDoc,
+          wanted.map((entry) => inkDoc.pages[entry.page - 1]),
+          SEE_EDGE,
+        ).map((page) => page.src)
+      : await pageImages(
+          importedNote,
+          wanted.map((entry) => entry.page - 1),
+          repository,
+        );
     return {
       pages: wanted.map((entry, index) => ({ page: entry.page, cite: entry.cite, src: images[index] })),
     };

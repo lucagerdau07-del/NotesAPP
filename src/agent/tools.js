@@ -4,7 +4,7 @@ import { renderPagesFromDocument, previewTextOf } from "../documents/notePreview
 import { browserFolderRepository, folderWithDescendants } from "../storage/folderRepository.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
-import { readSource, searchSources } from "../knowledge/sources.js";
+import { fold, queryTerms, readSource, searchSources } from "../knowledge/sources.js";
 import { requestGoogleDoc, requestGoogleDocEdit, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
@@ -112,6 +112,63 @@ function importedNoteEntry(note) {
     updatedAt: note.updatedAt || 0,
     preview: `${pageCount} ${pageCount === 1 ? "Seite" : "Seiten"} · ${kind}`,
   };
+}
+
+// Tool results go to the model as text, so the folder tree is indented lines
+// instead of JSON objects repeating id/name/parentId keys for every folder.
+function folderTree(folders, notes) {
+  if (folders.length === 0) return "Keine Ordner.";
+  const ids = new Set(folders.map((f) => f.id));
+  const seen = new Set();
+  const lines = [];
+  const visit = (children, depth) => {
+    for (const f of children) {
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      const count = notes.filter((n) => matchesFolder(n, f)).length;
+      lines.push(`${"  ".repeat(depth)}${f.name} [${f.id}] ${count}`);
+      visit(folders.filter((child) => child.parentId === f.id), depth + 1);
+    }
+  };
+  // A parentId pointing at a deleted folder still lists the folder at the top.
+  visit(folders.filter((f) => !f.parentId || !ids.has(f.parentId)), 0);
+  return `Ordner, Unterordner eingerückt (Name [id] Notizen):\n${lines.join("\n")}`;
+}
+
+const LISTED_PREVIEW_CHARS = 120;
+
+// One line per note, header once. The query matches title, folder and excerpt
+// with the same folding and stemming as search_sources ("Ubung" finds
+// "Übungen"); notes matching more terms come first, a title hit beats an
+// excerpt hit, then newest first.
+function noteListing(entries, rawQuery) {
+  const terms = queryTerms(rawQuery || "");
+  const ranked = entries
+    .map((entry) => {
+      if (terms.length === 0) return { entry, score: 0 };
+      const title = fold(entry.title);
+      const all = `${title} ${fold(entry.subject)} ${fold(entry.preview)}`;
+      const matched = terms.filter((term) => all.includes(term)).length;
+      const inTitle = terms.filter((term) => title.includes(term)).length;
+      return { entry, score: matched ? matched * 10 + inTitle : -1 };
+    })
+    .filter(({ score }) => score >= 0)
+    .sort((a, b) => b.score - a.score || b.entry.updatedAt - a.entry.updatedAt);
+  if (ranked.length === 0)
+    return terms.length
+      ? "Keine Notiz passt. Andere Stichwörter versuchen oder search_sources für den Volltext."
+      : "Keine Notizen.";
+  const shown = ranked.slice(0, MAX_LISTED_NOTES);
+  const lines = shown.map(({ entry }) => {
+    const date = entry.updatedAt ? new Date(entry.updatedAt).toISOString().slice(0, 10) : "-";
+    const preview = String(entry.preview || "").replace(/\s+/g, " ").trim().slice(0, LISTED_PREVIEW_CHARS);
+    return [entry.id, entry.title || "(ohne Titel)", entry.subject || "-", date, preview].join(" | ");
+  });
+  const more =
+    ranked.length > shown.length
+      ? ` (${ranked.length - shown.length} weitere, mit query oder folderId eingrenzen)`
+      : "";
+  return `${shown.length} Notizen${more}. id | Titel | Ordner | geändert | Auszug\n${lines.join("\n")}`;
 }
 
 // Wikipedia statt einer allgemeinen Suchmaschine: kostenlos, ohne Schlüssel,
@@ -654,7 +711,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "list_folders",
       description:
-        "Listet alle Ordner der Bibliothek mit id, name, parentId (null bei Ordnern oberster Ebene) und Notizanzahl. Rufe das zuerst auf, um die Ordnerstruktur günstig zu überblicken, bevor du list_notes für einen bestimmten Ordner aufrufst.",
+        "Zeigt den Ordnerbaum der Bibliothek mit id und Notizanzahl. Nur nötig, wenn die Ordnerstruktur selbst gefragt ist oder ein Zielordner für create_note gesucht wird; zum Finden einer Notiz direkt list_notes mit query.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -663,12 +720,15 @@ export const AGENT_TOOLS = [
     function: {
       name: "list_notes",
       description:
-        "Listet Notizen (eigene und importierte PDFs/Bilder) mit id, title, subject, updatedAt und einem kurzen Auszug (kein voller Inhalt) — günstig, um die richtige Notiz zu finden, ohne jede einzeln zu öffnen. Ohne folderId werden alle durchsucht.",
+        "Findet Notizen (eigene und importierte PDFs/Bilder) nach Titel, Ordner und Anfang des Textes: eine Zeile je Notiz mit id, Titel, Ordner, Änderungsdatum und kurzem Auszug, beste Treffer zuerst. Für Inhalte tiefer im Text search_sources.",
       parameters: {
         type: "object",
         properties: {
-          folderId: { type: "string", description: "Nur Notizen aus diesem Ordner (id oder Name)" },
-          query: { type: "string", description: "Filtert Titel und Textauszug per Teilstring, optional" },
+          folderId: { type: "string", description: "Nur dieser Ordner samt Unterordnern (id oder Name), optional" },
+          query: {
+            type: "string",
+            description: "Stichwörter, Wortformen und Umlaute egal; ohne query die neuesten Notizen",
+          },
         },
         required: [],
       },
@@ -679,7 +739,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "search_sources",
       description:
-        "Volltextsuche in den Quellen der Bibliothek: importierte Bücher und PDFs, gescannte Buchseiten, Arbeitsblätter und getippter Text eigener Notizen. Liefert die besten Stellen mit Auszug, noteId, page und Zitierangabe cite.",
+        "Volltextsuche in den Quellen der Bibliothek: importierte Bücher und PDFs, gescannte Buchseiten, Arbeitsblätter und eigene Mitschriften, getippt wie handschriftlich. Liefert die besten Stellen mit Auszug, noteId, page und Zitierangabe cite.",
       parameters: {
         type: "object",
         properties: {
@@ -712,7 +772,7 @@ export const AGENT_TOOLS = [
           image: {
             type: "boolean",
             description:
-              "Seiten eines importierten Dokuments als Bild statt Text, wenn Abbildung, Tabelle oder Layout genau zählen. Teurer als Text.",
+              "Seiten als Bild statt Text, wenn Abbildung, Skizze, Tabelle, Rechenweg oder Layout genau zählen. Teurer als Text.",
           },
         },
         required: ["noteId", "page"],
@@ -984,6 +1044,10 @@ export const CORE_TOOL_NAMES = new Set([
   "wolfram_alpha",
   "list_folders",
   "list_notes",
+  // Solving an exercise starts with the class material (see systemPrompt), so
+  // the source tools are needed on the first turn, not after enable_tools.
+  "search_sources",
+  "read_source",
   "done",
 ]);
 
@@ -1288,16 +1352,8 @@ export async function executeTool(name, rawArgs, api) {
 
   if (name === "list_folders") {
     const folders = browserFolderRepository.listFolders();
-    const notes = browserNoteRepository.listNotes();
-    return browserDocumentRepository.listImportedNotes().then((imported) => {
-      const allNotes = [...notes, ...imported];
-      return folders.map((folder) => ({
-        id: folder.id,
-        name: folder.name,
-        parentId: folder.parentId || null,
-        noteCount: allNotes.filter((n) => matchesFolder(n, folder)).length,
-      }));
-    });
+    const allNotes = [...browserNoteRepository.listNotes(), ...(await browserDocumentRepository.listImportedNotes())];
+    return folderTree(folders, allNotes);
   }
 
   if (name === "list_notes" || name === "search_sources" || name === "read_source") {
@@ -1310,40 +1366,26 @@ export async function executeTool(name, rawArgs, api) {
       : null;
     if (args.folderId && !folder)
       return `Fehler: Ordner "${args.folderId}" gibt es nicht. Vorhanden: ${folders.map((f) => f.name).join(", ")}`;
+    // Folders nest (Deutsch > Der Vorleser), so a folder covers its subfolders
+    // too. read_source takes no folderId and sees every note.
+    const scopeIds = folder ? folderWithDescendants(folders, folder.id) : null;
+    const inScope = (n) => !folder || folders.some((f) => scopeIds.has(f.id) && matchesFolder(n, f));
+    const imported = (await browserDocumentRepository.listImportedNotes()).filter(inScope);
     if (name !== "list_notes") {
-      // Sources nest (Deutsch > Der Vorleser), so searching a folder covers its
-      // subfolders too. read_source takes no folderId and sees every note.
-      const scopeIds = folder ? folderWithDescendants(folders, folder.id) : null;
-      const inScope = (n) => !folder || folders.some((f) => scopeIds.has(f.id) && matchesFolder(n, f));
-      const scope = {
-        notes: notes.filter(inScope),
-        imported: (await browserDocumentRepository.listImportedNotes()).filter(inScope),
-      };
+      const scope = { notes: notes.filter(inScope), imported };
       return name === "search_sources" ? searchSources(args.query, scope) : readSource(args, scope);
     }
-    const query = String(args.query || "").trim().toLowerCase();
-    return browserDocumentRepository.listImportedNotes().then((imported) => {
-      const entries = [
-        ...notes.map((n) => ({
-          id: n.id,
-          title: n.title || "",
-          subject: n.subject || "",
-          updatedAt: n.updatedAt || 0,
-          preview: previewTextOf(n.id),
-        })),
-        ...imported.map((n) => importedNoteEntry(n)),
-      ];
-      return entries
-        .filter((n) => !folder || matchesFolder(n, folder))
-        .filter(
-          (n) =>
-            !query ||
-            n.title.toLowerCase().includes(query) ||
-            n.preview.toLowerCase().includes(query),
-        )
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, MAX_LISTED_NOTES);
-    });
+    const entries = [
+      ...notes.filter(inScope).map((n) => ({
+        id: n.id,
+        title: n.title || "",
+        subject: n.subject || "",
+        updatedAt: n.updatedAt || 0,
+        preview: previewTextOf(n.id),
+      })),
+      ...imported.map((n) => importedNoteEntry(n)),
+    ];
+    return noteListing(entries, args.query);
   }
 
   const inkColor = color(api?.getColor?.(), "#1A1A1A");

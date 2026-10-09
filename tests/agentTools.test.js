@@ -340,7 +340,10 @@ describe("list_folders / list_notes", () => {
       "folders.folders.v1",
       JSON.stringify({
         version: 1,
-        folders: [{ id: "mathe", name: "Mathe", color: null, icon: null, parentId: null, createdAt: 0 }],
+        folders: [
+          { id: "mathe", name: "Mathe", color: null, icon: null, parentId: null, createdAt: 0 },
+          { id: "ana", name: "Analysis", color: null, icon: null, parentId: "mathe", createdAt: 0 },
+        ],
       }),
     );
     globalThis.localStorage.setItem(
@@ -350,18 +353,27 @@ describe("list_folders / list_notes", () => {
         notes: [
           { id: "n1", title: "Ableitungen", subject: "Mathe", updatedAt: 2 },
           { id: "n2", title: "Gedicht", subject: "Deutsch", updatedAt: 1 },
+          { id: "n3", title: "Übungen Kurvendiskussion", subject: "Analysis", updatedAt: 3 },
         ],
       }),
     );
 
     const folders = await executeTool("list_folders", {}, {});
-    expect(folders).toEqual([{ id: "mathe", name: "Mathe", parentId: null, noteCount: 1 }]);
+    expect(folders.split("\n").slice(1)).toEqual(["Mathe [mathe] 1", "  Analysis [ana] 1"]);
 
+    // A folder covers its subfolders, like search_sources.
     const inMathe = await executeTool("list_notes", { folderId: "mathe" }, {});
-    expect(inMathe.map((n) => n.id)).toEqual(["n1"]);
+    const ids = (listing) => listing.split("\n").slice(1).map((line) => line.split(" | ")[0]);
+    expect(ids(inMathe)).toEqual(["n3", "n1"]);
+
+    // Folded and stemmed: "ubung" finds "Übungen"; folder names match too.
+    expect(ids(await executeTool("list_notes", { query: "Ubung" }, {}))).toEqual(["n3"]);
+    expect(ids(await executeTool("list_notes", { query: "deutsch" }, {}))).toEqual(["n2"]);
+    // More matched terms rank first.
+    expect(ids(await executeTool("list_notes", { query: "Gedicht Ableitungen Mathe" }, {}))[0]).toBe("n1");
 
     const missing = await executeTool("list_notes", { query: "nichtvorhanden" }, {});
-    expect(missing).toEqual([]);
+    expect(missing).toMatch(/^Keine Notiz passt/);
   });
 
   it("includes imported PDFs/Bilder alongside own notes", async () => {
@@ -379,9 +391,8 @@ describe("list_folders / list_notes", () => {
     });
 
     const all = await executeTool("list_notes", {}, {});
-    const imported = all.find((n) => n.id === "imp-1");
-    expect(imported).toMatchObject({ title: "Skript Kapitel 3", subject: "Chemie" });
-    expect(imported.preview).toMatch(/2 Seiten.*PDF/);
+    const imported = all.split("\n").find((line) => line.startsWith("imp-1 |"));
+    expect(imported).toMatch(/Skript Kapitel 3 \| Chemie \| .* \| 2 Seiten.*PDF/);
   });
 });
 
