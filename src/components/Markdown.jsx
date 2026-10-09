@@ -12,14 +12,28 @@ import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
 
 const INLINE = /(\$[^$\n]+\$|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
 
+// True while the text is still being written (AssistantAnswer). A formula is
+// then usually incomplete TeX; instead of KaTeX's red error markup, keep
+// showing the last state that did render, so the formula builds up smoothly.
+const StreamingContext = React.createContext(false);
+
 function Katex({ tex, block = false }) {
+  const streaming = React.useContext(StreamingContext);
+  const lastGood = React.useRef(null);
   const html = React.useMemo(() => {
     try {
-      return katex.renderToString(tex, { throwOnError: false, displayMode: block });
+      const rendered = katex.renderToString(tex, { throwOnError: true, displayMode: block });
+      lastGood.current = rendered;
+      return rendered;
     } catch {
-      return null;
+      if (streaming) return lastGood.current ?? "";
+      try {
+        return katex.renderToString(tex, { throwOnError: false, displayMode: block });
+      } catch {
+        return null;
+      }
     }
-  }, [tex, block]);
+  }, [tex, block, streaming]);
   if (html == null) return block ? `$$${tex}$$` : `$${tex}$`;
   const Tag = block ? "div" : "span";
   return <Tag className={block ? "md-math-block" : "md-math"} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -91,9 +105,17 @@ function tableRow(line) {
     .map((cell) => cell.trim());
 }
 
-function Markdown({ text }) {
+// Models often write LaTeX delimiters instead of dollars: \( x \) inline and
+// \[ x \] for display math. Map both onto the $ / $$ forms rendered below.
+export function normalizeMath(text) {
+  return String(text ?? "")
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => `\n$$\n${tex.trim()}\n$$\n`)
+    .replace(/\\\((.+?)\\\)/g, (_, tex) => `$${tex.trim()}$`);
+}
+
+function Markdown({ text, streaming = false }) {
   const openLink = useBrowserLink();
-  const lines = String(text ?? "").split("\n");
+  const lines = normalizeMath(text).split("\n");
   const blocks = [];
   let index = 0;
 
@@ -238,7 +260,11 @@ function Markdown({ text }) {
     );
   }
 
-  return <div className="md">{blocks}</div>;
+  return (
+    <StreamingContext.Provider value={streaming}>
+      <div className="md">{blocks}</div>
+    </StreamingContext.Provider>
+  );
 }
 
 export default React.memo(Markdown);

@@ -41,4 +41,14 @@ describe('document importer', () => {
       .rejects.toMatchObject({ code: 'image-too-large' });
     expect(deps.repository.saveImportedDocument).not.toHaveBeenCalled();
   });
+
+  it('flags a textbook import and refuses images as textbooks', async () => {
+    const note = await createDocumentImporter(dependencies()).importFiles([pdfFile()], { subject: 'Mathe', book: true });
+    expect(note.book).toBe(true);
+    const deps = dependencies();
+    const image = new File(['png'], 'scan.png', { type: 'image/png' });
+    await expect(createDocumentImporter(deps).importFiles([image], { subject: 'Kunst', book: true }))
+      .rejects.toMatchObject({ code: 'book-needs-pdf' });
+    expect(deps.repository.saveImportedDocument).not.toHaveBeenCalled();
+  });
 });

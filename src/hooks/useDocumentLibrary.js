@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserDocumentImporter } from "../documents/documentImporter.js";
-import { renderImportedThumbnail } from "../documents/importedThumbnail.js";
+import { renderBookCover, renderImportedThumbnail } from "../documents/importedThumbnail.js";
 import { queueSourceIndexing } from "../knowledge/sources.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 
@@ -9,6 +9,7 @@ export default function useDocumentLibrary({
   importer = browserDocumentImporter,
   indexSources = queueSourceIndexing,
   thumbnailer = renderImportedThumbnail,
+  coverRenderer = renderBookCover,
 } = {}) {
   const [importedNotes, setImportedNotes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,7 +50,9 @@ export default function useDocumentLibrary({
       for (const note of missing) {
         try {
           const file = await repository.getFile(note.source.fileId);
-          const thumbnail = await thumbnailer(file.blob, note.source.type);
+          const thumbnail = note.book
+            ? await coverRenderer(file.blob)
+            : await thumbnailer(file.blob, note.source.type);
           await repository.saveImportedThumbnail(note.id, thumbnail);
           setImportedNotes((current) =>
             current.map((item) => (item.id === note.id ? { ...item, thumbnail } : item)),
@@ -59,15 +62,15 @@ export default function useDocumentLibrary({
         }
       }
     })();
-  }, [importedNotes, repository, thumbnailer]);
+  }, [importedNotes, repository, thumbnailer, coverRenderer]);
 
   const importFiles = useCallback(
-    async (files, subject) => {
+    async (files, subject, { book = false } = {}) => {
       if (isImporting) return null;
       setIsImporting(true);
       setError(null);
       try {
-        const note = await importer.importFiles(files, { subject });
+        const note = await importer.importFiles(files, { subject, book });
         setImportedNotes((current) => [
           note,
           ...current.filter((item) => item.id !== note.id),

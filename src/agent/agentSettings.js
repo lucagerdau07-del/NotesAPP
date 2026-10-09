@@ -93,10 +93,15 @@ export const AGENT_DEFAULTS = {
 // OpenRouter-Fallback-Kette weiter, solange model[0] mit "google/" beginnt.
 // Läuft über den im OpenRouter-Account hinterlegten eigenen Google-AI-Key
 // (BYOK) — Kosten trägt Googles Gratis-Kontingent, nicht unser Guthaben.
+// Das Gratis-Kontingent ist klein (20 Anfragen pro Tag und Modell). Ist es
+// aufgebraucht, antwortet jedes Gemini mit 429; der letzte Eintrag lässt den
+// Client dann ohne Google anfragen, und der Proxy nimmt bei Bildinhalt sein
+// DeepSeek-Vision-Modell (kostet Guthaben, aber nur in diesem Fall).
 export const VISION_MODEL_CHAIN = [
   "google/gemini-3.8-flash",
   "google/gemini-3.7-flash",
   "google/gemini-3.6-flash",
+  ULTIMATE_FALLBACK_MODEL,
 ];
 
 export function loadAgentConfig(storage = globalThis.localStorage) {

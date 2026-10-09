@@ -28,6 +28,18 @@
       "port": 5181
     },
     {
+      "name": "notes-dev-5190",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5190", "--strictPort"],
+      "port": 5190
+    },
+    {
+      "name": "notes-dev-5191",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5191", "--strictPort"],
+      "port": 5191
+    },
+    {
       "name": "notes-prod-base",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -64,6 +76,21 @@
         "C:\\Antigravity\\app-backend-temp\\server.js"
       ],
       "port": 7860
+    },
+    {
+      "name": "notes-dev-wt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Antigravity/NotesAPP/.claude/worktrees/input-no-white-focus",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5184",
+        "--strictPort"
+      ],
+      "port": 5184
     }
   ]
 }

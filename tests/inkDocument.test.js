@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   INK_SCHEMA_VERSION, createInkDocument, createInkStroke,
   getToolStyle, isInkDocument, createInkHistory, executeInkCommand,
-  undoInkHistory, redoInkHistory, findIntersectingStrokeIds
+  undoInkHistory, redoInkHistory, findIntersectingStrokeIds, findIntersectingObjectIds
 } from '../src/ink/inkDocument';
+
+describe('stroke eraser vs objects', () => {
+  it('skips locked objects such as imported PDFs', () => {
+    const box = { pageId: 'p', x: 0, y: 0, width: 100, height: 100 };
+    const doc = { objects: [{ id: 'pdf', locked: true, ...box }, { id: 'shape', ...box }] };
+    expect(findIntersectingObjectIds(doc, 'p', [{ x: 50, y: 50 }], 5)).toEqual(['shape']);
+  });
+});
 
 describe('ink document schema', () => {
   it('creates stable page-local vector state', () => {

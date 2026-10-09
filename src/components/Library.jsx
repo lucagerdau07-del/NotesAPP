@@ -74,7 +74,6 @@ import { browserFolderRepository } from "../storage/folderRepository.js";
 import { hydrateImages, loadImages } from "../ink/imageStore.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "../documents/exportDocument.js";
-import { FOLDER_ICONS } from "./folderIcons.js";
 import {
   notePageStyleOf,
   previewTextOf,
@@ -148,6 +147,15 @@ function matchesFolder(note, folder) {
 
 function countInFolder(folder, notes) {
   return notes.filter((n) => matchesFolder(n, folder)).length;
+}
+
+// Newest two note previews in a folder, for the sheets behind its card.
+function previewsInFolder(folder, notes) {
+  return notes
+    .filter((n) => matchesFolder(n, folder) && (n.thumbnail || n.preview))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, 2)
+    .map((n) => n.thumbnail || n.preview);
 }
 
 const MINUTE = 60 * 1000;
@@ -248,706 +256,66 @@ const DEFAULT_THEME = {
 // documentLibrary.importedNotes (imported PDFs/images) - mapped to this same
 // card shape further down, in place of what used to be a hardcoded mock list.
 
-function TileWrap({
-  onOpen,
-  w,
-  h,
-  bg,
-  className = "",
-  testId,
-  subject,
-  children,
-}) {
-  const cardImage = subject ? SUBJECT_CARD_IMAGES[subject.id] : null;
-  const titleFont =
-    subject?.id === "philosophie"
-      ? 'italic 600 27px/1 "Instrument Serif",serif'
-      : '800 24px/1 "Bricolage Grotesque",sans-serif';
-
+// A folder as a stack of sheets: two of its notes and its picture peek out
+// above a frosted glass front, which blurs the picture sitting behind it.
+function FolderCard({ name, count, image, color = "#8AD4FF", previews = [], testId, onOpen }) {
+  const picture = image
+    ? `url("${image}") center / cover`
+    : `linear-gradient(155deg, ${color}, #0B0C10 80%)`;
   return (
-    <div
-      onClick={onOpen}
-      className={`lib-tile ${className}`}
-      data-testid={testId}
-      style={{
-        position: "relative",
-        flex: "none",
-        width: w,
-        height: h,
-        background: cardImage
-          ? `linear-gradient(180deg, rgba(4,5,8,.04) 28%, rgba(4,5,8,.88) 100%), url(${cardImage}) center / cover no-repeat`
-          : bg,
-        cursor: "pointer",
-      }}
-    >
-      {cardImage ? (
-        <>
-          <div className="subject-card-sheen" aria-hidden="true" />
-          <div className="subject-card-copy">
-            <div
-              style={{
-                font: titleFont,
-                letterSpacing:
-                  subject.id === "philosophie" ? "-.01em" : "-.035em",
-              }}
-            >
-              {subject.name}
-            </div>
-            <div className="subject-card-count">{subject.count} Notizen</div>
-          </div>
-        </>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
-
-function SubjectTile({ s, isSelected, isOtherSelected, onToggle }) {
-  const tileClass = isSelected
-    ? "active"
-    : isOtherSelected
-      ? "lib-tile-inactive"
-      : "";
-  const testId = `subject-tile-${s.id}`;
-
-  if (s.id === "mathe") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={220}
-        h={148}
-        bg="linear-gradient(155deg, oklch(0.32 0.12 258), #090B14 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.14) 1px,transparent 1px)",
-            backgroundSize: "18px 18px",
-          }}
+    <button type="button" className="lib-folder" data-testid={testId} onClick={onOpen}>
+      {[previews[1], previews[0]].map((src, index) => (
+        <span
+          key={index}
+          className={`lib-folder-sheet lib-folder-sheet-${index}${src ? "" : " is-empty"}`}
+          style={{ background: src ? `#fff url("${src}") top / cover` : color }}
         />
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 34,
-            height: 58,
-            background:
-              "linear-gradient(72deg,transparent 12%,oklch(0.75 0.16 250/.85) 12%,oklch(0.75 0.16 250/.85) 13.4%,transparent 13.4%)",
-            transform: "skewY(-16deg)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: 18,
-            top: 14,
-            font: 'italic 20px "Instrument Serif",serif',
-            color: "#FFFFFF",
-          }}
-        >
-          f(x)
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 44,
-            height: 1,
-            background: "rgba(255,255,255,.35)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 20,
-            bottom: 22,
-            width: 1,
-            height: 16,
-            background: "rgba(255,255,255,.35)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: 18,
-            bottom: 24,
-            font: "600 9.5px ui-monospace,monospace",
-            letterSpacing: ".1em",
-            color: "#FFFFFF",
-          }}
-        >
-          {s.count} NOTIZEN
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 18,
-            bottom: 44,
-            font: '800 40px/.9 "Bricolage Grotesque",sans-serif',
-            letterSpacing: "-.04em",
-            color: "#FFFFFF",
-          }}
-        >
-          Mathe
-        </div>
-      </TileWrap>
-    );
-  }
-
-  if (s.id === "chemie") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={150}
-        h={164}
-        bg="linear-gradient(155deg, oklch(0.32 0.12 158), #06120A 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "radial-gradient(rgba(255,255,255,.16) 1.3px,transparent 1.4px)",
-            backgroundSize: "15px 15px",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: -16,
-            top: 22,
-            width: 76,
-            height: 76,
-            borderRadius: "50%",
-            border: "2px solid oklch(0.76 0.15 158/.8)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: 8,
-            top: 74,
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            border: "1.5px solid oklch(0.76 0.15 158/.55)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 34,
-            background: "rgba(0,30,12,.45)",
-            borderRight: "1px solid rgba(255,255,255,.16)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 14,
-            width: 34,
-            display: "flex",
-            justifyContent: "center",
-          }}
-        >
-          <span
-            style={{
-              writingMode: "vertical-rl",
-              font: '700 13px "Bricolage Grotesque",sans-serif',
-              letterSpacing: ".22em",
-              color: "#FFFFFF",
-            }}
-          >
-            CHEMIE
-          </span>
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            bottom: 14,
-            width: 34,
-            display: "flex",
-            justifyContent: "center",
-          }}
-        >
-          <span
-            style={{
-              writingMode: "vertical-rl",
-              font: "600 9px ui-monospace,monospace",
-              letterSpacing: ".14em",
-              color: "#FFFFFF",
-            }}
-          >
-            {s.count}
-          </span>
-        </div>
-      </TileWrap>
-    );
-  }
-
-  if (s.id === "kunst") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={140}
-        h={148}
-        bg="linear-gradient(155deg, oklch(0.30 0.12 330), #120912 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: -14,
-            top: -10,
-            width: 160,
-            height: 30,
-            background: "oklch(0.66 0.20 38)",
-            transform: "rotate(-11deg)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: -14,
-            top: 20,
-            width: 160,
-            height: 24,
-            background: "oklch(0.78 0.18 85)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: -14,
-            top: 44,
-            width: 160,
-            height: 26,
-            background: "oklch(0.60 0.17 215)",
-            transform: "rotate(-11deg)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: -14,
-            top: 70,
-            width: 160,
-            height: 20,
-            background: "oklch(0.52 0.18 320)",
-            transform: "rotate(-11deg)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: -10,
-            right: -10,
-            bottom: 26,
-            height: 30,
-            background: "#FFFFFF",
-            transform: "rotate(-7deg)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
-          <span
-            style={{
-              font: '700 15px "Bricolage Grotesque",sans-serif',
-              letterSpacing: "-.01em",
-              color: "#08080A",
-            }}
-          >
-            Kunst
-          </span>
-          <span
-            style={{
-              font: "700 8.5px ui-monospace,monospace",
-              color: "rgba(0,0,0,.6)",
-            }}
-          >
-            {s.count}
-          </span>
-        </div>
-      </TileWrap>
-    );
-  }
-
-  if (s.id === "pgw") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={150}
-        h={132}
-        bg="linear-gradient(155deg, oklch(0.30 0.12 315), #0F0916 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            left: 16,
-            bottom: 38,
-            display: "flex",
-            alignItems: "flex-end",
-            gap: 6,
-            height: 58,
-          }}
-        >
-          <div
-            style={{
-              width: 11,
-              height: 22,
-              background: "oklch(0.65 0.18 315/.65)",
-            }}
-          />
-          <div
-            style={{
-              width: 11,
-              height: 40,
-              background: "oklch(0.72 0.20 315/.85)",
-            }}
-          />
-          <div
-            style={{
-              width: 11,
-              height: 30,
-              background: "oklch(0.65 0.18 315/.6)",
-            }}
-          />
-          <div style={{ width: 11, height: 56, background: "#FFFFFF" }} />
-          <div
-            style={{
-              width: 11,
-              height: 18,
-              background: "oklch(0.65 0.18 315/.5)",
-            }}
-          />
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 75,
-            bottom: 100,
-            font: "600 9px ui-monospace,monospace",
-            color: "#FFFFFF",
-          }}
-        >
-          {s.count}
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 36,
-            height: 1,
-            background: "rgba(255,255,255,.35)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 16,
-            bottom: 11,
-            font: '800 22px/1 "Bricolage Grotesque",sans-serif',
-            letterSpacing: ".1em",
-            color: "#FFFFFF",
-          }}
-        >
-          PGW
-        </div>
-      </TileWrap>
-    );
-  }
-
-  if (s.id === "philosophie") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={190}
-        h={156}
-        bg="linear-gradient(155deg, oklch(0.32 0.09 78), #140F08 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            right: -8,
-            top: -14,
-            font: 'italic 110px/1 "Instrument Serif",serif',
-            color: "oklch(0.78 0.12 78/.22)",
-          }}
-        >
-          Φ
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 18,
-            top: 18,
-            right: 16,
-            font: 'italic 31px/1.02 "Instrument Serif",serif',
-            color: "#FFFFFF",
-          }}
-        >
-          Philo­sophie
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 18,
-            top: 96,
-            width: 40,
-            height: 1,
-            background: "oklch(0.78 0.14 78/.6)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 18,
-            top: 108,
-            right: 16,
-            font: "400 11px/1.45 Manrope,sans-serif",
-            color: "#FFFFFF",
-          }}
-        >
-          Sartre, Platon, Kant · {s.count} Notizen
-        </div>
-      </TileWrap>
-    );
-  }
-
-  if (s.id === "englisch") {
-    return (
-      <TileWrap
-        onOpen={onToggle}
-        w={136}
-        h={144}
-        bg="linear-gradient(155deg, oklch(0.30 0.13 26), #14090C 75%)"
-        className={tileClass}
-        testId={testId}
-        subject={s}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "linear-gradient(to bottom,transparent calc(100% - 1px),rgba(255,255,255,.18) calc(100% - 1px))",
-            backgroundSize: "100% 24px",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 22,
-            top: 0,
-            bottom: 0,
-            width: 1,
-            background: "oklch(0.72 0.18 26/.75)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: 10,
-            top: 4,
-            font: '400 54px/1 "Instrument Serif",serif',
-            color: "oklch(0.75 0.14 26/.25)",
-          }}
-        >
-          Aa
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 28,
-            top: 56,
-            font: "600 34px/1 Caveat,cursive",
-            color: "#FFFFFF",
-          }}
-        >
-          Englisch
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 6,
-            top: 60,
-            font: "600 8.5px ui-monospace,monospace",
-            color: "#FFFFFF",
-          }}
-        >
-          {s.count}
-        </div>
-      </TileWrap>
-    );
-  }
-
-  // spanisch
-  return (
-    <TileWrap
-      onOpen={onToggle}
-      w={150}
-      h={132}
-      bg="linear-gradient(155deg, oklch(0.32 0.14 56), #140B05 75%)"
-      className={tileClass}
-      testId={testId}
-      subject={s}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "repeating-linear-gradient(118deg,transparent 0 12px,oklch(0.65 0.16 52/.6) 12px 22px)",
-        }}
+      ))}
+      <span
+        className="lib-folder-sheet lib-folder-sheet-image"
+        style={{ background: picture }}
       />
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 24,
-          height: 34,
-          background: "#FFFFFF",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 14px",
-          gap: 7,
-        }}
-      >
-        <span
-          style={{
-            font: '700 15px "Bricolage Grotesque",sans-serif',
-            color: "#08080A",
-          }}
-        >
-          Spanisch
+      <span className="lib-folder-front">
+        {/* The tablet WebView ignores backdrop-filter, so the glass blurs its
+            own copy of the picture, laid exactly over the sheet behind it. */}
+        <span className="lib-folder-frost" style={{ background: picture }} aria-hidden="true" />
+        <span className="lib-folder-name">{name}</span>
+        <span className="lib-folder-count">
+          {count} {count === 1 ? "Notiz" : "Notizen"}
         </span>
-        <span
-          style={{
-            marginLeft: "auto",
-            font: "700 8.5px ui-monospace,monospace",
-            color: "rgba(0,0,0,.6)",
-          }}
-        >
-          {s.count}
-        </span>
-      </div>
-    </TileWrap>
+      </span>
+    </button>
   );
 }
 
-function GenericFolderTile({ folder, count, onOpen }) {
-  const Icon = FOLDER_ICONS[folder.icon] || FOLDER_ICONS.book;
-  const color = folder.color || "#8AD4FF";
+// A textbook on the folder's shelf: the PDF's first page as the cover, a
+// darker spine strip down the left edge and a long soft shadow.
+function BookTile({ book, onOpen, onLongPress }) {
+  const press = useLongPress(() => onLongPress?.(book), onOpen);
   return (
-    <TileWrap
-      onOpen={onOpen}
-      w={150}
-      h={148}
-      bg={`linear-gradient(155deg, ${color}33, #0B0C10 75%)`}
-      testId={`folder-tile-${folder.id}`}
-    >
-      {folder.image ? (
-        <>
-          <img
-            src={folder.image}
-            alt=""
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(to bottom, transparent 35%, rgba(0,0,0,.75))",
-            }}
-          />
-        </>
-      ) : (
-        <div style={{ position: "absolute", left: 18, top: 16, color }}>
-          <Icon size={22} />
-        </div>
-      )}
-      <div
-        style={{
-          position: "absolute",
-          left: 18,
-          right: 14,
-          bottom: 40,
-          font: '800 17px/1.1 "Bricolage Grotesque",sans-serif',
-          color: "#FFFFFF",
-          overflowWrap: "anywhere",
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 3,
-          overflow: "hidden",
-        }}
-      >
-        {folder.name}
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          left: 18,
-          bottom: 22,
-          font: "600 9.5px ui-monospace,monospace",
-          letterSpacing: ".1em",
-          color: "#FFFFFF",
-          opacity: 0.7,
-        }}
-      >
-        {count} {count === 1 ? "NOTIZ" : "NOTIZEN"}
-      </div>
-    </TileWrap>
+    <button type="button" className="lib-book" data-testid={`book-tile-${book.id}`} {...press}>
+      <span className="lib-book-cover">
+        {book.thumbnail ? (
+          <img src={book.thumbnail} alt="" draggable={false} />
+        ) : (
+          <BookOpen size={28} color="#FFFFFF" />
+        )}
+        <span className="lib-book-spine" aria-hidden="true" />
+      </span>
+      <span className="lib-book-title">{book.title}</span>
+    </button>
   );
 }
 
-function AddFolderTile({ onOpen }) {
+function AddBookTile({ onOpen, busy }) {
   return (
-    <TileWrap onOpen={onOpen} w={150} h={148} bg="rgba(255,255,255,.04)" testId="folder-tile-add">
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-        }}
-      >
+    <button type="button" className="lib-book lib-book-add" data-testid="book-tile-add" onClick={onOpen} disabled={busy}>
+      <span className="lib-book-cover">
         <Plus size={22} color="#FFFFFF" />
-        <span style={{ font: "600 11px ui-monospace,monospace", color: "#FFFFFF", opacity: 0.7 }}>
-          NEUER ORDNER
-        </span>
-      </div>
-    </TileWrap>
+        <span className="lib-book-add-label">{busy ? "WIRD IMPORTIERT…" : "SCHULBUCH"}</span>
+      </span>
+      <span className="lib-book-title">&nbsp;</span>
+    </button>
   );
 }
 
@@ -2921,23 +2289,46 @@ function RecentListRow({ n, onOpen, onLongPress }) {
   );
 }
 
-// Muted, near-equal-lightness accents: a subject stays recognisable by colour
-// without the grid turning into a neon quilt. Colour only rides the left bar.
-const UNTIS_SUBJECT_PALETTE = [
-  { accent: "#7ea8c4", bg: "rgba(126,168,196,.11)" },
-  { accent: "#89b39b", bg: "rgba(137,179,155,.11)" },
-  { accent: "#c1977c", bg: "rgba(193,151,124,.11)" },
-  { accent: "#a493c0", bg: "rgba(164,147,192,.11)" },
-  { accent: "#c2a86c", bg: "rgba(194,168,108,.11)" },
-  { accent: "#c18b95", bg: "rgba(193,139,149,.11)" },
+// Calendar-chip look: tinted fill, 1px border and light text of one hue.
+const UNTIS_COLORS = {
+  yellow: { text: "#fff0b4", border: "rgba(245,195,40,.9)", bg: "rgba(235,175,20,.38)" },
+  purple: { text: "#d8cbff", border: "rgba(160,130,255,.85)", bg: "rgba(120,90,255,.38)" },
+  orange: { text: "#ffd0ae", border: "rgba(255,140,70,.85)", bg: "rgba(250,110,40,.36)" },
+  red: { text: "#ffcdc8", border: "rgba(240,70,60,.9)", bg: "rgba(225,50,45,.38)" },
+  blue: { text: "#d0e0ff", border: "rgba(50,100,255,.9)", bg: "rgba(30,70,230,.42)" },
+  lightblue: { text: "#d8f4ff", border: "rgba(90,200,255,.9)", bg: "rgba(60,180,250,.34)" },
+  black: { text: "rgba(255,255,255,.92)", border: "rgba(255,255,255,.3)", bg: "rgba(8,8,12,.55)" },
+};
+// Fixed colour per subject, matched on the short code and long name together.
+// Order matters: "Seminar Profil Chemie" must hit seminar before chemie.
+const UNTIS_SUBJECT_COLORS = [
+  [/lernzeit|seminar|philosoph|kunst/i, "black"],
+  [/mathe/i, "yellow"],
+  [/chemie/i, "purple"],
+  [/englisch/i, "orange"],
+  [/spanisch|deutsch/i, "red"],
+  [/pgw|politik/i, "blue"],
+  [/wirtschaft/i, "lightblue"],
 ];
+// Subjects without an assigned colour (Sport, Tutorium, ...) hash into hues nobody owns.
+const UNTIS_FALLBACK_PALETTE = [
+  { text: "#b4f0c8", border: "rgba(80,210,130,.8)", bg: "rgba(40,180,100,.34)" },
+  { text: "#b4eef2", border: "rgba(70,200,210,.8)", bg: "rgba(30,170,190,.33)" },
+  { text: "#ffc4de", border: "rgba(245,100,170,.85)", bg: "rgba(235,60,150,.36)" },
+];
+// Entfall: dashed outline on a dim fill, so it never reads as a red subject.
+const UNTIS_CANCELLED = { text: "#ffc2bc", border: "rgba(255,90,79,.95)", bg: "rgba(255,70,60,.12)" };
+const UNTIS_IRREGULAR = { text: "#ffe2a8", border: "rgba(240,180,50,.9)", bg: "rgba(235,160,30,.4)" };
 const UNTIS_WEEKDAYS_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const UNTIS_MONTHS_SHORT = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.", "Dez."];
 
-function untisSubjectColor(name) {
+function untisSubjectColor(subject) {
+  const text = `${subject?.name || ""} ${subject?.longname || ""}`;
+  const hit = UNTIS_SUBJECT_COLORS.find(([pattern]) => pattern.test(text));
+  if (hit) return UNTIS_COLORS[hit[1]];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return UNTIS_SUBJECT_PALETTE[hash % UNTIS_SUBJECT_PALETTE.length];
+  for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  return UNTIS_FALLBACK_PALETTE[hash % UNTIS_FALLBACK_PALETTE.length];
 }
 
 function untisISOWeek(date) {
@@ -2991,35 +2382,48 @@ function UntisWeekGrid({ lessons, monday, note }) {
   }
   if (!note && allLessons.length === 0) note = "Diese Woche keine Stunden.";
 
-  // Cluster mutually overlapping lessons per day so parallel courses split the column width.
+  // No subject = an event (Klausur, Kompakttag ...). It gets the full column
+  // width under the lessons, labelled with its text, instead of a slot beside them.
+  const isEvent = (l) => !l.su?.[0]?.name && !l.su?.[0]?.longname;
+
+  // Untis lists Lernzeit once per room (9-14 parallel entries a day). Same
+  // subject in the same slot becomes one group, drawn as a single block.
+  const groupParallel = (dayLessons) => {
+    const groups = new Map();
+    for (const lesson of dayLessons) {
+      const key = `${lesson.su?.[0]?.name}|${lesson.startTime}|${lesson.endTime}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(lesson);
+    }
+    return [...groups.values()];
+  };
+
+  // Cluster mutually overlapping groups per day so parallel courses split the column width.
   const clusteredByDay = lessonsByDay.map((dayLessons) => {
     const clusters = [];
     let current = [];
     let currentEnd = -Infinity;
-    for (const lesson of dayLessons) {
-      const start = untisMinutes(lesson.startTime);
+    for (const group of groupParallel(dayLessons.filter((l) => !isEvent(l)))) {
+      const start = untisMinutes(group[0].startTime);
       if (current.length && start >= currentEnd) {
         clusters.push(current);
         current = [];
         currentEnd = -Infinity;
       }
-      current.push(lesson);
-      currentEnd = Math.max(currentEnd, untisMinutes(lesson.endTime));
+      current.push(group);
+      currentEnd = Math.max(currentEnd, untisMinutes(group[0].endTime));
     }
     if (current.length) clusters.push(current);
-    return clusters;
+    return [...dayLessons.filter(isEvent).map((l) => [[l]]), ...clusters];
   });
 
   return (
     <div className="untis-grid">
       {note && (
-        <div style={{ color: "rgba(255,255,255,.6)", font: "500 12px Manrope,sans-serif", padding: "0 4px 8px" }}>{note}</div>
+        <div style={{ color: "rgba(255,255,255,.6)", font: "500 12px Manrope,sans-serif", padding: "8px 10px" }}>{note}</div>
       )}
       <div className="untis-grid-head">
-        <div className="untis-time-col-head">
-          <span>KW {untisISOWeek(monday)}</span>
-          <span>{UNTIS_MONTHS_SHORT[monday.getMonth()]}</span>
-        </div>
+        <div />
         {days.map((d) => (
           <div
             key={untisDateKey(d)}
@@ -3050,9 +2454,13 @@ function UntisWeekGrid({ lessons, monday, note }) {
           })}
         </div>
         {clusteredByDay.map((clusters, dayIndex) => (
-          <div key={dayIndex} className="untis-day-col">
+          <div key={dayIndex} className={`untis-day-col ${untisDateKey(days[dayIndex]) === todayKey ? "is-today" : ""}`}>
             {clusters.map((cluster) =>
-              cluster.map((lesson, slotIndex) => {
+              cluster.map((group, slotIndex) => {
+                // Struck-out copies (a room that falls away) do not count; the
+                // block is Entfall only when every copy is.
+                const live = group.filter((l) => !isLessonCancelled(l));
+                const lesson = live[0] || group[0];
                 const start = untisMinutes(lesson.startTime);
                 const end = untisMinutes(lesson.endTime);
                 const top = `${((start - minStart) / total) * 100}%`;
@@ -3064,28 +2472,34 @@ function UntisWeekGrid({ lessons, monday, note }) {
                 const subject =
                   (cluster.length > 1
                     ? lesson.su?.[0]?.name || lesson.su?.[0]?.longname
-                    : lesson.su?.[0]?.longname || lesson.su?.[0]?.name) || "—";
-                const room = lesson.ro?.[0]?.name || "";
-                const cancelled = isLessonCancelled(lesson);
+                    : lesson.su?.[0]?.longname || lesson.su?.[0]?.name) ||
+                  lesson.lstext ||
+                  lesson.substText ||
+                  "—";
+                const roomOf = (l) => l.ro?.[0]?.name || "";
+                const room = live.length > 1 ? `${live.length} Räume` : roomOf(lesson);
+                const cancelled = live.length === 0;
                 const irregular = lesson.code === "irregular";
                 const color = cancelled
-                  ? { accent: "#ff5a4f", bg: "rgba(255,90,79,.24)" }
+                  ? UNTIS_CANCELLED
                   : irregular
-                  ? { accent: "#dba55e", bg: "rgba(219,165,94,.11)" }
-                  : untisSubjectColor(subject);
+                  ? UNTIS_IRREGULAR
+                  : untisSubjectColor(lesson.su?.[0]);
                 return (
                   <div
                     key={lesson.id}
-                    className={`untis-lesson ${cancelled ? "is-cancelled" : ""}`}
+                    className={`untis-lesson ${cancelled ? "is-cancelled" : ""} ${isEvent(lesson) ? "is-event" : ""}`}
                     style={{
                       top,
                       height,
-                      left: `${left}%`,
-                      width: `calc(${width}% - 3px)`,
-                      borderLeftColor: color.accent,
-                      background: color.bg,
+                      left: `calc(${left}% + 2px)`,
+                      width: `calc(${width}% - 4px)`,
+                      color: color.text,
+                      borderColor: color.border,
+                      // Soft colour bloom in the top-left corner over the tint: reads as blurred glass.
+                      background: `radial-gradient(130% 100% at 15% 0%, ${color.border}, transparent 72%), ${color.bg}`,
                     }}
-                    title={`${subject}${room ? " · " + room : ""}${cancelled ? " · Entfall" : ""}`}
+                    title={`${subject}${room ? " · " + (live.length > 1 ? live.map(roomOf).join(", ") : room) : ""}${cancelled ? " · Entfall" : ""}`}
                   >
                     <span className="untis-lesson-subject">{subject}</span>
                     {cancelled ? (
@@ -3113,19 +2527,29 @@ export default function Library({
 }) {
   const documentLibrary = useDocumentLibrary(documentLibraryOptions);
   const fileInputRef = useRef(null);
+  const bookInputRef = useRef(null);
   const dragDepthRef = useRef(0);
   const [isFileDragActive, setIsFileDragActive] = useState(false);
 
   // One document per file, so a stack of scanned book pages lands as separate
   // sources in the open folder. Only a single file is opened right away.
-  const runImport = async (files) => {
+  const runImport = async (files, { book = false } = {}) => {
     const list = Array.from(files || []);
     let note = null;
     for (const file of list) {
-      note = await documentLibrary.importFiles([file], selectedSubject?.name || "");
+      note = await documentLibrary.importFiles([file], selectedSubject?.name || "", { book });
     }
-    if (list.length === 1 && note) onOpenNote?.(note);
+    if (list.length === 1 && note && !book) onOpenNote?.(note);
   };
+
+  // Textbooks: PDF only, shown on the open folder's shelf instead of the grid.
+  const importBook = () =>
+    iservAvailable
+      ? pickLocalFiles().then(
+          (files) => runImport(files, { book: true }),
+          (error) => console.error("Datei-Auswahl fehlgeschlagen", error),
+        )
+      : bookInputRef.current?.click();
 
   const [iservOpen, setIservOpen] = useState(false);
 
@@ -3280,6 +2704,7 @@ export default function Library({
       : "Stundenplan konnte nicht geladen werden.";
 
   // Horizontal swipe on the week grid steps through weeks (back up to ~6 months).
+  const stepUntisWeek = (delta) => setUntisWeekOffset((o) => Math.max(-UNTIS_MAX_WEEKS_BACK, o + delta));
   const untisSwipeRef = useRef(null);
   const untisSwipe = {
     onPointerDown: (e) => {
@@ -3292,7 +2717,7 @@ export default function Library({
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-      setUntisWeekOffset((o) => Math.max(-UNTIS_MAX_WEEKS_BACK, o + (dx < 0 ? 1 : -1)));
+      stepUntisWeek(dx < 0 ? 1 : -1);
     },
     onPointerCancel: () => {
       untisSwipeRef.current = null;
@@ -3415,7 +2840,11 @@ export default function Library({
     iserv: "IServ",
   };
   const knowledge = useKnowledge({ notes: knowledgeNotes, subjects: untisSubjects, syncIserv });
-  const allNotes = [...importedCards, ...createdCards];
+  // Textbooks live on their folder shelf, not in the note grid or counts.
+  const allNotes = [...importedCards.filter((n) => !n.book), ...createdCards];
+  const folderBooks = selectedSubject
+    ? importedCards.filter((n) => n.book && matchesFolder(n, selectedSubject))
+    : [];
 
   // Filter notes by selected subject and search query
   const filteredNotes = allNotes.filter((n) => {
@@ -4033,6 +3462,20 @@ export default function Library({
         }}
       />
 
+      <input
+        ref={bookInputRef}
+        className="visually-hidden"
+        type="file"
+        aria-label="Schulbuch importieren"
+        data-testid="book-import-input"
+        multiple
+        accept="application/pdf,.pdf"
+        onChange={async (event) => {
+          await runImport(event.target.files, { book: true });
+          event.target.value = "";
+        }}
+      />
+
       {/* Sort Toast */}
       {sortToast && (
         <div
@@ -4163,6 +3606,15 @@ export default function Library({
                 {rootFolders.length} ORDNER ·{" "}
                 {rootFolders.reduce((a, f) => a + countInFolder(f, allNotes), 0)} NOTIZEN
               </span>
+              <button
+                type="button"
+                className="lib-add-folder"
+                onClick={() => setFolderDialog({ mode: "create", parentId: null })}
+                aria-label="Neuer Ordner"
+                title="Neuer Ordner"
+              >
+                <Plus size={18} />
+              </button>
             </div>
 
             {/* Folders horizontal selector row */}
@@ -4171,35 +3623,23 @@ export default function Library({
               style={{
                 display: "flex",
                 flexWrap: "wrap",
-                gap: 12,
+                gap: 18,
                 margin: "0 0 28px",
                 padding: "6px 4px 6px 0",
               }}
             >
-              {rootFolders.map((folder) =>
-                SUBJECT_THEMES[folder.id] ? (
-                  <SubjectTile
-                    key={folder.id}
-                    s={{
-                      id: folder.id,
-                      name: folder.name,
-                      count: countInFolder(folder, allNotes),
-                      themeColor: SUBJECTS.find((x) => x.id === folder.id)?.themeColor,
-                    }}
-                    isSelected={false}
-                    isOtherSelected={false}
-                    onToggle={() => handleOpenFolder(folder)}
-                  />
-                ) : (
-                  <GenericFolderTile
-                    key={folder.id}
-                    folder={folder}
-                    count={countInFolder(folder, allNotes)}
-                    onOpen={() => handleOpenFolder(folder)}
-                  />
-                ),
-              )}
-              <AddFolderTile onOpen={() => setFolderDialog({ mode: "create", parentId: null })} />
+              {rootFolders.map((folder) => (
+                <FolderCard
+                  key={folder.id}
+                  name={folder.name}
+                  count={countInFolder(folder, allNotes)}
+                  image={SUBJECT_CARD_IMAGES[folder.id] || folder.image}
+                  color={SUBJECTS.find((x) => x.id === folder.id)?.themeColor || folder.color}
+                  previews={previewsInFolder(folder, allNotes)}
+                  testId={SUBJECT_THEMES[folder.id] ? `subject-tile-${folder.id}` : `folder-tile-${folder.id}`}
+                  onOpen={() => handleOpenFolder(folder)}
+                />
+              ))}
             </div>
           </>
         )}
@@ -4277,32 +3717,64 @@ export default function Library({
             >
               <Trash2 size={16} />
             </button>
+            <button
+              type="button"
+              className="lib-add-folder"
+              onClick={() => setFolderDialog({ mode: "create", parentId: selectedSubject.id })}
+              aria-label="Neuer Ordner"
+              title="Neuer Ordner"
+            >
+              <Plus size={18} />
+            </button>
           </div>
         )}
 
-        {selectedSubject && (
+        {selectedSubject && subFolders.length > 0 && (
           <div
             className="lib-tile-row"
             style={{
               display: "flex",
               flexWrap: "wrap",
-              gap: 12,
+              gap: 18,
               margin: "0 0 28px",
               padding: "6px 4px 6px 0",
             }}
           >
             {subFolders.map((folder) => (
-              <GenericFolderTile
+              <FolderCard
                 key={folder.id}
-                folder={folder}
+                name={folder.name}
                 count={countInFolder(folder, allNotes)}
+                image={folder.image}
+                color={folder.color}
+                previews={previewsInFolder(folder, allNotes)}
+                testId={`folder-tile-${folder.id}`}
                 onOpen={() => handleOpenFolder(folder)}
               />
             ))}
-            <AddFolderTile
-              onOpen={() => setFolderDialog({ mode: "create", parentId: selectedSubject.id })}
-            />
           </div>
+        )}
+
+        {selectedSubject && (
+          <>
+            <h3 className="lib-shelf-title">
+              Bücher
+              <span>
+                {folderBooks.length} {folderBooks.length === 1 ? "BUCH" : "BÜCHER"}
+              </span>
+            </h3>
+            <div className="lib-shelf" data-testid="book-shelf">
+              {folderBooks.map((book) => (
+                <BookTile
+                  key={book.id}
+                  book={book}
+                  onOpen={() => onOpenNote?.(book)}
+                  onLongPress={setDetailNote}
+                />
+              ))}
+              <AddBookTile onOpen={importBook} busy={documentLibrary.isImporting} />
+            </div>
+          </>
         )}
 
         {/* Section title & count */}
@@ -4378,7 +3850,7 @@ export default function Library({
           bottom: 20,
         }}
       >
-        <div className="lib-glass agent-panel-card">
+        <div className="lib-glass agent-panel-card agent-panel-card-bare">
           <div className="agent-panel-head">
             <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
               Anstehend
@@ -4393,35 +3865,38 @@ export default function Library({
             />
           </div>
         </div>
-        <div className="lib-glass agent-panel-card" style={{ flex: "0 0 68%" }}>
-          <div className="agent-panel-head">
-            <span style={{ font: "700 15px \"Bricolage Grotesque\",sans-serif", color: "#FFFFFF" }}>
-              Stundenplan
-            </span>
-            {untisStatus === "ready" && (() => {
-              const at = loadUpdatedAt(untisMonday(untisWeekOffset));
-              if (!at) return null;
-              const d = new Date(at);
-              const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-              const sameDay = d.toDateString() === new Date().toDateString();
-              return (
-                <span style={{ font: "500 10.5px Manrope,sans-serif", color: "rgba(255,255,255,.4)" }}>
-                  Stand {sameDay ? time : `${d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}, ${time}`}
-                </span>
-              );
-            })()}
-            {untisWeekOffset === 0 ? (
-              <span className="agent-badge">WEBUNTIS</span>
-            ) : (
-              <button
-                type="button"
-                className="agent-badge"
-                style={{ cursor: "pointer" }}
-                onClick={() => setUntisWeekOffset(0)}
-              >
-                HEUTE
+        <div className="lib-glass agent-panel-card untis-card" style={{ flex: "0 0 68%" }}>
+          <div className="agent-panel-head untis-head">
+            <div className="untis-date-badge" aria-hidden="true">
+              <span>{UNTIS_MONTHS_SHORT[new Date().getMonth()].replace(".", "")}</span>
+              <b>{new Date().getDate()}</b>
+            </div>
+            <div className="untis-head-title">
+              <span>Stundenplan</span>
+              <small>
+                {(() => {
+                  const monday = untisMonday(untisWeekOffset);
+                  const friday = new Date(monday);
+                  friday.setDate(friday.getDate() + 4);
+                  const range = `${monday.getDate()}. ${UNTIS_MONTHS_SHORT[monday.getMonth()]} – ${friday.getDate()}. ${UNTIS_MONTHS_SHORT[friday.getMonth()]}`;
+                  const at = untisStatus === "ready" && loadUpdatedAt(monday);
+                  if (!at) return `KW ${untisISOWeek(monday)} · ${range}`;
+                  const d = new Date(at);
+                  const time = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+                  const sameDay = d.toDateString() === new Date().toDateString();
+                  return `KW ${untisISOWeek(monday)} · ${range} · Stand ${sameDay ? time : `${d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}, ${time}`}`;
+                })()}
+              </small>
+            </div>
+            <div className="untis-nav">
+              <button type="button" aria-label="Vorherige Woche" onClick={() => stepUntisWeek(-1)}>
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
               </button>
-            )}
+              <button type="button" onClick={() => setUntisWeekOffset(0)}>Heute</button>
+              <button type="button" aria-label="Nächste Woche" onClick={() => stepUntisWeek(1)}>
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
+              </button>
+            </div>
           </div>
           <div className="agent-panel-body" style={{ touchAction: "pan-y" }} {...untisSwipe}>
             {untisStatus === "missing" && (

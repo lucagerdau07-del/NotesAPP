@@ -599,7 +599,7 @@ export function findIntersectingObjectIds(document, pageId, points, radius) {
   return pageObjectsOf(document)
     .filter(
       (object) =>
-        object.pageId === pageId && objectIntersectsPoints(object, samples, radius),
+        object.pageId === pageId && !object.locked && objectIntersectsPoints(object, samples, radius),
     )
     .map((object) => object.id);
 }

@@ -212,10 +212,10 @@ body {
   cursor: grabbing;
 }
 
-.lib-tile, .lib-card, .lib-newnote {
+.lib-card, .lib-newnote {
   transition: transform 0.15s ease;
 }
-.lib-tile:hover, .lib-card:hover, .lib-newnote:hover {
+.lib-card:hover, .lib-newnote:hover {
   transform: translateY(-3px);
 }
 .lib-settings-btn:hover {
@@ -330,21 +330,8 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.lib-tile.active {
-  transform: translateY(-5px) scale(1.03);
-  box-shadow: 0 0 0 2.5px var(--subj-accent), 0 16px 36px -12px var(--subj-accent-soft) !important;
-}
 
-.lib-tile-inactive {
-  opacity: 0.55;
-  filter: grayscale(0.2);
-  transition: all 0.2s ease;
-}
 
-.lib-tile-inactive:hover {
-  opacity: 0.9;
-  filter: grayscale(0);
-}
 
 .lib-filter-pill {
   display: inline-flex;
@@ -824,78 +811,12 @@ body::after {
     0 30px 62px -16px rgba(0, 0, 0, 0.98) !important;
 }
 
-.lib-tile {
-  position: relative;
-  backdrop-filter: blur(36px) saturate(1.7) brightness(1.05) !important;
-  -webkit-backdrop-filter: blur(36px) saturate(1.7) brightness(1.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.22) !important;
-  border-radius: 24px;
-  box-shadow: 
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.85),
-    0 22px 46px -18px rgba(0, 0, 0, 0.95) !important;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease, opacity 0.2s ease !important;
-  overflow: hidden;
-}
 
-.lib-tile::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
-  pointer-events: none;
-  z-index: 10;
-}
 
-.lib-tile:hover {
-  transform: translateY(-4px) scale(1.015) !important;
-  border-color: rgba(255, 255, 255, 0.38) !important;
-  box-shadow: 
-    inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
-    0 30px 60px -16px rgba(0, 0, 0, 0.98) !important;
-}
 
-.lib-tile.active {
-  transform: translateY(-5px) scale(1.03) !important;
-  border-color: rgba(255, 255, 255, 0.45) !important;
-  box-shadow: 
-    inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
-    0 0 0 2.5px var(--subj-accent, #FFFFFF),
-    0 26px 56px -14px var(--subj-accent-soft, rgba(0, 0, 0, 0.95)) !important;
-}
 
-.subject-card-sheen {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(120deg, rgba(255,255,255,.18), transparent 22%, transparent 72%, rgba(255,255,255,.08)),
-    radial-gradient(ellipse 90% 52% at 50% 108%, rgba(0,0,0,.72), transparent 72%);
-  mix-blend-mode: soft-light;
-  pointer-events: none;
-}
 
-.subject-card-copy {
-  position: absolute;
-  left: 15px;
-  right: 14px;
-  bottom: 13px;
-  z-index: 2;
-  color: #fff;
-  text-shadow: 0 2px 12px rgba(0,0,0,.9);
-}
 
-.subject-card-count {
-  margin-top: 6px;
-  font: 700 8.5px/1 ui-monospace, monospace;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.78);
-}
 
 /* Audio Waveform Live Pulse Animation (Image 1 Audio Waves) */
 @keyframes wavePulse {
@@ -1278,6 +1199,33 @@ body::after {
   border-radius: 30px;
 }
 
+/* The assistant cuts the glass down to an L (rail + input band, see
+   lShapePath in AiChatPanel.jsx) so its messages float over the document.
+   The canvas is clipped to the L; the box's own CSS glass and rims step aside
+   for .rail-chat-shape, which draws the fill (fallback / light-doc scrim) and
+   the rim along the L instead of the rectangle. */
+.editor-sidebar[data-mode="agent"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.editor-sidebar[data-mode="agent"]::before,
+.editor-sidebar[data-mode="agent"]::after {
+  content: none !important;
+}
+
+.editor-sidebar[data-mode="agent"] > canvas {
+  clip-path: var(--agent-clip, none);
+}
+
+.editor-sidebar[data-mode="agent"] .rail-resize-handle {
+  top: auto;
+  height: var(--agent-band, 100%);
+}
+
 .editor-sidebar.browser-fullscreen {
   width: calc(100% - 16px);
 }
@@ -1363,21 +1311,290 @@ body::after {
   color: #15151a;
 }
 
-/* Plain flex child of the single glass control — no background of its own,
-   so it reads as the same panel that grew, not an overlay on top of it. */
+/* Plain flex child of the single glass control. Must stay unpositioned and
+   free of opacity/transform: .rail-chat-shape positions against the sidebar
+   and has to share its stacking context to sit between canvas and content. */
 .rail-chat {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 14px 14px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 22px;
+  padding: 12px;
   color: #F1EEE7;
   font-family: Manrope, sans-serif;
-  /* Only fades/slides in after the width transition is under way, so the
-     text doesn't visibly reflow while the panel is still narrow. */
-  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+}
+
+.rail-chat-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.rail-chat-shape path {
+  fill: url(#rail-chat-shape-fill);
+  stroke: url(#rail-chat-shape-rim);
+  stroke-width: 1;
+}
+
+[data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: none;
+}
+
+/* Same scrim the rectangle gets over light pages (see [data-liquid-glass-control]::after). */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-sidebar .rail-chat-shape path,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: rgba(10, 10, 14, 0.82);
+}
+
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: none;
+}
+
+/* --- Floating chat ------------------------------------------------------
+   Everything above the band sits straight on the document, so each piece
+   carries its own small glass: dark cards for the assistant, a light bubble
+   with a tail for the user. */
+.rail-chat {
+  --chat-glass: rgba(18, 18, 23, 0.74);
+  --chat-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --chat-glass-drop: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+  /* Cards that change while you watch (streamed text, step list, the ticking
+     status) skip backdrop blur: re-blurring the page behind them on every
+     change was the stutter on a Galaxy Tab A7. A denser fill stands in. */
+  --chat-card: rgba(20, 20, 25, 0.92);
+  --chat-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --chat-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Floats over the top of the message list (negative margin) so long
+   conversations scroll up underneath it instead of ending at a hard edge. */
+.rail-chat .rail-chat-head {
+  position: relative;
+  z-index: 2;
+  margin-bottom: -66px;
+  align-self: flex-end;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--chat-glass);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  animation: rail-chat-drop-in 0.5s var(--chat-out) 0.18s both;
+}
+
+.rail-chat .rail-chat-messages {
+  margin: 0 -6px;
+  padding: 58px 6px 2px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  scrollbar-width: none;
+}
+
+/* Short conversations hug the input band, like a chat; long ones scroll. */
+.rail-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: auto;
+}
+
+.rail-chat .rail-chat-msg {
+  padding: 11px 15px;
+  border-radius: 20px;
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+}
+
+.rail-chat .rail-chat-msg.assistant {
+  align-self: stretch;
+  max-width: 100%;
+  padding: 13px 17px 12px;
+  border-radius: 22px;
+  animation: rail-chat-rise 0.5s var(--chat-out) both;
+}
+
+/* Height is set from the content (AssistantAnswer) and eased, so a new line
+   grows the card; content-box so that height excludes the padding. */
+.rail-chat .rail-chat-answer {
+  box-sizing: content-box;
+  overflow-x: visible;
+  overflow-y: clip;
+  transition: height 0.24s var(--chat-out);
+}
+
+.rail-chat .rail-chat-msg.user {
+  max-width: 82%;
+  margin-right: 8px;
+  padding: 10px 30px 10px 15px;
+  border-radius: 20px 20px 5px 20px;
+  /* The tail sits in the bottom-right corner, so it takes the gradient's end colour. */
+  --bubble-end: #6A4FE8;
+  background: linear-gradient(135deg, #7C9DFF 0%, #7468F2 55%, var(--bubble-end) 100%);
+  color: #FFFFFF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 1px rgba(20, 0, 80, 0.25),
+    0 12px 28px -12px rgba(76, 60, 210, 0.75);
+  transform-origin: 100% 100%;
+  animation: rail-chat-pop 0.48s var(--chat-spring) both;
+}
+
+/* The tail: a corner of the bubble's colour with a quarter circle cut out of
+   it, curling out from the bubble's bottom-right edge. */
+.rail-chat .rail-chat-msg.user::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--bubble-end);
+  -webkit-mask: radial-gradient(circle at 100% 0, transparent 13.5px, #000 14px);
+  mask: radial-gradient(circle at 100% 0, transparent 13.5px, #000 14px);
+}
+
+.rail-chat .rail-chat-msg.user .rail-chat-copy {
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rail-chat .rail-chat-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-chat-welcome-title {
+  font: 700 17px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, #FFFFFF 20%, #B9C6FF 60%, #FFFFFF 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rail-chat-sheen 3.2s ease-in-out 0.4s infinite;
+}
+
+.rail-chat .rail-chat-empty {
+  color: rgba(241, 238, 231, 0.62);
+}
+
+.rail-chat .rail-chat-empty-wrap {
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.rail-chat .rail-chat-empty-wrap .rail-chat-welcome {
+  align-self: stretch;
+  margin-bottom: 4px;
+}
+
+/* Suggestions read as replies you could send: ghost user bubbles. */
+.rail-chat .rail-chat-suggestion {
+  margin-right: 8px;
+  padding: 8px 14px;
+  border-radius: 18px 18px 5px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 18, 23, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #F1EEE7;
+  font: 500 12.5px Manrope, sans-serif;
+  transform-origin: 100% 100%;
+  animation: rail-chat-pop 0.5s var(--chat-spring) calc(0.22s + var(--i, 0) * 0.07s) both;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s var(--chat-spring);
+}
+
+.rail-chat .rail-chat-suggestion:hover {
+  background: rgba(244, 242, 238, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.rail-chat .rail-chat-suggestion:active {
+  transform: scale(0.95);
+}
+
+.rail-chat .rail-chat-steps,
+.rail-chat .rail-chat-status {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 9px 14px;
+  border-radius: 16px;
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  box-sizing: border-box;
+}
+
+.rail-chat .rail-chat-steps {
+  align-self: stretch;
+  padding: 6px;
+  border-radius: 20px;
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+/* Folded, the run shrinks to a pill that only summarises it. */
+.rail-chat .rail-chat-steps.folded {
+  align-self: flex-start;
+  border-radius: 999px;
+}
+
+.rail-chat .rail-chat-status {
+  border-radius: 999px;
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+.rail-chat .rail-chat-doccard {
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  animation: rail-chat-rise 0.5s var(--chat-out) both;
+}
+
+.rail-chat .rail-chat-messages .rail-chat-error {
+  background: rgba(60, 20, 22, 0.92);
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+/* The input slides out of the rail together with the band it sits in. */
+.rail-chat-dock {
+  display: flex;
+  flex-direction: column;
+  animation: rail-chat-dock-in 0.56s var(--chat-out) 0.04s both;
+}
+
+@keyframes rail-chat-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-pop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-drop-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-dock-in {
+  from { opacity: 0; transform: translateX(-36px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-step-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-sheen {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0 0; }
 }
 
 @keyframes rail-chat-fade-in {
@@ -1419,6 +1636,9 @@ body::after {
 .rail-chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1436,6 +1656,7 @@ body::after {
   border-radius: 14px;
   max-width: 88%;
   min-width: 0;
+  overflow-wrap: anywhere;
   background: rgba(255, 255, 255, 0.08);
   user-select: text;
 }
@@ -1497,20 +1718,49 @@ body::after {
 .rail-chat-input {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 10px 8px 12px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 10px;
+  padding: 16px 12px 12px 18px;
+  border-radius: 24px;
+  /* Sits inside the rail, which is already a WebGL glass control; the shader
+     only handles direct children of the glass root, so this nested surface
+     gets the same material in CSS: clear tint, blur, and the editor's rim. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: none;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 32px -8px rgba(0, 0, 0, 0.55);
   position: relative;
   box-sizing: border-box;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.rail-chat-input:focus-within {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.09);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+/* Rim light, same ring as the enhanced rail/pills (bright top-left and bottom-right). */
+.rail-chat-input::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6),
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    rgba(255, 255, 255, 0.35)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  opacity: 0.8;
+}
+
+.rail-chat-input:focus-within::before {
+  opacity: 1;
 }
 
 .rail-chat-input-controls {
@@ -1523,8 +1773,25 @@ body::after {
 .rail-chat-input-tools {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  margin-left: -8px;
   position: relative;
+}
+
+.rail-chat-input-tools .rail-chat-model-selector {
+  min-width: 0;
+}
+
+.rail-chat-input-tools .rail-chat-model-btn {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.rail-chat-input-tools .rail-chat-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rail-chat-input input {
@@ -1544,46 +1811,56 @@ body::after {
 
 .rail-chat-send-btn,
 .rail-chat-input button.rail-chat-send-btn {
-  width: 30px !important;
-  height: 30px !important;
-  flex: 0 0 30px !important;
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 36px !important;
   border: none !important;
-  border-radius: 15px !important;
+  border-radius: 18px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  color: #15151a !important;
+  color: #FFFFFF !important;
   cursor: pointer !important;
-  background: linear-gradient(140deg, #FFFFFF, #6B6B72) !important;
-  transition: opacity 0.15s ease, transform 0.1s ease;
+  /* Liquid glass: clear tint, blur, bright top rim, dark bottom rim. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0.18)) !important;
+  backdrop-filter: blur(14px) saturate(1.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 16px -4px rgba(0, 0, 0, 0.5);
+  /* Springs up to full size once there is something to send. */
+  transition: opacity 0.2s ease, transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .rail-chat-send-btn:disabled,
 .rail-chat-input button.rail-chat-send-btn:disabled {
   opacity: 0.35 !important;
   cursor: default !important;
+  transform: scale(0.84);
 }
 
 .rail-chat-send-btn:not(:disabled):active {
   transform: scale(0.92);
+  transition-duration: 0.1s;
 }
 
 .rail-chat-circle-search {
-  width: 36px !important;
-  height: 36px !important;
-  flex: 0 0 36px !important;
-  border-radius: 10px !important;
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 16px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: rgba(241, 238, 231, 0.6) !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.85) !important;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .rail-chat-circle-search:hover {
-  background: rgba(255, 122, 51, 0.18) !important;
-  color: #FFB27A !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
 }
 
 /* Model selector dropdown (Antigravity-style) */
@@ -1596,9 +1873,9 @@ body::after {
   display: inline-flex !important;
   align-items: center !important;
   gap: 5px !important;
-  height: 26px !important;
-  padding: 0 8px !important;
-  border-radius: 8px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 16px !important;
   border: 1px solid rgba(255, 255, 255, 0.09) !important;
   background: rgba(255, 255, 255, 0.04) !important;
   color: rgba(241, 238, 231, 0.78) !important;
@@ -1622,15 +1899,15 @@ body::after {
 }
 
 .rail-chat-fast-btn {
-  width: 26px !important;
-  height: 26px !important;
-  flex: 0 0 26px !important;
-  border-radius: 8px !important;
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 16px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: rgba(255, 255, 255, 0.04) !important;
-  color: rgba(241, 238, 231, 0.5) !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.6) !important;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1639,9 +1916,18 @@ body::after {
   color: #FFFFFF !important;
 }
 
+.rail-chat-fast-btn svg {
+  display: block;
+}
+
 .rail-chat-fast-btn.active {
-  background: rgba(255, 196, 0, 0.18) !important;
-  color: #FFD65C !important;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.07) 55%, rgba(255, 255, 255, 0.16)) !important;
+  backdrop-filter: blur(14px) saturate(1.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+  color: #FFFFFF !important;
 }
 
 .rail-chat-model-chevron {
@@ -2008,68 +2294,218 @@ body::after {
 }
 
 /* The step list is the progress indicator: the number of steps isn't known
-   ahead of the run, so there is nothing a bar could fill. */
+   ahead of the run, so there is nothing a bar could fill. Each tool call is a
+   node on a small timeline: an icon for the kind of work, a spinning ring while
+   it runs, a check (or cross) that pops in when it lands. */
 .rail-chat-steps {
-  list-style: none;
-  margin: 0;
-  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 0 10px;
-  font: 400 11.5px Manrope, sans-serif;
-}
-
-.rail-chat-steps li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  color: rgba(241, 238, 231, 0.6);
-}
-
-.rail-chat-steps-collapsed,
-.rail-chat-steps-collapse {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: none;
-  background: none;
-  color: rgba(241, 238, 231, 0.45);
-  font: 400 11.5px Manrope, sans-serif;
-  cursor: pointer;
-}
-
-.rail-chat-steps-collapsed:hover,
-.rail-chat-steps-collapse:hover {
+  font: 400 12px Manrope, sans-serif;
   color: rgba(241, 238, 231, 0.75);
 }
 
-.rail-chat-steps-collapse {
-  padding: 0 10px 3px;
-}
-
-.rail-chat-steps li.done { color: rgba(255, 255, 255, 0.9); }
-.rail-chat-steps li.failed { color: #E8A0A0; }
-
-.rail-chat-step-line {
+.rail-chat-steps-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 12px 5px 5px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: rgba(241, 238, 231, 0.78);
+  font: 600 12px Manrope, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease;
 }
 
-/* Result/error line under a step, terminal-style: a tree connector plus
-   monospace output, same font as inline code in the markdown renderer. */
-.rail-chat-step-detail {
+.rail-chat-steps-head:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rail-chat-steps-stack {
   display: flex;
-  gap: 6px;
-  padding-left: 19px;
-  color: rgba(241, 238, 231, 0.4);
-  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex: none;
 }
 
-.rail-chat-steps li.failed .rail-chat-step-detail {
+.rail-chat-steps-stack > span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  margin-left: -7px;
+  border-radius: 50%;
+  border: 2px solid #141419;
+  background: #262a3d;
+  color: #C3CDFF;
+}
+
+.rail-chat-steps-stack > span:first-child {
+  margin-left: 0;
+}
+
+.rail-chat-steps-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-chat-steps-failed {
+  color: #EBA3A3;
+}
+
+.rail-chat-steps-chevron {
+  flex: none;
+  color: rgba(241, 238, 231, 0.5);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rail-chat-steps-chevron.open {
+  transform: rotate(180deg);
+}
+
+.rail-chat-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 4px 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rail-chat-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 5px 0;
+  animation: rail-chat-step-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Connector down to the next node. */
+.rail-chat-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 33px;
+  bottom: -3px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(rgba(143, 168, 255, 0.4), rgba(255, 255, 255, 0.07));
+}
+
+.rail-chat-step-badge {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: rgba(241, 238, 231, 0.85);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.rail-chat-step.running .rail-chat-step-badge {
+  background: rgba(124, 140, 255, 0.2);
+  color: #E2E7FF;
+}
+
+.rail-chat-step.running .rail-chat-step-badge::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: #93A9FF;
+  border-right-color: rgba(147, 169, 255, 0.3);
+  animation: rail-chat-spin 0.9s linear infinite;
+}
+
+.rail-chat-step.failed .rail-chat-step-badge {
+  background: rgba(232, 110, 110, 0.16);
+  color: #F2AFAF;
+}
+
+.rail-chat-step-mark {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #141419;
+  background: #5CD08C;
+  color: #0B1A10;
+  animation: rail-chat-mark-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.rail-chat-step.failed .rail-chat-step-mark {
+  background: #E77474;
+  color: #2A0B0B;
+}
+
+.rail-chat-step-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.rail-chat-step-label {
+  font: 500 12.5px / 1.35 Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.88);
+  overflow-wrap: anywhere;
+  transition: color 0.3s ease;
+}
+
+.rail-chat-step.running .rail-chat-step-label {
+  background: linear-gradient(90deg, rgba(241, 238, 231, 0.45) 25%, #FFFFFF 50%, rgba(241, 238, 231, 0.45) 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rail-chat-shimmer 1.4s linear infinite;
+}
+
+.rail-chat-step.failed .rail-chat-step-label {
+  color: #F0B4B4;
+}
+
+/* Result line: a small mono chip under the label. */
+.rail-chat-step-detail {
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(241, 238, 231, 0.5);
+  font: 400 11px / 1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: rail-chat-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* An error message is worth reading in full. */
+.rail-chat-step.failed .rail-chat-step-detail {
+  background: rgba(232, 110, 110, 0.1);
   color: #E8A0A0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@keyframes rail-chat-mark-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
 }
 
 .rail-chat-spin {
@@ -2161,8 +2597,8 @@ body::after {
   max-height: 120px;
   border: none;
   background: none;
-  color: inherit;
-  font: 400 13px / 1.4 'Inter', Manrope, sans-serif;
+  color: #FFFFFF;
+  font: 400 15px / 1.4 'Inter', Manrope, sans-serif;
   outline: none;
   resize: none;
   padding: 2px 2px 2px 2px;
@@ -3281,6 +3717,81 @@ body::after {
   flex-direction: column;
 }
 
+/* Same glass as the folder cards' front pane (.lib-folder-front). The tablet
+   WebView ignores backdrop-filter, so ::after is a blurred copy of the reeded
+   background (fixed, so it lines up with what sits behind the panel) with the
+   grey tint baked in; ::before adds the light catching the top-left. */
+.lib-glass.agent-panel-card {
+  isolation: isolate;
+  border-radius: 26px;
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -14px 24px -14px rgba(0, 0, 0, 0.45),
+    0 18px 34px -14px rgba(0, 0, 0, 0.85) !important;
+}
+.lib-glass.agent-panel-card::after {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(34, 36, 42, 0.5), rgba(34, 36, 42, 0.5)),
+    url("../assets/reeded-glass-background.png") center / cover fixed;
+  filter: blur(3px) saturate(1.3);
+}
+.lib-glass.agent-panel-card::before {
+  inset: 0;
+  height: auto;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05) 30%, rgba(255, 255, 255, 0) 55%);
+}
+
+/* Stundenplan: clearer glass than the chat card - lighter tint so the reeded
+   background reads through, stronger sheen and rim light. */
+.lib-glass.agent-panel-card.untis-card::after {
+  background:
+    linear-gradient(rgba(34, 36, 42, 0.16), rgba(34, 36, 42, 0.16)),
+    url("../assets/reeded-glass-background.png") center / cover fixed;
+  filter: blur(2px) saturate(1.5) brightness(1.15);
+}
+.lib-glass.agent-panel-card.untis-card::before {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08) 32%, rgba(255, 255, 255, 0) 60%);
+}
+/* Grid runs edge to edge: no inset at the sides or bottom of the card. */
+.untis-card .agent-panel-body {
+  padding: 0;
+}
+.untis-card .agent-panel-body > .agent-card {
+  margin: 0 14px;
+}
+.lib-glass.agent-panel-card.untis-card {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Anstehend: no box at all, content floats on the page background. */
+.lib-glass.agent-panel-card.agent-panel-card-bare {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.agent-panel-card-bare .agent-panel-body {
+  padding-left: 0;
+  padding-right: 0;
+}
+.agent-panel-card-bare .agent-panel-head {
+  padding-left: 4px;
+}
+.lib-glass.agent-panel-card.agent-panel-card-bare::before,
+.lib-glass.agent-panel-card.agent-panel-card-bare::after {
+  display: none;
+}
+
 .agent-panel[data-open="false"] {
   transform: translateX(calc(-100% - 24px));
   opacity: 0;
@@ -3483,77 +3994,167 @@ body::after {
 /* ==========================================================================
    WebUntis week grid (Stundenplan panel)
    ========================================================================== */
-.untis-grid {
+/* Panel head: date badge, title + range, ← Heute → segmented control. */
+.untis-head {
+  gap: 10px;
+}
+
+.untis-date-badge {
+  flex: none;
+  width: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.untis-date-badge span {
+  display: block;
+  padding: 3px 0 2px;
+  font: 700 8px Manrope, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.untis-date-badge b {
+  display: block;
+  padding: 3px 0 4px;
+  font: 700 14px Manrope, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.untis-head-title {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  gap: 3px;
+  min-width: 0;
+}
+.untis-head-title span {
+  font: 700 15px "Bricolage Grotesque", sans-serif;
+  line-height: 1.1;
+  color: #fff;
+}
+.untis-head-title small {
+  font: 500 10px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.42);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.untis-nav {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.untis-nav button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: 600 11.5px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.72);
+}
+.untis-nav button + button {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.untis-nav button:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* The grid is a dark calendar card: hairline cells, chips with a tinted fill
+   and a 1px border of the subject colour. */
+.untis-grid {
+  --untis-axis: 34px;
+  --untis-pad: 8px;
+  --untis-line: rgba(255, 255, 255, 0.13);
+  display: flex;
+  flex-direction: column;
+  /* Grows to the panel, but never below its content: the panel body scrolls
+     instead of the overflow:hidden card clipping the lessons. */
+  flex: 1 0 auto;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  /* Glass, not a dark slab: the panel card already blurs the reeded
+     background behind it (the tablet WebView has no backdrop-filter), so this
+     only adds a light sheen and a little depth on top. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 40%, rgba(8, 10, 14, 0.5));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -12px 20px -14px rgba(0, 0, 0, 0.45);
 }
 
 .untis-grid-head {
   display: grid;
-  grid-template-columns: 32px repeat(5, 1fr);
-  gap: 2px;
-  padding-bottom: 6px;
-}
-
-.untis-time-col-head {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  font: 600 8.5px Manrope, sans-serif;
-  letter-spacing: .02em;
-  color: rgba(255,255,255,.34);
-  line-height: 1.3;
-  padding-bottom: 2px;
+  grid-template-columns: var(--untis-axis) repeat(5, 1fr);
+  padding-right: var(--untis-pad);
+  border-bottom: 1px solid var(--untis-line);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .untis-day-head {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0;
-  padding: 3px 0 4px;
-  border-radius: 7px;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 0;
+  border-left: 1px solid var(--untis-line);
 }
 .untis-day-head span:first-child {
-  font: 600 8.5px Manrope, sans-serif;
-  letter-spacing: .1em;
-  color: rgba(255,255,255,.4);
-  text-transform: uppercase;
+  font: 600 10.5px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.45);
 }
 .untis-day-head span:last-child {
-  font: 600 13px Manrope, sans-serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  font: 600 11.5px Manrope, sans-serif;
   font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,.72);
+  color: rgba(255, 255, 255, 0.78);
 }
-/* Today reads by contrast, not by hue — the rest of this UI is monochrome
-   glass and an iOS-blue pill was the one foreign accent in it. */
-.untis-day-head.is-today {
-  background: rgba(255,255,255,.10);
-}
+/* Today reads by contrast, not by hue: a grey disc behind the date. */
 .untis-day-head.is-today span:first-child {
-  color: rgba(255,255,255,.7);
+  color: rgba(255, 255, 255, 0.75);
 }
 .untis-day-head.is-today span:last-child {
-  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .untis-grid-body {
   position: relative;
   display: grid;
-  grid-template-columns: 32px repeat(5, 1fr);
-  gap: 2px;
+  grid-template-columns: var(--untis-axis) repeat(5, 1fr);
   flex: 1;
   min-height: 180px;
-  margin-bottom: 10px;
+  /* Slim margin between the lesson blocks and the card edge (right, bottom). */
+  padding: 0 var(--untis-pad) var(--untis-pad) 0;
 }
 
 .untis-gridlines {
   position: absolute;
   top: 0;
-  bottom: 0;
-  left: 34px;
+  bottom: var(--untis-pad);
+  left: var(--untis-axis);
   right: 0;
   pointer-events: none;
 }
@@ -3562,7 +4163,7 @@ body::after {
   left: 0;
   right: 0;
   height: 1px;
-  background: rgba(255,255,255,.055);
+  background: var(--untis-line);
 }
 
 .untis-time-axis {
@@ -3577,60 +4178,105 @@ body::after {
   text-align: right;
   font: 600 9px Manrope, sans-serif;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.01em;
-  color: rgba(255,255,255,.38);
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.34);
 }
 
+/* The column line and the today tint run on into the grid padding (bottom, and
+   right for the last day) so they reach the card edge; lessons stay inset. */
 .untis-day-col {
   position: relative;
-  border-left: 1px solid rgba(255,255,255,.045);
+}
+.untis-day-col::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * var(--untis-pad));
+  border-left: 1px solid var(--untis-line);
+  pointer-events: none;
+}
+.untis-day-col:last-child::before {
+  right: calc(-1 * var(--untis-pad));
+}
+.untis-day-col.is-today::before {
+  background: rgba(255, 255, 255, 0.06);
 }
 
+/* Colour comes inline (text, border, fill) from the subject palette; the room
+   line just dims the same text colour. */
 .untis-lesson {
   position: absolute;
-  border-radius: 4px;
-  border-left: 2.5px solid;
-  padding: 2px 5px;
+  box-sizing: border-box;
+  margin-top: 1px;
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 3px 6px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1px;
   line-height: 1.2;
   min-height: 14px;
+  z-index: 1;
+  /* Frosted chip: blur whatever is behind it, plus a rim and sheen. The tablet
+     WebView ignores backdrop-filter and falls back to the plain tinted fill. */
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 12px rgba(255, 255, 255, 0.06),
+    0 4px 10px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* Events sit under the lessons of their day and wrap their label. */
+.untis-lesson.is-event {
+  z-index: 0;
+}
+.untis-lesson.is-event .untis-lesson-subject {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .untis-lesson-subject {
-  font: 700 10px Manrope, sans-serif;
-  letter-spacing: -.015em;
-  color: rgba(255,255,255,.95);
+  font: 700 10.5px Manrope, sans-serif;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .untis-lesson-room {
-  font: 500 9px Manrope, sans-serif;
-  color: rgba(255,255,255,.5);
+  font: 500 9.5px Manrope, sans-serif;
+  opacity: 0.65;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Entfall must be spotted at a glance: red fill, thick red bar, label. */
+/* Entfall must be spotted at a glance: red fill and border, struck subject, label. */
 .untis-lesson.is-cancelled {
-  border-left-width: 4px;
-  box-shadow: inset 0 0 0 1px rgba(255,90,79,.45);
+  border-style: dashed;
+}
+/* Thick red cross corner to corner; non-scaling-stroke keeps it 3.5px at any block size. */
+.untis-lesson.is-cancelled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M0 0L100 100M100 0L0 100' stroke='%23ff453a' stroke-width='3.5' stroke-linecap='round' vector-effect='non-scaling-stroke' fill='none'/></svg>") center / 100% 100% no-repeat;
 }
 .untis-lesson.is-cancelled .untis-lesson-subject {
   text-decoration: line-through;
-  text-decoration-color: rgba(255,255,255,.6);
-  color: rgba(255,255,255,.7);
+  text-decoration-color: rgba(255, 255, 255, 0.6);
 }
 .untis-lesson-entfall {
   font: 800 8.5px Manrope, sans-serif;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ff8a80;
   white-space: nowrap;
 }
 
@@ -5687,4 +6333,206 @@ body::after {
   .settings-content {
     padding: 16px;
   }
+}
+
+/* Textbook shelf inside a subject folder (Library.jsx BookTile). */
+.lib-shelf-title {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  margin: 0 0 14px;
+  font: 700 21px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+.lib-shelf-title span {
+  font: 600 9.5px ui-monospace, monospace;
+  letter-spacing: 0.11em;
+}
+.lib-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px 20px;
+  margin: 0 0 30px;
+  padding: 6px 4px 6px 2px;
+}
+.lib-book {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 118px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-book-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 118px;
+  height: 160px;
+  overflow: hidden;
+  border-radius: 3px 9px 9px 3px;
+  background: var(--subj-accent, #3b5b8c);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    14px 16px 28px -10px rgba(0, 0, 0, 0.6);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-book-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Spine: a darker band with a fold highlight, like the book icon. */
+.lib-book-spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 11px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22) 70%, rgba(255, 255, 255, 0.28) 85%, rgba(0, 0, 0, 0.12));
+}
+.lib-book:active .lib-book-cover,
+.lib-book:hover .lib-book-cover {
+  transform: translateY(-3px);
+}
+.lib-book-title {
+  font: 700 12.5px/1.2 "Bricolage Grotesque", sans-serif;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.lib-book-add .lib-book-cover {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+}
+.lib-book-add-label {
+  font: 600 10px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.lib-book-add:disabled {
+  cursor: progress;
+}
+
+/* Folder card (Library.jsx FolderCard): sheets stacked behind a frosted front. */
+.lib-folder {
+  position: relative;
+  flex: none;
+  width: 210px;
+  height: 156px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-folder-sheet {
+  position: absolute;
+  height: 96px;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-folder-sheet-0 { top: 0; left: 24px; right: 24px; }
+.lib-folder-sheet-1 { top: 8px; left: 14px; right: 14px; }
+.lib-folder-sheet-0.is-empty { opacity: 0.45; }
+.lib-folder-sheet-1.is-empty { opacity: 0.75; }
+.lib-folder-sheet-image { top: 17px; left: 5px; right: 5px; height: 132px; }
+.lib-folder-front {
+  position: absolute;
+  inset: 30px 0 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 0 22px 18px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  background: rgba(40, 42, 48, 0.35);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -10px 18px -10px rgba(0, 0, 0, 0.45),
+    0 18px 34px -14px rgba(0, 0, 0, 0.85);
+  transition: transform 0.2s ease;
+}
+/* Blurred copy of the picture sheet: the front starts 13px below the sheet
+   and its 1px border shifts it in, hence -14px / 4px against 17px / 5px. */
+.lib-folder-frost {
+  position: absolute;
+  top: -14px;
+  left: 4px;
+  right: 4px;
+  height: 132px;
+  z-index: -1;
+  border-radius: 14px;
+  filter: blur(12px) saturate(1.4) brightness(1.08);
+}
+/* Sheen: light catching the top-left of the pane, fading toward the bottom. */
+.lib-folder-front::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07) 38%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.05), transparent 30%);
+  pointer-events: none;
+}
+.lib-folder-name {
+  position: relative;
+  font: 700 19px/1.1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.lib-folder-count {
+  position: relative;
+  font: 500 12.5px/1.2 Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.62);
+}
+.lib-folder:hover .lib-folder-sheet-0 { transform: translateY(-6px); }
+.lib-folder:hover .lib-folder-sheet-1 { transform: translateY(-4px); }
+.lib-folder:hover .lib-folder-sheet-image { transform: translateY(-2px); }
+.lib-folder:active .lib-folder-front { transform: scale(0.98); }
+.lib-add-folder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  align-self: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.lib-add-folder:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }

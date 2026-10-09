@@ -34,3 +34,26 @@ export async function renderImportedThumbnail(blob, type) {
   }
   return canvas.toDataURL("image/jpeg", 0.75);
 }
+
+// Textbooks show as a portrait cover on the shelf: the whole first page.
+const COVER_WIDTH = 360;
+
+export async function renderBookCover(blob) {
+  const { openPdf } = await import("./pdfRuntime.js");
+  const opened = await openPdf(blob);
+  try {
+    const page = await opened.document.getPage(1);
+    const viewport = page.getViewport({ scale: COVER_WIDTH / page.getViewport({ scale: 1 }).width });
+    const canvas = document.createElement("canvas");
+    canvas.width = COVER_WIDTH;
+    canvas.height = Math.round(viewport.height);
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    page.cleanup();
+    return canvas.toDataURL("image/jpeg", 0.8);
+  } finally {
+    await opened.dispose();
+  }
+}

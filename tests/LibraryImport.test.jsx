@@ -28,7 +28,7 @@ describe('Library file import', () => {
     fireEvent.click(screen.getByTestId('subject-tile-chemie'));
     const input = screen.getByTestId('file-import-input');
     fireEvent.change(input, { target: { files: [new File(['pdf'], 'blatt.pdf', { type: 'application/pdf' })] } });
-    await waitFor(() => expect(importFiles).toHaveBeenCalledWith(expect.anything(), { subject: 'Chemie' }));
+    await waitFor(() => expect(importFiles).toHaveBeenCalledWith(expect.anything(), { subject: 'Chemie', book: false }));
     expect(importFiles.mock.calls[0][0][0].name).toBe('blatt.pdf');
     expect(onOpenNote).toHaveBeenCalledWith(note);
   });

@@ -30,8 +30,10 @@ export function createDocumentImporter({
   now = Date.now,
 } = {}) {
   return {
-    async importFiles(files, { subject = "" } = {}) {
+    async importFiles(files, { subject = "", book = false } = {}) {
       const { file, mimeType, type } = validateSingleImport(files);
+      if (book && type !== "pdf")
+        throw new ImportFailure("book-needs-pdf", "Schulbücher bitte als PDF importieren.");
       let sourcePages;
       try {
         sourcePages =
@@ -71,6 +73,7 @@ export function createDocumentImporter({
         createdAt: timestamp,
         updatedAt: timestamp,
         source: { fileId, type },
+        ...(book ? { book: true } : {}),
         pages: toPageDescriptors(noteId, sourcePages),
       };
       const fileRecord = {
