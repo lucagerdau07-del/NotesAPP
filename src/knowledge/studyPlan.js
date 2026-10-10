@@ -137,6 +137,22 @@ export function planInputsKey(events) {
 export const isPlanCurrent = (plan, events, today) =>
   plan?.generatedFor === today && plan?.rules === PLAN_RULES_VERSION && plan?.inputs === planInputsKey(events);
 
+// Abhaken (Aufgabe oder Lernblock) rechnet den Plan nicht sofort neu: erst eine
+// Stunde nach dem ersten Abhaken oder auf Knopfdruck.
+export const PLAN_DONE_DELAY_MS = 60 * 60 * 1000;
+
+// Nur Erledigt-Flag und abgehakte Minuten haben sich seit dem Plan geändert,
+// sonst nichts an den Eingaben.
+export function isPlanDoneOnlyChange(plan, events, today) {
+  if (!plan || plan.generatedFor !== today || plan.rules !== PLAN_RULES_VERSION) return false;
+  const doneThen = new Set(plan.doneIds || []);
+  const worksThen = plan.works || {};
+  const restored = (Array.isArray(events) ? events : []).map((event) =>
+    event ? { ...event, done: doneThen.has(event.id), work: worksThen[event.id] || {} } : event,
+  );
+  return plan.inputs === planInputsKey(restored);
+}
+
 const asList = (events) => (Array.isArray(events) ? events : []);
 
 // Aufgaben (Hausaufgaben wie Lernzeitaufgaben, die Unterscheidung spielt für den
@@ -567,6 +583,9 @@ export async function buildPlan({ events = [], terms = [], subjects = [], today,
     generatedFor: today,
     rules: PLAN_RULES_VERSION,
     inputs: planInputsKey(events),
+    // Welche Aufgaben beim Erstellen schon erledigt waren (isPlanDoneOnlyChange).
+    doneIds: asList(events).filter((event) => event?.done).map((event) => event.id),
+    works: Object.fromEntries(asList(events).filter((event) => event && workMinutes(event)).map((event) => [event.id, event.work])),
     days: budgets.map(({ date, budgetMinutes }) => ({
       date,
       budgetMinutes,

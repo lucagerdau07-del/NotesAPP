@@ -19,7 +19,15 @@ import {
   X,
 } from "lucide-react";
 import useKnowledge from "../hooks/useKnowledge.js";
-import { activeNeed, activePrep, isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
+import {
+  PLAN_DONE_DELAY_MS,
+  activeNeed,
+  activePrep,
+  isoDate,
+  isPlanCurrent,
+  isPlanDoneOnlyChange,
+  planInputsKey,
+} from "../knowledge/studyPlan.js";
 import { TOPIC_MAX_CHARS } from "../knowledge/examPrep.js";
 import ExamDashboard from "./ExamDashboard.jsx";
 import SwipeRow from "./SwipeRow.jsx";
@@ -340,6 +348,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
     dashboardExamId,
     setEventDone,
     setWorkDone,
+    setPlanPending,
     addEvent,
     removeEvent,
     iservState,
@@ -362,13 +371,29 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
   // den offenen Aufgaben passt. Der Ref merkt sich, für welchen Stand schon
   // angefragt wurde, damit ein fehlschlagendes Speichern nicht endlos wiederholt.
   const planCurrent = isPlanCurrent(plan, events, today);
+  // Abhaken wartet eine Stunde (oder den Knopf), jede andere Änderung rechnet sofort neu.
+  const planDoneOnly = !planCurrent && isPlanDoneOnlyChange(plan, events, today);
+  const pendingSince = plan?.pendingSince;
   const wantedPlan = `${today}|${planInputsKey(events)}`;
   const planRequestedRef = useRef(null);
   useEffect(() => {
-    if (planCurrent || planRequestedRef.current === wantedPlan) return;
+    if (planCurrent) {
+      if (pendingSince) setPlanPending(null);
+      return undefined;
+    }
+    if (planDoneOnly) {
+      if (!pendingSince) {
+        setPlanPending(Date.now());
+        return undefined;
+      }
+      const timer = setTimeout(() => void refreshPlan(), Math.max(0, pendingSince + PLAN_DONE_DELAY_MS - Date.now()));
+      return () => clearTimeout(timer);
+    }
+    if (planRequestedRef.current === wantedPlan) return undefined;
     planRequestedRef.current = wantedPlan;
     void refreshPlan();
-  }, [planCurrent, wantedPlan, refreshPlan]);
+    return undefined;
+  }, [planCurrent, planDoneOnly, pendingSince, wantedPlan, refreshPlan, setPlanPending]);
 
   const lessons = useMemo(
     () => mondaysOfMonth(month.year, month.month).flatMap((monday) => loadArchivedWeek(monday) || []),

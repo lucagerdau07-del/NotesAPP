@@ -8,7 +8,9 @@ import {
   HOME_BASE_MINUTES,
   estimatedMinutes,
   isoDate,
+  isPlanDoneOnlyChange,
   lastWorkDay,
+  PLAN_RULES_VERSION,
   planInputsKey,
 } from "../src/knowledge/studyPlan.js";
 
@@ -632,5 +634,43 @@ describe("Blöcke erledigter Aufgaben", () => {
   it("entfallen an einem Tag, an dem die Aufgabe abgehakt wurde (dort steht der erledigte Eintrag)", async () => {
     const worked = await run([{ ...done, work: { [MONDAY]: 30 } }]);
     expect(worked.days[0].blocks.some((block) => block.eventIds?.includes("t1"))).toBe(false);
+  });
+});
+
+describe("isPlanDoneOnlyChange", () => {
+  const TODAY = "2026-09-07";
+  const task = { id: "t1", kind: "homework", title: "Blatt", due: "2026-09-14", subject: "Mathe" };
+  const plan = (events, doneIds = [], works = {}) => ({
+    generatedFor: TODAY,
+    rules: PLAN_RULES_VERSION,
+    inputs: planInputsKey(events),
+    doneIds,
+    works,
+    days: [],
+  });
+
+  it("is true when only a task was checked off since the plan", () => {
+    expect(isPlanDoneOnlyChange(plan([task]), [{ ...task, done: true }], TODAY)).toBe(true);
+  });
+
+  it("is true when only studied minutes were checked off since the plan", () => {
+    expect(isPlanDoneOnlyChange(plan([task]), [{ ...task, work: { [TODAY]: 30 } }], TODAY)).toBe(true);
+    expect(
+      isPlanDoneOnlyChange(plan([{ ...task, work: { [TODAY]: 30 } }], [], { t1: { [TODAY]: 30 } }), [task], TODAY),
+    ).toBe(true);
+  });
+
+  it("is false when a task was added or its due date changed", () => {
+    expect(isPlanDoneOnlyChange(plan([task]), [task, { ...task, id: "t2" }], TODAY)).toBe(false);
+    expect(isPlanDoneOnlyChange(plan([task]), [{ ...task, due: "2026-09-20" }], TODAY)).toBe(false);
+  });
+
+  it("is true again when a checked-off task is reopened", () => {
+    expect(isPlanDoneOnlyChange(plan([{ ...task, done: true }], ["t1"]), [task], TODAY)).toBe(true);
+  });
+
+  it("is false for another day or an older rule set", () => {
+    expect(isPlanDoneOnlyChange(plan([task]), [{ ...task, done: true }], "2026-09-08")).toBe(false);
+    expect(isPlanDoneOnlyChange({ ...plan([task]), rules: 1 }, [{ ...task, done: true }], TODAY)).toBe(false);
   });
 });

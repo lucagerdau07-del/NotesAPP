@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../src/agent/agentClient.js", () => ({
   requestCompletion: vi.fn(async () => ({ content: '{"days":{}}' })),
@@ -102,6 +102,53 @@ describe("CalendarScreen", () => {
     expect(stored().events[0].done).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Wieder öffnen" }));
     expect(stored().events[0].done).toBe(false);
+  });
+
+  it("lässt den Plan beim Abhaken stehen und merkt sich den Zeitpunkt", () => {
+    seed({ plan: currentPlan([iservEvent]) });
+    render(<CalendarScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+    expect(requestCompletion).not.toHaveBeenCalled();
+    expect(typeof stored().plan.pendingSince).toBe("number");
+    expect(stored().plan.generatedFor).toBe(today);
+  });
+
+  it("rechnet den Plan eine Stunde nach dem Abhaken neu", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      seed({ plan: currentPlan([iservEvent]) });
+      render(<CalendarScreen onBack={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+      expect(requestCompletion).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(59 * 60 * 1000));
+      expect(requestCompletion).not.toHaveBeenCalled();
+      await act(() => vi.advanceTimersByTimeAsync(2 * 60 * 1000));
+      expect(requestCompletion).toHaveBeenCalled();
+      expect(stored().plan.pendingSince).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechnet den Plan sofort neu, wenn sich außer dem Abhaken etwas ändert", async () => {
+    seed({ plan: currentPlan([iservEvent]) });
+    render(<CalendarScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+    expect(requestCompletion).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Neuer Eintrag" }));
+    fireEvent.click(document.querySelector('input[name="kind"][value="homework"]'));
+    fireEvent.change(screen.getByLabelText("Titel"), { target: { value: "Neu" } });
+    fireEvent.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    await waitFor(() => expect(requestCompletion).toHaveBeenCalled());
+  });
+
+  it("aktualisiert den Plan auf Knopfdruck trotz wartendem Abhaken", async () => {
+    seed({ plan: currentPlan([iservEvent]) });
+    render(<CalendarScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+    fireEvent.click(screen.getByTestId("plan-refresh"));
+    await waitFor(() => expect(requestCompletion).toHaveBeenCalled());
+    expect(stored().plan.pendingSince).toBeUndefined();
   });
 
   it("legt einen eigenen Termin an und löscht ihn wieder", () => {
@@ -303,5 +350,7 @@ describe("CalendarScreen Wischen zum Abhaken", () => {
     drag(screen.getByTestId(`cal-entry-study:${today}:0`).closest(".cal-swipe"), 90);
     expect(stored().events[0].work).toEqual({ [today]: 30 });
     expect(stored().events[0].done).toBe(true);
+    expect(requestCompletion).not.toHaveBeenCalled();
+    expect(typeof stored().plan.pendingSince).toBe("number");
   });
 });

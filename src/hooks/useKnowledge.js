@@ -204,6 +204,17 @@ export default function useKnowledge({
     [repository],
   );
 
+  // Wann der Plan auf eine Aktualisierung wartet (Abhaken). Ohne Angabe: nicht mehr wartend.
+  const setPlanPending = useCallback(
+    (since) => {
+      const current = repository.read();
+      if (!current.plan) return;
+      repository.savePlan({ ...current.plan, pendingSince: since ?? undefined });
+      setState(repository.read());
+    },
+    [repository],
+  );
+
   // Einen Lernblock abhaken (clear = wieder öffnen): Die Minuten verteilen sich
   // auf die Aufgaben des Blocks, der Plan rechnet danach mit dem Rest.
   const setWorkDone = useCallback(
@@ -277,6 +288,7 @@ export default function useKnowledge({
     updateStudy,
     setEventDone,
     setWorkDone,
+    setPlanPending,
     addEvent,
     removeEvent,
     setAutoScan,
