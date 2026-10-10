@@ -333,6 +333,13 @@ describe("examSchedule: Lernblöcke je Klausur", () => {
     expect(rows(schedule)).toEqual(["07.09. A60", "08.09. B60+A30", "09.09. A90", "10.09. B75"]);
   });
 
+  it("gibt an einem geteilten Tag keiner Klausur einen Schnipsel unter einer halben Stunde", () => {
+    const schedule = examSchedule([exam("A", "2026-09-10"), exam("B", "2026-09-11")], MONDAY);
+    const shared = [...schedule.values()].filter((entries) => entries.length > 1);
+    expect(shared.length).toBeGreaterThan(0);
+    for (const entries of shared) for (const entry of entries) expect(entry.minutes).toBeGreaterThanOrEqual(30);
+  });
+
   it("lässt Tage aus, die von Hausaufgaben voll sind", () => {
     // Neun Aufgaben bis Fr 11.9. verlangen an Mo-Do je 54 Minuten: kein Platz für einen Block.
     const tasks = Array.from({ length: 9 }, (_, index) => homework(`h${index}`, "2026-09-11"));

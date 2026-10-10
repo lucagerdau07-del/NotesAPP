@@ -164,6 +164,7 @@ function ExamPlan({ event, planning, onPlan }) {
   const [error, setError] = useState("");
   const prep = activePrep(event);
   const need = activeNeed(event);
+  const planned = prep ? prep.blocks.reduce((sum, block) => sum + block.minutes, 0) : null;
 
   const request = async () => {
     setError("");
@@ -177,6 +178,7 @@ function ExamPlan({ event, planning, onPlan }) {
       {need && (
         <p className="cal-hint" data-testid="exam-need">
           Geschätzter Aufwand: {need.minutes} Min
+          {planned !== null && planned < need.minutes && ` · eingeplant: ${planned} Min`}
           {need.content.length > 0 && ` · Inhalt: ${need.content.join(" · ")}`}
         </p>
       )}

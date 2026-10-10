@@ -33,7 +33,7 @@ const MORNING_CUTOFF = "12:00";
 export const PLAN_DAYS = 7;
 // Hochzählen, wenn sich die Planungsregeln ändern: ein gespeicherter Plan mit
 // älterer Version wird dann sofort neu berechnet statt erst am nächsten Tag.
-export const PLAN_RULES_VERSION = 6;
+export const PLAN_RULES_VERSION = 7;
 
 export function isoDate(value) {
   const date = new Date(value);
@@ -237,7 +237,8 @@ export function examSchedule(events, today, { skipId = null } = {}) {
   // Vom spätesten Tag rückwärts: jeder Tag geht an die Klausur, der noch am
   // meisten fehlt (bei Gleichstand die frühere), so teilen sich nahe Klausuren
   // die Tage, statt dass die erste alle nimmt. Zweiter Durchgang: Reste auf
-  // Tagen, die schon einer anderen Klausur gehören.
+  // Tagen, die schon einer anderen Klausur gehören, nur als volle Einheit
+  // (EXAM_SESSION_MINUTES), keine Schnipsel.
   const horizon = plans.map((plan) => lastWorkDay(plan.exam, today)).sort().at(-1);
   const days = daysThrough(today, horizon).reverse();
   for (const shared of [false, true]) {
@@ -249,7 +250,7 @@ export function examSchedule(events, today, { skipId = null } = {}) {
             plan.need >= EXAM_SESSION_MIN_MINUTES &&
             plan.usable.has(iso) &&
             !(claimed.get(iso) || []).some((entry) => entry.id === plan.exam.id) &&
-            plan.room(iso) - load(iso) >= EXAM_SESSION_MIN_MINUTES,
+            plan.room(iso) - load(iso) >= (shared ? EXAM_SESSION_MINUTES : EXAM_SESSION_MIN_MINUTES),
         )
         .sort((a, b) => b.need - a.need || a.exam.due.localeCompare(b.exam.due))[0];
       if (!next) continue;
