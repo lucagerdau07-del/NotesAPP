@@ -8,6 +8,7 @@ import {
   FileText,
   GraduationCap,
   Hourglass,
+  ListChecks,
   NotebookPen,
   Paperclip,
   Plus,
@@ -18,7 +19,8 @@ import {
   X,
 } from "lucide-react";
 import useKnowledge from "../hooks/useKnowledge.js";
-import { isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
+import { activeNeed, activePrep, isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
+import { TOPIC_MAX_CHARS } from "../knowledge/examPrep.js";
 import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
 import {
   ENTRY_TYPES,
@@ -155,7 +157,77 @@ function DayLessons({ lessons }) {
   );
 }
 
-function EntryDetail({ entry, notesById, onToggleDone, onRemove, onOpenNote, onOpenAttachment, attachmentError }) {
+// Das Fenster einer Klausur: Thema angeben, Lernplan anfordern. Der Plan füllt
+// die Lerntage vor der Klausur mit konkreten Aufgaben (examPrep.js).
+function ExamPlan({ event, planning, onPlan }) {
+  const [topic, setTopic] = useState(event.topic || "");
+  const [error, setError] = useState("");
+  const prep = activePrep(event);
+  const need = activeNeed(event);
+
+  const request = async () => {
+    setError("");
+    const result = await onPlan(event.id, topic);
+    if (result?.error) setError(result.error);
+  };
+
+  return (
+    <section className="cal-detail-section" aria-label="Lernplan">
+      <h3 className="cal-detail-label">Lernplan</h3>
+      {need && (
+        <p className="cal-hint" data-testid="exam-need">
+          Geschätzter Aufwand: {need.minutes} Min
+          {need.content.length > 0 && ` · Inhalt: ${need.content.join(" · ")}`}
+        </p>
+      )}
+      <label className="cal-group cal-field cal-field-note">
+        <span className="cal-sr">Thema der Klausur</span>
+        <textarea
+          rows={3}
+          maxLength={TOPIC_MAX_CHARS}
+          value={topic}
+          disabled={planning}
+          onChange={(change) => setTopic(change.target.value)}
+          placeholder="Thema und Stoff der Klausur, z. B. Kettenregel, Produktregel, Kurvendiskussion"
+        />
+      </label>
+      <div className="cal-actions">
+        <button type="button" className="cal-button is-primary" onClick={request} disabled={planning}>
+          <ListChecks size={15} aria-hidden="true" />
+          {planning ? "Plan wird erstellt …" : prep ? "Lernplan neu erstellen" : "Lernplan erstellen"}
+        </button>
+      </div>
+      {error && (
+        <p className="cal-hint" role="status">
+          {error}
+        </p>
+      )}
+      {prep && (
+        <ul className="cal-group cal-prep" aria-label="Lernplan zur Klausur">
+          {prep.blocks.map((block, index) => (
+            <li key={`${block.date}-${index}`}>
+              <span className="cal-lesson-time">{shortDate(block.date)}</span>
+              <span>{block.task}</span>
+              <span className="cal-prep-minutes">{block.minutes} min</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function EntryDetail({
+  entry,
+  notesById,
+  planning,
+  onPlanExam,
+  onToggleDone,
+  onRemove,
+  onOpenNote,
+  onOpenAttachment,
+  attachmentError,
+}) {
   const event = entry.event;
   const sourceNote = event && event.sourceNoteId !== "manual" && !event.iservId ? notesById[event.sourceNoteId] : null;
   const lesson = entry.lesson;
@@ -196,11 +268,16 @@ function EntryDetail({ entry, notesById, onToggleDone, onRemove, onOpenNote, onO
         </section>
       )}
 
+      {event?.kind === "exam" && !event.done && (
+        <ExamPlan event={event} planning={planning} onPlan={onPlanExam} />
+      )}
+
       {entry.type === "study" && (
         <section className="cal-detail-section">
           <div className="cal-group cal-detail-body">
-            {entry.minutes} Minuten aus dem Lernplan. Er richtet sich nach deinen offenen Hausaufgaben und Klausuren und wird
-            jeden Tag neu berechnet.
+            {entry.forExam
+              ? `${entry.minutes} Minuten für die Klausur „${entry.forExam.title}“. Thema und Plan änderst du im Fenster der Klausur.`
+              : `${entry.minutes} Minuten aus dem Lernplan. Er richtet sich nach deinen offenen Hausaufgaben und Klausuren und wird jeden Tag neu berechnet.`}
           </div>
         </section>
       )}
@@ -250,7 +327,8 @@ function EntryDetail({ entry, notesById, onToggleDone, onRemove, onOpenNote, onO
 export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
   const notes = useMemo(() => browserNoteRepository.listNotes(), []);
   const knowledge = useKnowledge({ notes, subjects: [], syncIserv });
-  const { events, plan, refreshPlan, isPlanning, setEventDone, addEvent, removeEvent, iservState } = knowledge;
+  const { events, plan, refreshPlan, isPlanning, planExam, planningExamId, setEventDone, addEvent, removeEvent, iservState } =
+    knowledge;
 
   const today = isoDate(Date.now());
   const [month, setMonth] = useState(() => ({ year: new Date().getFullYear(), month: new Date().getMonth() }));
@@ -464,6 +542,8 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
               <EntryDetail
                 entry={selected}
                 notesById={notesById}
+                planning={planningExamId !== null && planningExamId === selected.event?.id}
+                onPlanExam={planExam}
                 onToggleDone={setEventDone}
                 onRemove={(id) => {
                   removeEvent(id);

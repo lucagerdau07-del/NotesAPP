@@ -3,8 +3,10 @@ import {
   BASE_MINUTES,
   buildPlan,
   dailyBudgets,
+  examSchedule,
   FAR_CAP_MINUTES,
   HOME_BASE_MINUTES,
+  estimatedMinutes,
   isoDate,
   lastWorkDay,
 } from "../src/knowledge/studyPlan.js";
@@ -59,14 +61,14 @@ describe("dailyBudgets", () => {
   });
 
   it("caps far-off demand at one hour, stacked across several tasks", () => {
-    const events = Array.from({ length: 3 }, (_, index) => ({
-      kind: "exam",
-      title: `Klausur ${index}`,
+    const events = Array.from({ length: 15 }, (_, index) => ({
+      kind: "homework",
+      title: `Aufgabe ${index}`,
       subject: "Math",
-      due: "2026-09-13", // 6 Tage entfernt - für jede Klausur weit weg
+      due: "2026-09-13", // 6 Tage entfernt - für jede Aufgabe weit weg
       done: false,
     }));
-    // Je Klausur 30min/Tag (180min / 6 Lerntage), 3 davon macht 90 - gedeckelt auf 60.
+    // Je Aufgabe 30min / 7 Tage, 15 davon macht rund 64 - gedeckelt auf 60.
     expect(budgetOn(dailyBudgets(events, { today: MONDAY }), MONDAY)).toBe(HOME_BASE_MINUTES + FAR_CAP_MINUTES);
   });
 
@@ -76,7 +78,7 @@ describe("dailyBudgets", () => {
     ];
     // Fällig morgen: heute liegt innerhalb der Kulanzfrist von 2 Tagen, kein Deckel.
     const budgets = dailyBudgets(events, { today: MONDAY });
-    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 15);
+    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 30);
   });
 
   it("ignores completed events", () => {
@@ -87,19 +89,22 @@ describe("dailyBudgets", () => {
   it("spreads an exam across preceding learning days, not its due date", () => {
     const events = [{ kind: "exam", title: "Exam", subject: "Math", due: "2026-09-11", done: false }];
     const budgets = dailyBudgets(events, { today: MONDAY });
-    // 4 Lerntage vor der Klausur (07.-10.9), 180min verteilt: 45min/Tag, innerhalb
-    // der Kulanzfrist von 2 Tagen vor der Klausur also ungedeckelt.
-    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 45);
-    expect(budgetOn(budgets, "2026-09-10")).toBe(HOME_BASE_MINUTES + 45);
+    // 4 Lerntage vor der Klausur (07.-10.9), 300min Standardbedarf: 60min/Tag
+    // (Tageslimit), in der Kulanzfrist von 2 Tagen vor der Klausur 75min.
+    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 60);
+    expect(budgetOn(budgets, "2026-09-10")).toBe(HOME_BASE_MINUTES + 75);
     expect(budgetOn(budgets, "2026-09-11")).toBe(HOME_BASE_MINUTES);
   });
 
-  it("limits a distant exam to the last ten learning days and caps it far out", () => {
+  it("starts a distant exam late enough: half-hour blocks on the last ten days", () => {
     const events = [{ kind: "exam", title: "Exam", subject: "Math", due: "2026-09-25", done: false }];
     const budgets = dailyBudgets(events, { today: MONDAY, days: 20 });
-    // Vor dem 10-Tage-Fenster: keine Nachfrage. Darin (15.-24.9.): 180min/10 Tage.
+    // Vorbereitung bis Do 24.9.; 300 min in Blöcken zu 30 min sind zehn Tage.
     expect(budgetOn(budgets, "2026-09-14")).toBe(HOME_BASE_MINUTES);
-    expect(budgetOn(budgets, "2026-09-15")).toBe(HOME_BASE_MINUTES + 18);
+    expect(budgetOn(budgets, "2026-09-15")).toBe(HOME_BASE_MINUTES + 30);
+    expect(budgetOn(budgets, "2026-09-19")).toBe(30); // Sa, keine Grundlast
+    expect(budgetOn(budgets, "2026-09-23")).toBe(BASE_MINUTES + 30);
+    expect(budgetOn(budgets, "2026-09-25")).toBe(HOME_BASE_MINUTES);
   });
 
   it("moves an overdue event to today", () => {
@@ -107,11 +112,29 @@ describe("dailyBudgets", () => {
     expect(budgetOn(dailyBudgets(events, { today: MONDAY }), MONDAY)).toBe(HOME_BASE_MINUTES + 30);
   });
 
-  it("spreads homework evenly through its due date when the deadline is not a morning one", () => {
+  it("does a task that fits one block in one block on one day, not spread out", () => {
     const events = [{ kind: "homework", title: "Essay", subject: "German", due: "2026-09-08", done: false }];
     const budgets = dailyBudgets(events, { today: MONDAY });
-    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 15);
-    expect(budgetOn(budgets, "2026-09-08")).toBe(HOME_BASE_MINUTES + 15);
+    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 30);
+    expect(budgetOn(budgets, "2026-09-08")).toBe(HOME_BASE_MINUTES);
+  });
+
+  it("balances several small tasks over the days before their deadline", () => {
+    const events = ["a", "b", "c"].map((id) => ({ kind: "homework", title: id, subject: "x", due: "2026-09-10", done: false }));
+    const budgets = dailyBudgets(events, { today: MONDAY });
+    // Mo, Di, Mi je eine Aufgabe, der Donnerstag (Abgabetag, ohne Uhrzeit) bleibt frei.
+    expect([MONDAY, "2026-09-08"].map((d) => budgetOn(budgets, d))).toEqual([HOME_BASE_MINUTES + 30, HOME_BASE_MINUTES + 30]);
+    expect(budgetOn(budgets, WEDNESDAY_DATE)).toBe(BASE_MINUTES + 30);
+    expect(budgetOn(budgets, "2026-09-10")).toBe(HOME_BASE_MINUTES);
+  });
+
+  it("splits only a task larger than one block, one part per day", () => {
+    const events = [{ kind: "homework", title: "Projekt", subject: "x", due: "2026-09-10", description: "ca. 2 Stunden", done: false }];
+    const budgets = dailyBudgets(events, { today: MONDAY });
+    // 120 Minuten sind zwei Blöcke à 60 auf zwei Tage.
+    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 60);
+    expect(budgetOn(budgets, "2026-09-08")).toBe(HOME_BASE_MINUTES + 60);
+    expect(budgetOn(budgets, WEDNESDAY_DATE)).toBe(BASE_MINUTES);
   });
 
   it("excludes the due day itself when the deadline is in the morning", () => {
@@ -128,8 +151,11 @@ describe("dailyBudgets", () => {
     const events = [
       { kind: "homework", title: "Abends fällig", subject: "German", due: "2026-09-08", time: "18:00", done: false },
     ];
-    const budgets = dailyBudgets(events, { today: MONDAY });
-    expect(budgetOn(budgets, "2026-09-08")).toBe(HOME_BASE_MINUTES + 15);
+    // Zwei Aufgaben bis Di abends: die zweite kommt auf den Abgabetag, er ist nutzbar.
+    const second = [...events, { ...events[0], title: "Zweite" }];
+    const budgets = dailyBudgets(second, { today: MONDAY });
+    expect(budgetOn(budgets, MONDAY)).toBe(HOME_BASE_MINUTES + 30);
+    expect(budgetOn(budgets, "2026-09-08")).toBe(HOME_BASE_MINUTES + 30);
   });
 });
 
@@ -154,7 +180,7 @@ describe("buildPlan", () => {
 
     expect(plan.generatedFor).toBe(MONDAY);
     const monday = plan.days.find((day) => day.date === MONDAY);
-    expect(monday.budgetMinutes).toBe(HOME_BASE_MINUTES + 15);
+    expect(monday.budgetMinutes).toBe(HOME_BASE_MINUTES + 30);
     expect(monday.blocks[0]).toEqual({ subject: "Mathe", task: "Aufgabe 4 rechnen", minutes: 15 });
   });
 
@@ -275,6 +301,171 @@ describe("buildPlan", () => {
   });
 });
 
+describe("examSchedule: Lernblöcke je Klausur", () => {
+  const exam = (id, due, patch = {}) => ({ id, kind: "exam", title: `Klausur ${id}`, subject: "Mathe", due, done: false, ...patch });
+  const homework = (id, due) => ({ id, kind: "homework", title: `HA ${id}`, subject: "Mathe", due, done: false });
+  // "TT.MM. Klausur Minuten", nach Datum sortiert, mehrere Klausuren eines Tages mit +.
+  const rows = (schedule) =>
+    [...schedule]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, entries]) => `${date.slice(8)}.${date.slice(5, 7)}. ${entries.map((e) => `${e.id}${e.minutes}`).join("+")}`);
+
+  it("plant eine Klausur in zehn Tagen als halbstündige Blöcke, bis 300 Minuten erreicht sind", () => {
+    // Do 17.9.: letzter Lerntag Mi 16.9., zehn Tage ab heute für 300 Minuten.
+    const rowsOf = rows(examSchedule([exam("A", "2026-09-17")], MONDAY));
+    expect(rowsOf).toHaveLength(10);
+    expect(rowsOf[0]).toBe("07.09. A30");
+    expect(rowsOf[9]).toBe("16.09. A30");
+  });
+
+  it("macht die Blöcke länger, wenn nur wenige Tage bleiben, und lockert das Limit kurz vor der Klausur", () => {
+    // Fr 11.9.: Lerntage Mo-Do. Mo/Di im Tageslimit (60), Mi/Do ohne Limit (75).
+    expect(rows(examSchedule([exam("A", "2026-09-11")], MONDAY))).toEqual([
+      "07.09. A60",
+      "08.09. A60",
+      "09.09. A75",
+      "10.09. A75",
+    ]);
+  });
+
+  it("gibt nahen Klausuren zuerst eigene Tage und teilt erst dann", () => {
+    const schedule = examSchedule([exam("A", "2026-09-10"), exam("B", "2026-09-11")], MONDAY);
+    expect(rows(schedule)).toEqual(["07.09. A60", "08.09. B60+A30", "09.09. A90", "10.09. B75"]);
+  });
+
+  it("lässt Tage aus, die von Hausaufgaben voll sind", () => {
+    // Neun Aufgaben bis Fr 11.9. verlangen an Mo-Do je 54 Minuten: kein Platz für einen Block.
+    const tasks = Array.from({ length: 9 }, (_, index) => homework(`h${index}`, "2026-09-11"));
+    const schedule = examSchedule([...tasks, exam("A", "2026-09-14")], MONDAY);
+    // 9 Aufgaben à 30 auf Mo-Fr: Mo-Do je 60 (voll), Fr nur 30, daher dort ein halber Block.
+    expect(rows(schedule)).toEqual(["11.09. A30", "12.09. A90", "13.09. A90"]);
+  });
+
+  it("verplant keine erledigte Klausur und hält die Tage einer Klausur mit eigenem Lernplan fest", () => {
+    expect(examSchedule([exam("A", "2026-09-11", { done: true })], MONDAY).size).toBe(0);
+
+    const planned = exam("A", "2026-09-11", { prep: { due: "2026-09-11", at: 1, blocks: [{ date: "2026-09-10", task: "x", minutes: 60 }] } });
+    const schedule = examSchedule([planned, exam("B", "2026-09-11")], MONDAY);
+    expect(schedule.get("2026-09-10")[0]).toEqual({ id: "A", minutes: 60 });
+    const daysOfB = [...schedule].filter(([, entries]) => entries.some((e) => e.id === "B"));
+    expect(daysOfB.length).toBeGreaterThan(1);
+  });
+
+  it("verlangt Hausaufgaben und Lernzeitaufgaben auch an Lerntagen voll", () => {
+    const [today] = dailyBudgets([exam("A", "2026-09-11"), homework("h", MONDAY)], { today: MONDAY });
+    // Die heute fällige Aufgabe behält ihre 30, der Klausurblock bekommt den Rest des Limits.
+    expect(today.budgetMinutes).toBe(HOME_BASE_MINUTES + 30 + 30);
+  });
+
+  it("liest die vorgesehene Bearbeitungszeit aus der Beschreibung", () => {
+    const task = (description) => ({ kind: "homework", title: "x", due: MONDAY, description });
+    expect(estimatedMinutes(task("Bearbeitungszeit: ca. 45 Minuten"))).toBe(45);
+    expect(estimatedMinutes(task("etwa 20-30 min"))).toBe(30);
+    expect(estimatedMinutes(task("ca. 1,5 Stunden"))).toBe(90);
+    expect(estimatedMinutes(task("2 Std."))).toBe(120);
+    expect(estimatedMinutes(task("Seite 12, Nr. 3"))).toBeNull();
+    expect(estimatedMinutes(task("5 Hausaufgaben"))).toBeNull();
+  });
+
+  it("plant eine große Aufgabe mit Zeitangabe in Blöcken auf die letzten Tage vor der Frist", () => {
+    const task = { kind: "homework", title: "Lernzeit Bio", subject: "Bio", due: "2026-09-30", description: "ca. 70 Minuten", done: false };
+    const budgets = dailyBudgets([task], { today: MONDAY, days: 24 });
+    // 70 Minuten sind zwei Blöcke à 35, im Fenster der letzten sieben Tage (24.-30.9.).
+    expect(budgetOn(budgets, "2026-09-10")).toBe(HOME_BASE_MINUTES);
+    expect(budgetOn(budgets, "2026-09-24")).toBe(HOME_BASE_MINUTES + 35);
+    expect(budgetOn(budgets, "2026-09-25")).toBe(HOME_BASE_MINUTES + 35);
+    expect(budgetOn(budgets, "2026-09-28")).toBe(HOME_BASE_MINUTES);
+  });
+
+  it("nimmt den geschätzten Bedarf einer Klausur, solange er zu Thema und Termin passt", () => {
+    const need = { minutes: 90, content: ["a"], topic: "", due: "2026-09-11", at: 1 };
+    const total = (event) =>
+      [...examSchedule([event], MONDAY)].flatMap(([, entries]) => entries).reduce((sum, entry) => sum + entry.minutes, 0);
+    expect(total(exam("A", "2026-09-11", { need }))).toBe(90);
+    expect(total(exam("A", "2026-09-11", { need: { ...need, topic: "alt" } }))).toBe(270);
+    expect(total(exam("A", "2026-09-11", { need: { ...need, minutes: 600 } }))).toBe(300);
+  });
+});
+
+describe("buildPlan mit Klausurblöcken", () => {
+  const exam = (id, due) => ({ id, kind: "exam", title: `Klausur ${id}`, subject: "Mathe", due, done: false });
+  const iserv = { id: "i1", kind: "homework", title: "Lernzeit Philosophie", subject: "Philosophie", due: "2026-09-10", iservId: "u1", description: "ca. 40 Minuten", done: false };
+  const answerFor = (blocksByDate) => ({ content: JSON.stringify({ days: blocksByDate }) });
+  const dayOf = (plan, date) => plan.days.find((day) => day.date === date);
+
+  it("nennt dem Modell je Tag die erlaubten Klausuren mit Minuten und die vorgesehene Zeit der Aufgaben", async () => {
+    let request = "";
+    await buildPlan({
+      events: [exam("A", "2026-09-10"), exam("B", "2026-09-11"), iserv],
+      today: MONDAY,
+      complete: async ({ messages }) => {
+        request = messages[1].content;
+        return answerFor({});
+      },
+    });
+
+    // Klausuren stehen als A1/A2, die Lernzeitaufgabe als A3. Montag gehört A,
+    // Dienstag B mit einem Rest von A.
+    expect(request).toMatch(/2026-09-07: \d+ Min · möglich: A1, A3 · vorgesehen: A3 40 Min · Klausur: A1 \d+ Min\n/);
+    expect(request).toMatch(/2026-09-08: \d+ Min · möglich: A1, A2, A3 · Klausur: A2 \d+ Min, A1 \d+ Min/);
+    expect(request).toContain("A3 · fällig 2026-09-10 · Aufgabe · Philosophie · Lernzeit Philosophie · ca. 40 Min");
+    expect(request).toContain("Klausur · Mathe · Klausur A");
+  });
+
+  it("lässt einen Block mehrere Aufgaben tragen und prüft jede Kennung", async () => {
+    const tasks = [
+      { id: "h1", kind: "homework", title: "Vokabeln", subject: "Englisch", due: "2026-09-08", done: false },
+      { id: "h2", kind: "homework", title: "Blatt 2", subject: "Mathe", due: "2026-09-07", done: false },
+    ];
+    const plan = await buildPlan({
+      events: tasks,
+      today: MONDAY,
+      complete: async () =>
+        answerFor({
+          "2026-09-07": [{ refs: ["A1", "A2"], subject: "", task: "Vokabeln lernen, Blatt 2 rechnen", minutes: 20 }],
+          // A2 ist ab Dienstag vorbei, ein Block mit ihr ist nicht zulässig.
+          "2026-09-08": [{ refs: ["A1", "A2"], subject: "", task: "Beides", minutes: 20 }],
+        }),
+    });
+    expect(dayOf(plan, "2026-09-07").blocks).toHaveLength(1);
+    expect(dayOf(plan, "2026-09-08").blocks).toEqual([]);
+  });
+
+  it("verwirft Klausurblöcke an Tagen, an denen die Klausur nicht vorgesehen ist, auch ohne Kennung", async () => {
+    const plan = await buildPlan({
+      events: [exam("A", "2026-09-10"), exam("B", "2026-09-11")],
+      today: MONDAY,
+      complete: async () =>
+        answerFor({
+          // Montag ist nur für A vorgesehen.
+          "2026-09-07": [
+            { ref: "A2", subject: "Mathe", task: "Klausur B üben", minutes: 20 },
+            { ref: "", subject: "Mathe", task: "Aufgaben für Klausur B rechnen", minutes: 10 },
+            { ref: "A1", subject: "Mathe", task: "Klausur A üben", minutes: 30 },
+          ],
+        }),
+    });
+
+    expect(dayOf(plan, "2026-09-07").blocks.map((block) => block.task)).toEqual(["Klausur A üben"]);
+  });
+
+  it("plant im Rückfallplan die Klausur nur an ihren Tagen, mit den Minuten des Blocks", async () => {
+    const plan = await buildPlan({
+      events: [exam("A", "2026-09-10"), exam("B", "2026-09-11")],
+      today: MONDAY,
+      complete: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    expect(dayOf(plan, "2026-09-07").blocks[0]).toMatchObject({ task: "Vorbereitung: Klausur A", minutes: 60 });
+    const tuesday = dayOf(plan, "2026-09-08").blocks.map((block) => `${block.task} ${block.minutes}`);
+    expect(tuesday).toEqual(expect.arrayContaining(["Vorbereitung: Klausur B 60", "Vorbereitung: Klausur A 30"]));
+    const allTasks = plan.days.flatMap((day) => day.blocks.map((block) => block.task));
+    expect(allTasks.filter((task) => task === "Vorbereitung: Klausur B")).toHaveLength(2);
+  });
+});
+
 describe("lastWorkDay", () => {
   const homework = (due, time) => ({ kind: "homework", title: "x", due, ...(time ? { time } : {}) });
 
@@ -344,7 +535,8 @@ describe("buildPlan hält Abgabefristen hart ein", () => {
       },
     });
 
-    expect(dayOf(plan, WEDNESDAY_DATE).blocks[0].task).toBe("Lernzeit Philosophie");
+    // Eine kleine Aufgabe kommt an einem Tag in einem Block, vor ihrem Abgabetag.
+    expect(dayOf(plan, MONDAY).blocks[0].task).toBe("Lernzeit Philosophie");
     expect(dayOf(plan, THURSDAY).blocks.some((block) => block.task === "Lernzeit Philosophie")).toBe(false);
   });
 
@@ -359,7 +551,7 @@ describe("buildPlan hält Abgabefristen hart ein", () => {
       },
     });
 
-    expect(request).toContain(`${WEDNESDAY_DATE}: ${BASE_MINUTES + 10} Min · möglich: A1`);
+    expect(request).toContain(`${WEDNESDAY_DATE}: ${BASE_MINUTES} Min · möglich: A1`);
     expect(request).toMatch(new RegExp(`${THURSDAY}: \\d+ Min · möglich: nur Wiederholung`));
   });
 });

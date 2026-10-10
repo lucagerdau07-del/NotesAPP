@@ -3,7 +3,10 @@ import { requestCompletion } from "../agent/agentClient.js";
 import { runScan, scanImagesOf } from "../knowledge/documentScan.js";
 import { browserCommentRepository } from "../knowledge/commentRepository.js";
 import { browserKnowledgeRepository, KNOWLEDGE_CHANGED } from "../knowledge/knowledgeRepository.js";
-import { buildPlan, isoDate } from "../knowledge/studyPlan.js";
+import { buildExamPrep, examMemory, loadExamMaterial } from "../knowledge/examPrep.js";
+import { estimateExamNeeds, needsEstimate } from "../knowledge/examNeed.js";
+import { browserMemoryRepository } from "../knowledge/memoryRepository.js";
+import { activeNeed, buildPlan, isoDate } from "../knowledge/studyPlan.js";
 
 const UPCOMING_DAYS = 14;
 
@@ -32,6 +35,7 @@ export default function useKnowledge({
   const [state, setState] = useState(() => repository.read());
   const [isScanning, setScanning] = useState(false);
   const [isPlanning, setPlanning] = useState(false);
+  const [planningExamId, setPlanningExamId] = useState(null);
   const [iservState, setIservState] = useState("off");
   const busyRef = useRef(false);
   const notesRef = useRef(notes);
@@ -88,8 +92,31 @@ export default function useKnowledge({
     // Nur awaiten, wenn es etwas zu holen gibt: ohne syncIserv läuft buildPlan synchron an.
     if (syncIservRef.current) await pullIserv();
     const today = isoDate(Date.now());
-    const current = repository.read();
+    let current = repository.read();
     try {
+      // Jede Klausur ohne gültige Schätzung bekommt ihren Bedarf und Inhalt
+      // geschätzt, bevor der Plan ihre Lernblöcke vergibt. Scheitert das, plant
+      // der Standardbedarf, und der nächste Plan versucht es wieder.
+      const pending = current.events.filter((event) => needsEstimate(event, today));
+      if (pending.length > 0) {
+        try {
+          const materials = Object.fromEntries(
+            await Promise.all(pending.map(async (event) => [event.id, await loadExamMaterial({ event, topic: event.topic })])),
+          );
+          const estimates = await estimateExamNeeds({
+            exams: pending,
+            terms: current.terms,
+            memory: examMemory(browserMemoryRepository.list()),
+            materials,
+            today,
+            complete: requestCompletion,
+          });
+          for (const { id, need } of estimates) repository.setExamNeed(id, need);
+          current = repository.read();
+        } catch {
+          // Ohne Schätzung gilt der Standardbedarf.
+        }
+      }
       const plan = await buildPlan({
         events: current.events,
         terms: current.terms,
@@ -103,6 +130,40 @@ export default function useKnowledge({
       setState(repository.read());
     }
   }, [repository, pullIserv]);
+
+  // Der Lernplan einer Klausur aus ihrem Thema, den eigenen Notizen und dem, was
+  // sich der Agent über den Nutzer gemerkt hat. Läuft nur auf Knopfdruck. Gibt
+  // {ok} oder {error} zurück; das Thema bleibt auch bei einem Fehler gespeichert.
+  const planExam = useCallback(
+    async (id, topic) => {
+      const { events: all, terms: knownTerms } = repository.read();
+      const event = all.find((entry) => entry.id === id);
+      if (!event || event.kind !== "exam") return { error: "Klausur nicht gefunden." };
+      setPlanningExamId(id);
+      try {
+        const prep = await buildExamPrep({
+          event,
+          events: all,
+          terms: knownTerms,
+          topic,
+          material: await loadExamMaterial({ event, topic }),
+          memory: examMemory(browserMemoryRepository.list()),
+          need: activeNeed(event),
+          today: isoDate(Date.now()),
+          complete: requestCompletion,
+        });
+        repository.setExamPrep(id, { topic: prep.topic, prep });
+        return { ok: true };
+      } catch (error) {
+        repository.setExamPrep(id, { topic });
+        return { error: error?.message || "Der Lernplan konnte nicht erstellt werden." };
+      } finally {
+        setPlanningExamId(null);
+        setState(repository.read());
+      }
+    },
+    [repository],
+  );
 
   const setEventDone = useCallback(
     (id, done) => {
@@ -164,9 +225,11 @@ export default function useKnowledge({
     autoScan: state.settings.autoScan,
     isScanning,
     isPlanning,
+    planningExamId,
     iservState,
     scanNow,
     refreshPlan,
+    planExam,
     setEventDone,
     addEvent,
     removeEvent,

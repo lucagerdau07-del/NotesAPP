@@ -1,5 +1,5 @@
 import { browserKnowledgeRepository, KNOWLEDGE_CHANGED } from "../knowledge/knowledgeRepository.js";
-import { isoDate } from "../knowledge/studyPlan.js";
+import { activePrep, isoDate } from "../knowledge/studyPlan.js";
 import { lessonSubject, untisIso, untisTime } from "../knowledge/calendarEntries.js";
 import { fold, queryTerms } from "../knowledge/sources.js";
 import { isLessonCancelled, loadArchivedWeek, untisDateNumber, untisMonday } from "../ink/untisArchive.js";
@@ -64,8 +64,14 @@ const taskLine = (event, today) =>
     .filter(Boolean)
     .join(" ");
 
-function planLine(plan, today) {
-  const blocks = plan?.days?.find((day) => day.date === today)?.blocks || [];
+// Heutige Blöcke: erst die Klausurpläne (konkret, vom Nutzer angefordert), dann der Tagesplan.
+function planLine(plan, events, today) {
+  const examBlocks = events.flatMap((event) =>
+    (activePrep(event)?.blocks || [])
+      .filter((block) => block.date === today)
+      .map((block) => ({ ...block, subject: event.subject || "" })),
+  );
+  const blocks = [...examBlocks, ...(plan?.days?.find((day) => day.date === today)?.blocks || [])];
   if (blocks.length === 0) return "";
   const parts = blocks
     .slice(0, 4)
@@ -93,7 +99,7 @@ export function buildSchoolContext(
   const nextNumber = [...new Set(lessons.map((l) => l.date))].sort((a, b) => a - b).find((d) => d > todayNumber);
   // Reihenfolge ist Rang: passt der Block nicht, fällt von hinten weg.
   const extras = [
-    planLine(plan, today),
+    planLine(plan, events, today),
     lessonLine(lessons, todayNumber, "heute"),
     nextNumber ? lessonLine(lessons, nextNumber, shortDay(untisIso(nextNumber))) : "",
   ].filter(Boolean);
@@ -218,6 +224,9 @@ function listTasks(args, events, today) {
   const rows = shown.map((event) => {
     const text = String(event.description || "").replace(/\s+/g, " ").trim();
     const files = (event.attachments || []).map((file) => file?.filename).filter(Boolean);
+    const topic = String(event.topic || "").trim();
+    // Der Klausurplan nur bei enger Auswahl, sonst bläht die Liste auf.
+    const prep = shown.length <= 3 ? activePrep(event)?.blocks || [] : [];
     return [
       [
         shortId(event.id),
@@ -227,6 +236,10 @@ function listTasks(args, events, today) {
         `${event.title}${event.done ? " (erledigt)" : ""}`,
       ].join(" | "),
       text ? `  ${clip(text, textChars)}` : "",
+      topic ? `  Thema: ${clip(topic, 300)}` : "",
+      prep.length
+        ? `  Lernplan: ${prep.map((block) => `${shortDay(block.date)} ${block.minutes} Min ${clip(block.task, 90)}`).join(" | ")}`
+        : "",
       files.length ? `  Anhänge: ${files.join(", ")}` : "",
     ]
       .filter(Boolean)

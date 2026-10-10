@@ -178,6 +178,45 @@ describe("CalendarScreen", () => {
     expect(requestCompletion).toHaveBeenCalledTimes(1);
   });
 
+  it("erstellt im Fenster der Klausur einen Lernplan aus dem Thema", async () => {
+    const exam = { id: "k1", kind: "exam", title: "Analysis", subject: "Mathe", due: today, done: false, sourceNoteId: "manual" };
+    seed({ events: [exam] });
+    requestCompletion.mockResolvedValueOnce({
+      message: {
+        role: "assistant",
+        content: JSON.stringify({ days: { [today]: [{ task: "Kettenregel: fünf Ableitungen üben", minutes: 30 }] } }),
+      },
+      usage: null,
+    });
+    render(<CalendarScreen onBack={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("Thema der Klausur"), { target: { value: "Kettenregel, Produktregel" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lernplan erstellen" }));
+
+    expect(await screen.findByRole("list", { name: "Lernplan zur Klausur" })).toHaveTextContent(
+      "Kettenregel: fünf Ableitungen üben",
+    );
+    const [event] = stored().events;
+    expect(event.topic).toBe("Kettenregel, Produktregel");
+    expect(event.prep).toMatchObject({ due: today, blocks: [{ date: today, minutes: 30 }] });
+    expect(requestCompletion.mock.calls[0][0].messages[1].content).toContain("Thema vom Schüler: Kettenregel, Produktregel");
+    expect(screen.getByRole("button", { name: "Lernplan neu erstellen" })).toBeInTheDocument();
+  });
+
+  it("meldet einen fehlgeschlagenen Klausurplan und behält das Thema", async () => {
+    const exam = { id: "k1", kind: "exam", title: "Analysis", subject: "Mathe", due: today, done: false, sourceNoteId: "manual" };
+    seed({ events: [exam] });
+    requestCompletion.mockRejectedValueOnce(new Error("Server nicht erreichbar. Verbindung prüfen."));
+    render(<CalendarScreen onBack={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("Thema der Klausur"), { target: { value: "Integrale" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lernplan erstellen" }));
+
+    expect(await screen.findByText("Server nicht erreichbar. Verbindung prüfen.")).toBeInTheDocument();
+    expect(stored().events[0]).toMatchObject({ topic: "Integrale" });
+    expect(stored().events[0].prep).toBeUndefined();
+  });
+
   it("lässt einen aktuellen Plan stehen, fragt aber IServ nach Neuem", async () => {
     seed();
     render(<CalendarScreen onBack={() => {}} />);

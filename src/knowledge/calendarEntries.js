@@ -1,4 +1,4 @@
-import { isoDate } from "./studyPlan.js";
+import { activePrep, isoDate } from "./studyPlan.js";
 import { isLessonCancelled } from "../ink/untisArchive.js";
 
 // Alles, was die App an Datiertem sammelt, als eine Liste von Kalendereinträgen:
@@ -53,6 +53,22 @@ function fromPlan(plan) {
   );
 }
 
+// Der Klausurplan (examPrep.js) steht an der Klausur, nicht im täglichen Plan.
+function fromPrep(events) {
+  return events.flatMap((event) =>
+    (activePrep(event)?.blocks || []).map((block, index) => ({
+      id: `prep:${event.id}:${index}`,
+      type: "study",
+      date: block.date,
+      time: "",
+      title: block.task,
+      subject: event.subject || "",
+      minutes: block.minutes,
+      forExam: event,
+    })),
+  );
+}
+
 // Nur was vom normalen Stundenplan abweicht, ist ein Eintrag; die regulären
 // Stunden zeigt die Detailansicht des Tages.
 function fromLessons(lessons) {
@@ -96,9 +112,13 @@ export function compareEntries(left, right) {
 }
 
 export function buildCalendarEntries({ events = [], plan = null, lessons = [], notes = [] }) {
-  return [...fromEvents(events), ...fromPlan(plan), ...fromLessons(lessons), ...fromNotes(notes)].sort(
-    compareEntries,
-  );
+  return [
+    ...fromEvents(events),
+    ...fromPlan(plan),
+    ...fromPrep(events),
+    ...fromLessons(lessons),
+    ...fromNotes(notes),
+  ].sort(compareEntries);
 }
 
 const dateOf = (iso) => new Date(`${iso}T00:00:00`);

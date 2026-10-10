@@ -82,6 +82,10 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           id: previous.id,
           createdAt: previous.createdAt,
           ...(previous.done !== undefined ? { done: previous.done } : {}),
+          // Was der Nutzer zur Klausur angegeben hat, überlebt jeden IServ-Abgleich.
+          ...(previous.topic ? { topic: previous.topic } : {}),
+          ...(previous.prep ? { prep: previous.prep } : {}),
+          ...(previous.need ? { need: previous.need } : {}),
         });
       } else {
         byKey.set(key, candidate);
@@ -167,6 +171,33 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
         events: state.events.map((event) =>
           event.id === id ? { ...event, done: Boolean(done), updatedAt: timestamp } : event,
         ),
+      }));
+    },
+
+    // Thema der Klausur und der dazu erstellte Lernplan (examPrep.js). Ohne prep
+    // bleibt ein vorhandener Plan stehen, nur das Thema wird gemerkt.
+    setExamPrep(id, { topic, prep }) {
+      const timestamp = now();
+      update((state) => ({
+        ...state,
+        events: state.events.map((event) =>
+          event.id === id
+            ? {
+                ...event,
+                topic: String(topic ?? "").trim(),
+                ...(prep ? { prep } : {}),
+                updatedAt: timestamp,
+              }
+            : event,
+        ),
+      }));
+    },
+
+    // Geschätzter Vorbereitungsbedarf einer Klausur (examNeed.js).
+    setExamNeed(id, need) {
+      update((state) => ({
+        ...state,
+        events: state.events.map((event) => (event.id === id ? { ...event, need } : event)),
       }));
     },
 

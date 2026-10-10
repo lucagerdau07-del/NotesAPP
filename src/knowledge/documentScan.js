@@ -33,6 +33,10 @@ export function extractJson(text) {
   return null;
 }
 
+// requestCompletion liefert { message, usage }; ein Testdouble oder älterer
+// Aufrufer reicht die Nachricht selbst durch. Beides ergibt den Antworttext.
+export const replyText = (result) => result?.message?.content ?? result?.content;
+
 function cleanText(value, limit) {
   return String(value ?? "").trim().slice(0, limit);
 }
@@ -134,7 +138,7 @@ export async function pagesNeeded(note, comments, { complete, signal }) {
     ],
     signal,
   });
-  const answers = extractJson(message?.content)?.comments;
+  const answers = extractJson(replyText(message))?.comments;
   // Eine unlesbare Antwort ist kein Grund, Kontext wegzulassen.
   return comments.map((_, index) => {
     const answer = Array.isArray(answers) ? answers.find((entry) => Number(entry?.n) === index + 1) : null;
@@ -190,7 +194,7 @@ export async function scanNote(note, comments, { renderPages, complete, today, s
     signal,
   });
 
-  const parsed = extractJson(message?.content);
+  const parsed = extractJson(replyText(message));
   if (!parsed) throw new Error("Antwort des Modells war kein gültiges JSON.");
   return validateFindings(parsed, { today, fallbackSubject: note.subject || "" });
 }

@@ -525,6 +525,32 @@
   color: var(--cal-ink-2);
 }
 
+/* Lernplan einer Klausur: die Aufgabe bricht um, sie ist ein ganzer Satz. */
+.cal-prep li {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cal-prep li + li {
+  border-top: 1px solid var(--cal-sep);
+}
+
+.cal-prep-minutes {
+  color: var(--cal-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-detail-section > .cal-actions,
+.cal-detail-section > .cal-prep,
+.cal-detail-section > .cal-hint {
+  margin-top: 10px;
+}
+
 .cal-lessons li.is-cancelled .cal-lesson-subject {
   color: var(--cal-ink-3);
   text-decoration: line-through;
