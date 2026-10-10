@@ -389,7 +389,8 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 36px 40px 40px;
 }
 
@@ -400,7 +401,7 @@
 .cal-detail-inner {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   max-width: 620px;
   animation: cal-detail-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -410,18 +411,18 @@
   flex: 0 0 auto;
 }
 
-/* Nur der Textblock (Aufgabenbeschreibung etc.) darf wachsen und scrollen -
-   der Rest des Fensters soll immer ohne Scrollen reinpassen. */
+/* Der Textblock (Aufgabenbeschreibung etc.) hat eine Höchsthöhe und scrollt
+   selbst. Er schrumpft nie unter seinen Inhalt, sonst überlagert er die
+   Abschnitte darunter. Das ganze Fenster scrollt bei Bedarf (.cal-detail). */
 .cal-detail-section:has(> .cal-detail-body) {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .cal-detail-section:has(> .cal-detail-body) .cal-detail-body {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  max-height: 32vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
