@@ -1,12 +1,19 @@
 import { createInkStroke, getToolStyle } from "../ink/inkDocument.js";
 import { createPageObject, objectBounds, pageObjectsOf } from "../ink/pageObjects.js";
 import { renderPagesFromDocument, previewTextOf } from "../documents/notePreview.js";
-import { browserFolderRepository, folderWithDescendants } from "../storage/folderRepository.js";
+import {
+  browserFolderRepository,
+  folderWithDescendants,
+  matchesFolder,
+} from "../storage/folderRepository.js";
+import { browserCardRepository, cardText } from "../knowledge/cardRepository.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 import { fold, queryTerms, readSource, searchSources } from "../knowledge/sources.js";
 import { requestGoogleDoc, requestGoogleDocEdit, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
+import { SCHOOL_TOOLS, isSchoolTool, runSchoolTool } from "./schoolContext.js";
+import { browserMemoryRepository, MEMORY_MAX_CHARS } from "../knowledge/memoryRepository.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
   PAGE_WIDTH,
@@ -91,12 +98,11 @@ export function estimateTextHeight(text, width, fontSize, lineHeight, fontFamily
 
 const MAX_LISTED_NOTES = 40;
 
-// Same rule as Library.jsx's matchesFolder (kept separate rather than
-// imported - a UI component isn't a dependency of the tool layer): a note
-// belongs to a folder when its subject string matches the folder's id or name.
-function matchesFolder(note, folder) {
-  const subject = String(note?.subject || "").toLowerCase();
-  return !!subject && (subject === folder.name.toLowerCase() || subject === folder.id.toLowerCase());
+// Karte der Notiz (cards.js), gefunden über ihren Ordner. Leer, solange der
+// Ordner noch keine hat; dann gilt der Auszug wie bisher.
+function noteCardOf(note, folders, cards) {
+  const folder = folders.find((f) => matchesFolder(note, f));
+  return (folder && cards[folder.id]?.auto?.notes?.[note.id]) || "";
 }
 
 // Imported PDFs/Bilder haben keinen extrahierten Text (kein OCR) - der
@@ -116,7 +122,7 @@ function importedNoteEntry(note) {
 
 // Tool results go to the model as text, so the folder tree is indented lines
 // instead of JSON objects repeating id/name/parentId keys for every folder.
-function folderTree(folders, notes) {
+function folderTree(folders, notes, cards = {}) {
   if (folders.length === 0) return "Keine Ordner.";
   const ids = new Set(folders.map((f) => f.id));
   const seen = new Set();
@@ -126,13 +132,14 @@ function folderTree(folders, notes) {
       if (seen.has(f.id)) continue;
       seen.add(f.id);
       const count = notes.filter((n) => matchesFolder(n, f)).length;
-      lines.push(`${"  ".repeat(depth)}${f.name} [${f.id}] ${count}`);
+      const card = cardText(cards[f.id]);
+      lines.push(`${"  ".repeat(depth)}${f.name} [${f.id}] ${count}${card ? `: ${card}` : ""}`);
       visit(folders.filter((child) => child.parentId === f.id), depth + 1);
     }
   };
   // A parentId pointing at a deleted folder still lists the folder at the top.
   visit(folders.filter((f) => !f.parentId || !ids.has(f.parentId)), 0);
-  return `Ordner, Unterordner eingerückt (Name [id] Notizen):\n${lines.join("\n")}`;
+  return `Ordner, Unterordner eingerückt (Name [id] Notizen: Karte):\n${lines.join("\n")}`;
 }
 
 const LISTED_PREVIEW_CHARS = 120;
@@ -147,7 +154,9 @@ function noteListing(entries, rawQuery) {
     .map((entry) => {
       if (terms.length === 0) return { entry, score: 0 };
       const title = fold(entry.title);
-      const all = `${title} ${fold(entry.subject)} ${fold(entry.preview)}`;
+      // Die Karte zählt wie der Auszug: "Kurvendiskussion" findet auch ein
+      // Blatt, das nur "Blatt 4" heißt.
+      const all = `${title} ${fold(entry.subject)} ${fold(entry.preview)} ${fold(entry.card || "")}`;
       const matched = terms.filter((term) => all.includes(term)).length;
       const inTitle = terms.filter((term) => title.includes(term)).length;
       return { entry, score: matched ? matched * 10 + inTitle : -1 };
@@ -161,7 +170,10 @@ function noteListing(entries, rawQuery) {
   const shown = ranked.slice(0, MAX_LISTED_NOTES);
   const lines = shown.map(({ entry }) => {
     const date = entry.updatedAt ? new Date(entry.updatedAt).toISOString().slice(0, 10) : "-";
-    const preview = String(entry.preview || "").replace(/\s+/g, " ").trim().slice(0, LISTED_PREVIEW_CHARS);
+    // Eine Karte ist schon verdichtet und kurz, nur der Auszug wird gekürzt.
+    const preview = entry.card
+      ? entry.card
+      : String(entry.preview || "").replace(/\s+/g, " ").trim().slice(0, LISTED_PREVIEW_CHARS);
     return [entry.id, entry.title || "(ohne Titel)", entry.subject || "-", date, preview].join(" | ");
   });
   const more =
@@ -711,7 +723,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "list_folders",
       description:
-        "Zeigt den Ordnerbaum der Bibliothek mit id und Notizanzahl. Nur nötig, wenn die Ordnerstruktur selbst gefragt ist oder ein Zielordner für create_note gesucht wird; zum Finden einer Notiz direkt list_notes mit query.",
+        "Zeigt den Ordnerbaum der Bibliothek mit id, Notizanzahl und Karte (kurze Inhaltsangabe). Steht schon im Systemprompt; nur nötig, wenn die Ordnerstruktur selbst gefragt ist oder ein Zielordner für create_note gesucht wird; zum Finden einer Notiz direkt list_notes mit query.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -720,7 +732,7 @@ export const AGENT_TOOLS = [
     function: {
       name: "list_notes",
       description:
-        "Findet Notizen (eigene und importierte PDFs/Bilder) nach Titel, Ordner und Anfang des Textes: eine Zeile je Notiz mit id, Titel, Ordner, Änderungsdatum und kurzem Auszug, beste Treffer zuerst. Für Inhalte tiefer im Text search_sources.",
+        "Findet Notizen (eigene und importierte PDFs/Bilder) nach Titel, Ordner und Anfang des Textes: eine Zeile je Notiz mit id, Titel, Ordner, Änderungsdatum und Karte (kurze Inhaltsangabe, sonst Textanfang), beste Treffer zuerst. Für Inhalte tiefer im Text search_sources.",
       parameters: {
         type: "object",
         properties: {
@@ -922,6 +934,18 @@ export const AGENT_TOOLS = [
   {
     type: "function",
     function: {
+      name: "remember",
+      description: `Merkt dauerhaft einen Satz über den Nutzer (Schwäche, Lehrervorgabe, Vorliebe), höchstens ${MEMORY_MAX_CHARS} Zeichen, Fach vorweg. Von selbst nutzen, wenn so etwas deutlich wird, und kurz erwähnen. Nichts Tagesaktuelles oder Doppeltes. Mit id ersetzen, mit id und leerem text löschen.`,
+      parameters: {
+        type: "object",
+        properties: { text: { type: "string" }, id: { type: "integer" } },
+        required: ["text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "done",
       description: "Beendet den Lauf mit einer kurzen deutschen Zusammenfassung.",
       parameters: {
@@ -947,6 +971,7 @@ const READ_ONLY_TOOL_NAMES = new Set([
   "search_web",
   "wolfram_alpha",
   "create_file",
+  "remember",
   "done",
 ]);
 
@@ -969,6 +994,7 @@ const NO_DOCUMENT_TOOL_NAMES = new Set([
   "search_web",
   "wolfram_alpha",
   "create_file",
+  "remember",
   "done",
 ]);
 
@@ -1048,6 +1074,8 @@ export const CORE_TOOL_NAMES = new Set([
   // the source tools are needed on the first turn, not after enable_tools.
   "search_sources",
   "read_source",
+  // One short schema, and a weak spot shows up mid-task, not after enable_tools.
+  "remember",
   "done",
 ]);
 
@@ -1073,7 +1101,7 @@ export const AGENT_CORE_TOOLS = [
 // Union by name: some tools (list_notes, ...) sit in both source sets.
 export const AGENT_LIBRARY_TOOLS = [
   ...new Map(
-    [...AGENT_CORE_TOOLS, ...AGENT_NO_DOCUMENT_TOOLS, ...LIBRARY_NOTE_TOOLS].map((tool) => [
+    [...AGENT_CORE_TOOLS, ...AGENT_NO_DOCUMENT_TOOLS, ...LIBRARY_NOTE_TOOLS, ...SCHOOL_TOOLS].map((tool) => [
       tool.function.name,
       tool,
     ]),
@@ -1175,6 +1203,14 @@ export function describeToolCall(name, args = {}) {
       return `Notiz anlegen: ${String(args.title || "").slice(0, 40)}`;
     case "open_note":
       return "Notiz öffnen";
+    case "list_tasks":
+      return args.query ? `Aufgaben suchen: ${String(args.query).slice(0, 40)}` : "Aufgaben nachsehen";
+    case "add_task":
+      return `Eintragen: ${String(args.title || "").slice(0, 40)}`;
+    case "set_task_done":
+      return args.done === false ? "Aufgabe wieder öffnen" : "Aufgabe abhaken";
+    case "remember":
+      return String(args.text || "").trim() ? "Merken" : "Vergessen";
     case "done":
       return "Fertig";
     default:
@@ -1347,13 +1383,15 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "read_google_doc") return readGoogleDoc(args);
   if (name === "edit_google_doc") return editGoogleDoc(args);
   if (name === "done") return { summary: String(args.summary || "") };
+  if (name === "remember") return browserMemoryRepository.remember(args);
+  if (isSchoolTool(name)) return runSchoolTool(name, args);
   if (name === "create_note") return api?.createNote ? api.createNote(args) : "Fehler: Notizen anlegen geht nur auf der Startseite.";
   if (name === "open_note") return api?.openNote ? api.openNote(args) : "Fehler: Notizen wechseln geht nur auf der Startseite.";
 
   if (name === "list_folders") {
     const folders = browserFolderRepository.listFolders();
     const allNotes = [...browserNoteRepository.listNotes(), ...(await browserDocumentRepository.listImportedNotes())];
-    return folderTree(folders, allNotes);
+    return folderTree(folders, allNotes, browserCardRepository.all());
   }
 
   if (name === "list_notes" || name === "search_sources" || name === "read_source") {
@@ -1375,6 +1413,7 @@ export async function executeTool(name, rawArgs, api) {
       const scope = { notes: notes.filter(inScope), imported };
       return name === "search_sources" ? searchSources(args.query, scope) : readSource(args, scope);
     }
+    const cards = browserCardRepository.all();
     const entries = [
       ...notes.filter(inScope).map((n) => ({
         id: n.id,
@@ -1382,8 +1421,9 @@ export async function executeTool(name, rawArgs, api) {
         subject: n.subject || "",
         updatedAt: n.updatedAt || 0,
         preview: previewTextOf(n.id),
+        card: noteCardOf(n, folders, cards),
       })),
-      ...imported.map((n) => importedNoteEntry(n)),
+      ...imported.map((n) => ({ ...importedNoteEntry(n), card: noteCardOf(n, folders, cards) })),
     ];
     return noteListing(entries, args.query);
   }

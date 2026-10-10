@@ -408,6 +408,7 @@ describe("AGENT_NO_DOCUMENT_TOOLS", () => {
       "list_notes",
       "read_google_doc",
       "read_source",
+      "remember",
       "search_sources",
       "search_web",
       "wolfram_alpha",

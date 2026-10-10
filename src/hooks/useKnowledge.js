@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { requestCompletion } from "../agent/agentClient.js";
 import { runScan, scanImagesOf } from "../knowledge/documentScan.js";
 import { browserCommentRepository } from "../knowledge/commentRepository.js";
-import { browserKnowledgeRepository } from "../knowledge/knowledgeRepository.js";
+import { browserKnowledgeRepository, KNOWLEDGE_CHANGED } from "../knowledge/knowledgeRepository.js";
 import { buildPlan, isoDate } from "../knowledge/studyPlan.js";
 
 const UPCOMING_DAYS = 14;
@@ -136,6 +136,13 @@ export default function useKnowledge({
     },
     [repository],
   );
+
+  // Der Agent trägt Aufgaben am Hook vorbei ein (add_task, set_task_done).
+  useEffect(() => {
+    const reread = () => setState(repository.read());
+    globalThis.addEventListener?.(KNOWLEDGE_CHANGED, reread);
+    return () => globalThis.removeEventListener?.(KNOWLEDGE_CHANGED, reread);
+  }, [repository]);
 
   // Nur einmal je Einhängen.
   const startedRef = useRef(false);

@@ -71,6 +71,7 @@ import useKnowledge from "../hooks/useKnowledge.js";
 import { syncIserv } from "../knowledge/iservSync.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserFolderRepository } from "../storage/folderRepository.js";
+import { browserCardRepository } from "../knowledge/cardRepository.js";
 import { hydrateImages, loadImages } from "../ink/imageStore.js";
 import { browserInkRepository } from "../ink/inkRepository.js";
 import { exportDocumentAsPdf, exportPageAsPng } from "../documents/exportDocument.js";
@@ -2748,13 +2749,15 @@ export default function Library({
   useBackHandler(iservOpen, () => setIservOpen(false));
   useBackHandler(folderDialog !== null, () => setFolderDialog(null));
 
-  const handleCreateFolder = ({ name, color, icon, image }, parentId) => {
-    browserFolderRepository.createFolder({ name, color, icon, image, parentId });
+  const handleCreateFolder = ({ name, color, icon, image, description }, parentId) => {
+    const created = browserFolderRepository.createFolder({ name, color, icon, image, parentId });
+    if (description) browserCardRepository.setManual(created.id, description);
     setFolderDialog(null);
   };
 
-  const handleRenameFolder = (folder, { name, color, icon, image }) => {
+  const handleRenameFolder = (folder, { name, color, icon, image, description }) => {
     const updated = browserFolderRepository.renameFolder(folder.id, { name, color, icon, image });
+    browserCardRepository.setManual(folder.id, description);
     // Notes are matched to a folder by subject name (see matchesFolder), so a
     // rename must carry existing notes along or they'd silently fall out of
     // the folder.
@@ -2777,7 +2780,7 @@ export default function Library({
     knowledgeNotes
       .filter((n) => matchesFolder(n, folder))
       .forEach((n) => browserNoteRepository.removeNote(n.id));
-    browserFolderRepository.removeFolder(folder.id);
+    browserCardRepository.remove(browserFolderRepository.removeFolder(folder.id));
     setSelectedSubject(null);
   };
 
@@ -4070,6 +4073,12 @@ export default function Library({
         <FolderDialog
           mode={folderDialog.mode}
           initial={folderDialog.mode === "create" ? null : folderDialog.folder}
+          manualCard={
+            folderDialog.mode === "create" ? "" : browserCardRepository.get(folderDialog.folder.id)?.manual || ""
+          }
+          autoCard={
+            folderDialog.mode === "create" ? "" : browserCardRepository.get(folderDialog.folder.id)?.auto?.text || ""
+          }
           onSubmit={(values) =>
             folderDialog.mode === "create"
               ? handleCreateFolder(values, folderDialog.parentId)

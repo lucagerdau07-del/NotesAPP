@@ -81,6 +81,13 @@ export function createFolderRepository(storage, { now = Date.now } = {}) {
   };
 }
 
+// A note belongs to a folder when its subject string matches the folder's id
+// or name (see Library.jsx's matchesFolder, which says the same).
+export function matchesFolder(note, folder) {
+  const subject = String(note?.subject || "").toLowerCase();
+  return !!subject && (subject === folder.name.toLowerCase() || subject === folder.id.toLowerCase());
+}
+
 // A folder's id plus the ids of every folder nested below it, at any depth.
 export function folderWithDescendants(folders, id) {
   const ids = new Set([String(id)]);

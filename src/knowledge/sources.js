@@ -344,6 +344,32 @@ export function queueSourceIndexing(
   return queue;
 }
 
+// Hängt eine Aufgabe an dieselbe Warteschlange wie die Texterkennung: nie zwei
+// Modellaufrufe parallel, und die Aufgabe sieht erst, was vor ihr gelesen wurde.
+export function afterIndexing(task) {
+  queue = queue.then(task).catch(() => {});
+  return queue;
+}
+
+// Anfang einer Quelle als ein Absatz, für die Karten der Bibliothek (cards.js).
+// pages ist bei Importen die Zahl der bisher gelesenen Seiten, damit sich die
+// Karte erneuert, wenn die Texterkennung weiterkommt.
+export async function leadingText(
+  note,
+  { imported = false, chars = 280, repository = browserDocumentRepository, load = loadInk } = {},
+) {
+  const pages = imported
+    ? await pagesOfImported(note, repository)
+    : await pagesOfNote(note, repository, load);
+  const text = pages
+    .slice(0, imported ? 2 : 4)
+    .map((page) => page.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { text: text.slice(0, chars), pages: pages.length };
+}
+
 // Das Original als Bild, wenn der Text einer Seite eine Abbildung oder das
 // Layout nicht trägt. Nur auf Anfrage des Agenten, nie beim Indizieren.
 async function pageImages(note, indexes, repository) {

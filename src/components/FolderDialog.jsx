@@ -23,12 +23,16 @@ function fileToThumb(file, size = 512) {
   });
 }
 
-export default function FolderDialog({ mode = "create", initial, onSubmit, onClose }) {
+// manualCard / autoCard: the agent-facing description (knowledge/cardRepository.js).
+// The generated one is only a placeholder, so it shows what the agent sees
+// without becoming the user's own text.
+export default function FolderDialog({ mode = "create", initial, manualCard = "", autoCard = "", onSubmit, onClose }) {
   const [name, setName] = useState(initial?.name || "");
   const [color, setColor] = useState(initial?.color || FOLDER_COLORS[0]);
   const [icon, setIcon] = useState(initial?.icon || FOLDER_ICON_KEYS[0]);
 
   const [image, setImage] = useState(initial?.image || null);
+  const [description, setDescription] = useState(manualCard);
 
   const pickImage = async (e) => {
     const file = e.target.files?.[0];
@@ -38,7 +42,7 @@ export default function FolderDialog({ mode = "create", initial, onSubmit, onClo
 
   const submit = () => {
     if (!name.trim()) return;
-    onSubmit?.({ name: name.trim(), color, icon, image });
+    onSubmit?.({ name: name.trim(), color, icon, image, description: description.trim() });
   };
 
   return (
@@ -180,6 +184,28 @@ export default function FolderDialog({ mode = "create", initial, onSubmit, onClo
               </button>
             )}
           </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>Beschreibung für den Assistenten</div>
+          <textarea
+            data-testid="folder-dialog-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={autoCard || "Wird automatisch aus den Notizen erstellt"}
+            rows={3}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              resize: "none",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,.15)",
+              background: "rgba(255,255,255,.06)",
+              color: "#FFFFFF",
+              font: "500 13px sans-serif",
+            }}
+          />
         </div>
 
         <button

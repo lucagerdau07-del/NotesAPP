@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { browserDocumentImporter } from "../documents/documentImporter.js";
 import { renderBookCover, renderImportedThumbnail } from "../documents/importedThumbnail.js";
 import { queueHandwritingIndexing, queueSourceIndexing } from "../knowledge/sources.js";
+import { queueCardGeneration } from "../knowledge/cards.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
+import { browserFolderRepository } from "../storage/folderRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
 
 export default function useDocumentLibrary({
@@ -10,6 +12,8 @@ export default function useDocumentLibrary({
   importer = browserDocumentImporter,
   indexSources = queueSourceIndexing,
   indexHandwriting = queueHandwritingIndexing,
+  generateCards = queueCardGeneration,
+  folderRepository = browserFolderRepository,
   noteRepository = browserNoteRepository,
   thumbnailer = renderImportedThumbnail,
   coverRenderer = renderBookCover,
@@ -31,6 +35,16 @@ export default function useDocumentLibrary({
         // Then the handwriting of the user's own notes, so the agent can
         // search class notes as well as books.
         indexHandwriting(noteRepository.listNotes(), { repository });
+        // Last, once the text of every page is read: folder and note cards
+        // the agent navigates by (see knowledge/cards.js).
+        generateCards(
+          {
+            folders: folderRepository.listFolders(),
+            notes: noteRepository.listNotes(),
+            imported: notes,
+          },
+          { docRepository: repository },
+        );
       })
       .catch((cause) => {
         if (!disposed) setError(cause);
@@ -41,7 +55,7 @@ export default function useDocumentLibrary({
     return () => {
       disposed = true;
     };
-  }, [repository, indexSources, indexHandwriting, noteRepository]);
+  }, [repository, indexSources, indexHandwriting, generateCards, folderRepository, noteRepository]);
 
   // Card previews: imports made before thumbnails existed (and any new one)
   // get theirs rendered once, one at a time, and stored on the note.

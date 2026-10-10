@@ -1,4 +1,7 @@
 export const KNOWLEDGE_STORAGE_KEY = "notes.knowledge.v1";
+// Fenster-Event, wenn jemand außerhalb von useKnowledge schreibt (der Agent
+// über add_task / set_task_done), damit die Oberfläche neu liest.
+export const KNOWLEDGE_CHANGED = "notes:knowledge-changed";
 
 function emptyState() {
   return {

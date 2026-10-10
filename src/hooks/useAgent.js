@@ -12,6 +12,9 @@ import {
   executeTool,
 } from "../agent/tools.js";
 import { buildSystemPrompt } from "../agent/systemPrompt.js";
+import { loadLibraryOverview } from "../agent/libraryOverview.js";
+import { loadSchoolContext } from "../agent/schoolContext.js";
+import { browserMemoryRepository, memoryBlock } from "../knowledge/memoryRepository.js";
 import { createLibraryNoteSession } from "../agent/libraryNote.js";
 
 const MAX_STEPS = 30;
@@ -342,6 +345,9 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             ],
           }
         : { role: "user", content: wireText };
+      // Fast mode answers from training and never searches, so the cards
+      // would only cost tokens there.
+      const libraryOverview = fast ? "" : await loadLibraryOverview().catch(() => "");
       let conversation = [
         {
           role: "system",
@@ -355,6 +361,11 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             isWhiteboard,
             background,
             fast,
+            libraryOverview,
+            memory: memoryBlock(browserMemoryRepository.list()),
+            // Only where the task tools are sent too (AGENT_LIBRARY_TOOLS):
+            // the editor chat stays as lean as it was.
+            schoolContext: library && canEdit ? loadSchoolContext() : "",
           }),
         },
         ...messages,
