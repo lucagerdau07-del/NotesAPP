@@ -241,7 +241,7 @@ describe('App Component', () => {
     expect(screen.queryByText('Titrationskurve')).not.toBeInTheDocument();
 
     // Reset via the folder back button
-    fireEvent.click(screen.getByTitle('Zurück zur Übersicht'));
+    fireEvent.click(screen.getByTitle('Zurück'));
     expect(screen.getByText('Titrationskurve')).toBeInTheDocument();
   });
 
