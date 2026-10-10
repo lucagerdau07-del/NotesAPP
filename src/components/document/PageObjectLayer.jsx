@@ -202,10 +202,14 @@ function ImageCropOverlay({ object, boxWidth, boxHeight, zoom, pointerScale = zo
   const rootRef = useRef(null);
 
   // Pressing anywhere outside the crop (its own frame and buttons included)
-  // abandons it, same as the cancel button.
+  // abandons it, same as the cancel button. The press is swallowed: it only
+  // leaves the crop, it must not also start a stroke on the canvas below.
   useEffect(() => {
     const handleDown = (event) => {
-      if (rootRef.current && !rootRef.current.contains(event.target)) onCancel();
+      if (rootRef.current && !rootRef.current.contains(event.target)) {
+        event.stopPropagation();
+        onCancel();
+      }
     };
     document.addEventListener("pointerdown", handleDown, true);
     return () => document.removeEventListener("pointerdown", handleDown, true);
