@@ -32,8 +32,7 @@ import {
   nearestEntry,
   untisTime,
 } from "../knowledge/calendarEntries.js";
-import { isLessonCancelled, loadArchivedWeek, untisDateNumber } from "../ink/untisArchive.js";
-import { iservClient } from "../lib/iservClient.js";
+import { loadArchivedWeek } from "../ink/untisArchive.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import "../styles/calendar.css";
 
@@ -449,7 +448,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
 
   const openAttachment = (attachment) => {
     setAttachmentError(false);
-    openIservAttachment({ client: iservClient, attachment }).catch(() => setAttachmentError(true));
+    openIservAttachment({ attachment }).catch(() => setAttachmentError(true));
   };
 
   return (
