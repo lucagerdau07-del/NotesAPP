@@ -22,11 +22,13 @@ function normalizeKey(value) {
     .trim();
 }
 
-// IServ-Termine sind über ihre IServ-ID eindeutig: ändert sich Titel oder Frist,
-// wird derselbe Termin aktualisiert statt ein zweiter angelegt.
+// IServ-Termine sind über die Zahl ihrer Aufgaben-URL eindeutig (…/exercise/show/<id>): ändert sich Titel,
+// Frist oder die Schreibweise der Domain, wird derselbe Termin aktualisiert statt ein zweiter angelegt.
+const iservTaskId = (value) => /\/exercise\/show\/(\d+)/.exec(String(value))?.[1] ?? String(value);
+
 const eventKey = (event) =>
   event.iservId
-    ? `iserv|${event.iservId}`
+    ? `iserv|${iservTaskId(event.iservId)}`
     : `${event.kind}|${normalizeKey(event.subject)}|${event.due}|${normalizeKey(event.title)}`;
 
 const termKey = (term) => `${normalizeKey(term.subject)}|${normalizeKey(term.term)}`;
@@ -69,7 +71,7 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
     return next;
   };
 
-  const mergeList = (existing, incoming, keyOf, build) => {
+  const mergeList = (existing, incoming, keyOf, build, { skip = () => false, onKnown = () => null } = {}) => {
     const byKey = new Map(existing.map((entry) => [keyOf(entry), entry]));
     let added = 0;
     for (const raw of incoming) {
@@ -87,8 +89,9 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           ...(previous.prep ? { prep: previous.prep } : {}),
           ...(previous.need ? { need: previous.need } : {}),
           ...(previous.study ? { study: previous.study } : {}),
+          ...onKnown(candidate, previous),
         });
-      } else {
+      } else if (!skip(candidate)) {
         byKey.set(key, candidate);
         added += 1;
       }
@@ -118,12 +121,18 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
                 url: raw.url,
                 description: raw.description,
                 attachments: raw.attachments,
+                iservClosed: raw.iservClosed === true,
               }
             : {}),
           done: false,
           createdAt: timestamp,
           updatedAt: timestamp,
-        }));
+        }), {
+          // Was IServ schon als erledigt oder abgelaufen führt, kommt nicht neu in den Kalender.
+          skip: (event) => event.iservClosed === true,
+          // Wechselt eine bekannte Aufgabe auf geschlossen, ist sie abgehakt. Danach gilt wieder die App.
+          onKnown: (event, previous) => (event.iservClosed && !previous.iservClosed ? { done: true } : null),
+        });
         const mergedTerms = mergeList(state.terms, terms, termKey, (raw) => ({
           id: nextId("term"),
           term: raw.term,

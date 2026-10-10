@@ -240,3 +240,61 @@ describe("eigene Kalendereinträge", () => {
     expect(repository.read().events).toEqual([]);
   });
 });
+
+describe("knowledge repository — IServ-Status", () => {
+  const task = (overrides = {}) => ({
+    kind: "homework",
+    title: "Blatt",
+    subject: "Mathe",
+    due: "2026-10-01",
+    iservId: "https://schule.example/iserv/exercise/show/77",
+    url: "https://schule.example/iserv/exercise/show/77",
+    description: "",
+    attachments: [],
+    iservClosed: false,
+    ...overrides,
+  });
+
+  it("hakt eine bekannte Aufgabe ab, sobald IServ sie als erledigt oder abgelaufen meldet", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [task()], sourceNoteId: "iserv" });
+    repository.mergeFindings({ events: [task({ iservClosed: true })], sourceNoteId: "iserv" });
+    expect(repository.read().events[0].done).toBe(true);
+  });
+
+  it("legt eine unbekannte, schon geschlossene Aufgabe nicht an", () => {
+    const repository = repo();
+    const result = repository.mergeFindings({ events: [task({ iservClosed: true })], sourceNoteId: "iserv" });
+    expect(result.addedEvents).toBe(0);
+    expect(repository.read().events).toHaveLength(0);
+  });
+
+  it("lässt ein Un-Häkchen stehen, solange sich der IServ-Status nicht ändert", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [task()], sourceNoteId: "iserv" });
+    repository.mergeFindings({ events: [task({ iservClosed: true })], sourceNoteId: "iserv" });
+    repository.setEventDone(repository.read().events[0].id, false);
+    repository.mergeFindings({ events: [task({ iservClosed: true })], sourceNoteId: "iserv" });
+    expect(repository.read().events[0].done).toBe(false);
+  });
+
+  it("nimmt ein App-Häkchen nicht zurück, wenn IServ die Aufgabe noch offen führt", () => {
+    const repository = repo();
+    repository.mergeFindings({ events: [task()], sourceNoteId: "iserv" });
+    repository.setEventDone(repository.read().events[0].id, true);
+    repository.mergeFindings({ events: [task()], sourceNoteId: "iserv" });
+    expect(repository.read().events[0].done).toBe(true);
+  });
+
+  it("erkennt eine ältere Aufgabe ohne iservClosed wieder, auch bei anderer Schreibweise der Domain", () => {
+    const repository = repo();
+    repository.mergeFindings({
+      events: [task({ iservId: "https://alt.example/iserv/exercise/show/77", iservClosed: undefined })],
+      sourceNoteId: "iserv",
+    });
+    const result = repository.mergeFindings({ events: [task({ iservClosed: true })], sourceNoteId: "iserv" });
+    expect(result.addedEvents).toBe(0);
+    expect(repository.read().events).toHaveLength(1);
+    expect(repository.read().events[0].done).toBe(true);
+  });
+});
