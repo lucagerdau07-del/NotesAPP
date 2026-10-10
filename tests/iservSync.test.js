@@ -1,35 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ISERV_BUCKET,
   openIservAttachment,
   pullIservEvents,
-  rowToEvent,
   syncIserv,
+  taskToEvent,
 } from "../src/knowledge/iservSync.js";
 import { createKnowledgeRepository } from "../src/knowledge/knowledgeRepository.js";
 
-const row = (overrides = {}) => ({
-  id: "https://iserv/ex/1",
+const config = { baseUrl: "https://space.example/api/notes/", accessKey: "k".repeat(20) };
+
+const task = (overrides = {}) => ({
+  id: 1,
+  url: "https://schule.example/iserv/exercise/show/1",
   title: "Blatt 3",
-  subject: "Mathe",
-  due: "2026-09-24",
-  url: "https://iserv/ex/1",
+  tags: "Mathe",
+  due: "2026-09-24T14:30",
+  done: false,
+  expired: false,
   description: "Löse Seite 10",
-  attachments: [{ filename: "Blatt.pdf", path: "u/h/Blatt.pdf", size_bytes: 3 }],
+  attachments: [{ filename: "Blatt.pdf", path: "/iserv/fs/file/exercise/1" }],
   ...overrides,
 });
 
-const credentials = { email: "a@b.de", password: "pw" };
-
-function fakeClient({ session = null, rows = [], signInError = null, queryError = null } = {}) {
-  const order = vi.fn(async () => ({ data: rows, error: queryError }));
-  const select = vi.fn(() => ({ order }));
-  const from = vi.fn(() => ({ select }));
-  const schema = vi.fn(() => ({ from }));
-  const signInWithPassword = vi.fn(async () => ({ error: signInError }));
-  const getSession = vi.fn(async () => ({ data: { session } }));
-  return { client: { auth: { getSession, signInWithPassword }, schema }, signInWithPassword, schema, from };
-}
+const jsonResponse = (body, status = 200) => ({
+  ok: status < 400,
+  status,
+  json: async () => body,
+  blob: async () => new Blob(["x"]),
+});
 
 function memoryRepository() {
   const values = new Map();
@@ -39,162 +37,125 @@ function memoryRepository() {
   );
 }
 
-describe("rowToEvent", () => {
-  it("macht aus einer Zeile eine Hausaufgabe", () => {
-    expect(rowToEvent(row())).toEqual({
+describe("taskToEvent", () => {
+  it("macht aus einer Aufgabe eine Hausaufgabe mit Frist und Uhrzeit", () => {
+    expect(taskToEvent(task())).toEqual({
       kind: "homework",
       title: "Blatt 3",
       subject: "Mathe",
       due: "2026-09-24",
-      iservId: "https://iserv/ex/1",
-      url: "https://iserv/ex/1",
+      time: "14:30",
+      iservId: "https://schule.example/iserv/exercise/show/1",
+      url: "https://schule.example/iserv/exercise/show/1",
       description: "Löse Seite 10",
-      attachments: [{ filename: "Blatt.pdf", path: "u/h/Blatt.pdf", size_bytes: 3 }],
+      attachments: [{ filename: "Blatt.pdf", path: "/iserv/fs/file/exercise/1" }],
+      iservClosed: false,
     });
   });
 
-  it("verwirft Zeilen ohne Titel", () => {
-    expect(rowToEvent(row({ title: "  " }))).toBeNull();
+  it("nimmt ein Datum ohne Uhrzeit ohne time", () => {
+    expect(taskToEvent(task({ due: "2026-09-24" })).time).toBeUndefined();
   });
 
-  it("verwirft Zeilen ohne lesbare Frist", () => {
-    expect(rowToEvent(row({ due: null }))).toBeNull();
-    expect(rowToEvent(row({ due: "" }))).toBeNull();
+  it("meldet erledigt und abgelaufen als geschlossen", () => {
+    expect(taskToEvent(task({ done: true })).iservClosed).toBe(true);
+    expect(taskToEvent(task({ expired: true })).iservClosed).toBe(true);
+  });
+
+  it("verwirft Aufgaben ohne Titel, Frist oder URL", () => {
+    expect(taskToEvent(task({ title: " " }))).toBeNull();
+    expect(taskToEvent(task({ due: null }))).toBeNull();
+    expect(taskToEvent(task({ url: "" }))).toBeNull();
   });
 
   it("verträgt fehlende Anhänge", () => {
-    expect(rowToEvent(row({ attachments: null })).attachments).toEqual([]);
-  });
-
-  it("übernimmt eine gültige Abgabeuhrzeit", () => {
-    expect(rowToEvent(row({ due_time: "07:45" })).time).toBe("07:45");
-  });
-
-  it("lässt die Uhrzeit weg, wenn keine gesetzt oder ungültig ist", () => {
-    expect(rowToEvent(row({ due_time: null })).time).toBeUndefined();
-    expect(rowToEvent(row({ due_time: "irgendwann" })).time).toBeUndefined();
-  });
-
-  it("liest die Uhrzeit aus deadline_raw, wenn due_time fehlt", () => {
-    const philo = row({ due: "2026-09-28", due_time: null, deadline_raw: "2026-09-28T00:00:00+02:00" });
-    expect(rowToEvent(philo).time).toBe("00:00");
-  });
-
-  it("bevorzugt due_time und ignoriert ein deadline_raw mit anderem Datum", () => {
-    expect(rowToEvent(row({ due_time: "07:45", deadline_raw: "2026-09-24T18:00:00+02:00" })).time).toBe("07:45");
-    expect(rowToEvent(row({ deadline_raw: "2026-09-23T18:00:00+02:00" })).time).toBeUndefined();
-    expect(rowToEvent(row({ deadline_raw: "Do, 24.09.2026" })).time).toBeUndefined();
+    expect(taskToEvent(task({ attachments: null })).attachments).toEqual([]);
   });
 });
 
 describe("pullIservEvents", () => {
-  it("meldet sich an, wenn keine Sitzung besteht", async () => {
-    const { client, signInWithPassword } = fakeClient({ rows: [row()] });
-    const events = await pullIservEvents({ client, credentials });
-    expect(signInWithPassword).toHaveBeenCalledWith({ email: "a@b.de", password: "pw" });
+  it("fragt den Space mit dem Schlüssel und gibt die Termine zurück", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ tasks: [task(), task({ id: 2, title: "" })] }));
+    const events = await pullIservEvents({ config, fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://space.example/api/notes/iserv/tasks");
+    expect(fetchImpl.mock.calls[0][1].headers["x-app-key"]).toBe(config.accessKey);
     expect(events).toHaveLength(1);
   });
 
-  it("meldet sich nicht erneut an, wenn eine Sitzung besteht", async () => {
-    const { client, signInWithPassword } = fakeClient({ session: {}, rows: [row()] });
-    await pullIservEvents({ client, credentials });
-    expect(signInWithPassword).not.toHaveBeenCalled();
-  });
-
-  it("liest die Tabelle notesapp.iserv_tasks", async () => {
-    const { client, schema, from } = fakeClient({ session: {} });
-    await pullIservEvents({ client, credentials });
-    expect(schema).toHaveBeenCalledWith("notesapp");
-    expect(from).toHaveBeenCalledWith("iserv_tasks");
-  });
-
-  it("wirft bei einem Loginfehler", async () => {
-    const { client } = fakeClient({ signInError: new Error("Invalid login") });
-    await expect(pullIservEvents({ client, credentials })).rejects.toThrow("Invalid login");
-  });
-
-  it("wirft bei einem Lesefehler", async () => {
-    const { client } = fakeClient({ session: {}, queryError: new Error("offline") });
-    await expect(pullIservEvents({ client, credentials })).rejects.toThrow("offline");
-  });
-
-  it("lässt Zeilen ohne Frist aus", async () => {
-    const { client } = fakeClient({ session: {}, rows: [row(), row({ id: "x", due: null })] });
-    expect(await pullIservEvents({ client, credentials })).toHaveLength(1);
+  it("wirft bei einem Fehlerstatus", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: "unreachable" }, 502));
+    await expect(pullIservEvents({ config, fetchImpl })).rejects.toThrow();
   });
 });
 
 describe("syncIserv", () => {
-  it("gibt null zurück, wenn nichts eingerichtet ist", async () => {
-    const repository = memoryRepository();
-    const { client } = fakeClient();
-    expect(await syncIserv({ repository, client, loadCredentials: async () => null })).toBeNull();
-    expect(await syncIserv({ repository, client: null, loadCredentials: async () => credentials })).toBeNull();
-    expect(
-      await syncIserv({ repository, client, loadCredentials: async () => ({ email: "a@b.de", password: "" }) }),
-    ).toBeNull();
+  it("ist ohne Zugriffsschlüssel aus und fragt nicht", async () => {
+    const fetchImpl = vi.fn();
+    const result = await syncIserv({
+      repository: memoryRepository(),
+      loadConfig: () => ({ ...config, accessKey: "" }),
+      fetchImpl,
+    });
+    expect(result).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("trägt Zeilen als Termine ein und zählt nur neue", async () => {
+  it("trägt neue Aufgaben ein und hakt geschlossene bekannte ab", async () => {
     const repository = memoryRepository();
-    const { client } = fakeClient({ session: {}, rows: [row()] });
-    const options = { repository, client, loadCredentials: async () => credentials };
+    const loadConfig = () => config;
+    await syncIserv({ repository, loadConfig, fetchImpl: async () => jsonResponse({ tasks: [task()] }) });
+    expect(repository.read().events).toHaveLength(1);
 
-    expect(await syncIserv(options)).toBe(1);
-    expect(repository.read().events[0]).toMatchObject({
-      sourceNoteId: "iserv",
-      iservId: "https://iserv/ex/1",
-      kind: "homework",
+    const unknownClosed = task({ id: 9, url: "https://schule.example/iserv/exercise/show/9", expired: true });
+    const added = await syncIserv({
+      repository,
+      loadConfig,
+      fetchImpl: async () => jsonResponse({ tasks: [task({ expired: true }), unknownClosed] }),
     });
-    expect(await syncIserv(options)).toBe(0);
+
+    expect(added).toBe(0);
+    const { events } = repository.read();
+    expect(events).toHaveLength(1);
+    expect(events[0].done).toBe(true);
+    expect(events[0].sourceNoteId).toBe("iserv");
+  });
+
+  it("wirft bei einem Fehler, damit der Hook den Zustand setzt", async () => {
+    await expect(
+      syncIserv({
+        repository: memoryRepository(),
+        loadConfig: () => config,
+        fetchImpl: async () => jsonResponse({}, 503),
+      }),
+    ).rejects.toThrow();
   });
 });
 
 describe("openIservAttachment", () => {
-  const client = (download) => ({ storage: { from: vi.fn(() => ({ download })) } });
-
-  it("lädt den Anhang aus dem Bucket und reicht ihn ans Teilen-Menü", async () => {
-    const blob = new Blob(["x"]);
-    const download = vi.fn(async () => ({ data: blob, error: null }));
+  it("lädt die Datei über den Space und reicht sie ans Teilen-Menü", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}));
     const share = vi.fn(async () => {});
-    const fake = client(download);
-
     await openIservAttachment({
-      client: fake,
-      attachment: { filename: "Blatt 1.pdf", path: "u/h/Blatt_1.pdf" },
+      attachment: { filename: "Blatt:1.pdf", path: "/iserv/fs/file/exercise/1" },
+      config,
       share,
+      fetchImpl,
     });
-
-    expect(fake.storage.from).toHaveBeenCalledWith(ISERV_BUCKET);
-    expect(download).toHaveBeenCalledWith("u/h/Blatt_1.pdf");
-    expect(share).toHaveBeenCalledWith(blob, "Blatt 1.pdf");
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      "https://space.example/api/notes/iserv/file?path=%2Fiserv%2Ffs%2Ffile%2Fexercise%2F1",
+    );
+    expect(share).toHaveBeenCalledWith(expect.any(Blob), "Blatt_1.pdf");
   });
 
-  it("bereinigt Zeichen, die kein Dateiname enthalten darf", async () => {
-    const share = vi.fn(async () => {});
-    const download = vi.fn(async () => ({ data: new Blob(["x"]), error: null }));
-    await openIservAttachment({
-      client: client(download),
-      attachment: { filename: "a/b:c.pdf", path: "u/h/a_b_c.pdf" },
-      share,
-    });
-    expect(share.mock.calls[0][1]).toBe("a_b_c.pdf");
+  it("wirft ohne Pfad", async () => {
+    await expect(openIservAttachment({ attachment: { filename: "x" }, config, fetchImpl: vi.fn() })).rejects.toThrow();
   });
 
-  it("wirft, wenn der Anhang keinen Pfad hat", async () => {
+  it("wirft, wenn der Space die Datei nicht liefert", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: "refused" }, 502));
     await expect(
-      openIservAttachment({ client: {}, attachment: { filename: "x.pdf", path: null }, share: vi.fn() }),
+      openIservAttachment({ attachment: { filename: "x", path: "/iserv/x" }, config, share: vi.fn(), fetchImpl }),
     ).rejects.toThrow();
-  });
-
-  it("wirft, wenn der Download scheitert", async () => {
-    const download = vi.fn(async () => ({ data: null, error: new Error("nicht gefunden") }));
-    await expect(
-      openIservAttachment({
-        client: client(download),
-        attachment: { filename: "x.pdf", path: "u/h/x.pdf" },
-        share: vi.fn(),
-      }),
-    ).rejects.toThrow("nicht gefunden");
   });
 });
