@@ -11,12 +11,19 @@
   --cal-type: #98989d;
   position: absolute;
   inset: 0;
+  /* Eigener Stapelkontext: der Nebel (.liquid-glass-scene) liegt damit unter
+     allen Inhalten, auch unter nicht positionierten Kopfzeilen. */
+  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
   gap: 16px;
   padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
   color: var(--cal-ink);
   font-family: "Manrope", sans-serif;
+}
+
+.cal > .liquid-glass-scene {
+  z-index: -1;
 }
 
 /* Farbe je Art, angelehnt an die Systemfarben im Dunkelmodus. */

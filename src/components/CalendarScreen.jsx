@@ -454,6 +454,8 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
 
   return (
     <main className="cal" data-testid="calendar-screen" data-detail-open={detailOpen || creating}>
+      {/* Same black fog as the Library and Settings backdrop. */}
+      <div className="liquid-glass-scene" aria-hidden="true" />
       <section className="cal-list-pane" aria-label="Einträge">
         <header className="cal-head">
           <button type="button" className="cal-round" onClick={onBack} aria-label="Zurück zur Bibliothek" title="Zurück">
