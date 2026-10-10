@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.env
+.env.local
+.superpowers/
+.worktrees/
+backups/
+.playwright-cli/
+output/playwright/
+
+# Android
+android/.gradle/
+android/build/
+android/*/build/
+android/local.properties
+android/.idea/
+android/app/release/
+*.apk
+*.aab
+
+# Android (backup copy)
+android_backup/.gradle/
+android_backup/build/
+android_backup/*/build/
+android_backup/local.properties
+android_backup/.idea/

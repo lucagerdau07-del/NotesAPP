@@ -1,0 +1,98 @@
+/* Rich text inside text objects: the editor, the page and the preview
+   renderer (notePreview inlines this file) all draw it from these rules.
+   --rt-line is the box's own line height, a whole number of rules on ruled
+   paper, so a heading still advances whole rules and the text below it stays
+   on the lines. */
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text p,
+.rich-text ul,
+.rich-text ol,
+.rich-text pre {
+  margin: 0;
+}
+
+.rich-text h1 {
+  position: relative;
+  top: var(--rt-h1-shift, 0px);
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: calc(var(--rt-line) * 2);
+}
+
+.rich-text h2 {
+  position: relative;
+  top: var(--rt-h2-shift, 0px);
+  font-size: 1.25em;
+  font-weight: 700;
+  line-height: var(--rt-line);
+}
+
+.rich-text h3 {
+  position: relative;
+  top: var(--rt-h3-shift, 0px);
+  font-size: 1.1em;
+  font-weight: 700;
+  line-height: var(--rt-line);
+}
+
+.rich-text ul,
+.rich-text ol {
+  padding-left: 1.4em;
+}
+
+/* execCommand("indent") outside a list wraps the paragraph in a blockquote. */
+.rich-text blockquote {
+  margin: 0 0 0 1.6em;
+}
+
+.rich-text code,
+.rich-text pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.rich-text code {
+  padding: 0 0.2em;
+  border-radius: 0.2em;
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.rich-text a {
+  color: #5b9bf0;
+  text-decoration: underline;
+}
+
+.rich-text ul[data-check] {
+  list-style: none;
+  padding-left: 0.1em;
+}
+
+.rich-text ul[data-check] > li {
+  position: relative;
+  padding-left: 1.5em;
+}
+
+/* The box sits in the item's left padding; checkboxAt() hit-tests that strip. */
+.rich-text ul[data-check] > li::before {
+  content: "";
+  position: absolute;
+  left: 0.1em;
+  top: calc(0.5lh - 0.45em);
+  width: 0.9em;
+  height: 0.9em;
+  box-sizing: border-box;
+  border: 0.11em solid currentColor;
+  border-radius: 0.22em;
+  opacity: 0.85;
+}
+
+.rich-text ul[data-check] > li[data-checked="true"] {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.rich-text ul[data-check] > li[data-checked="true"]::before {
+  background: currentColor;
+}

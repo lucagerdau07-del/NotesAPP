@@ -1,0 +1,96 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "notes-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5180",
+        "--strictPort"
+      ],
+      "port": 5180
+    },
+    {
+      "name": "notes-dev-5181",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181
+    },
+    {
+      "name": "notes-dev-5190",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5190", "--strictPort"],
+      "port": 5190
+    },
+    {
+      "name": "notes-dev-5191",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5191", "--strictPort"],
+      "port": 5191
+    },
+    {
+      "name": "notes-prod-base",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--",
+        "--outDir",
+        "C:/Users/lucag/AppData/Local/Temp/claude/C--Antigravity-NotesAPP/0d06fd24-6242-4e5b-900a-519bfc4c9249/scratchpad/dist-base",
+        "--port",
+        "5182",
+        "--strictPort"
+      ],
+      "port": 5182
+    },
+    {
+      "name": "notes-prod-new",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview",
+        "--",
+        "--outDir",
+        "C:/Users/lucag/AppData/Local/Temp/claude/C--Antigravity-NotesAPP/0d06fd24-6242-4e5b-900a-519bfc4c9249/scratchpad/dist-new",
+        "--port",
+        "5183",
+        "--strictPort"
+      ],
+      "port": 5183
+    },
+    {
+      "name": "app-backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:\\Antigravity\\app-backend-temp\\server.js"
+      ],
+      "port": 7860
+    },
+    {
+      "name": "notes-dev-wt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Antigravity/NotesAPP/.claude/worktrees/input-no-white-focus",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5184",
+        "--strictPort"
+      ],
+      "port": 5184
+    }
+  ]
+}

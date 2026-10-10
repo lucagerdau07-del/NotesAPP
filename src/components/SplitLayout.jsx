@@ -1,0 +1,181 @@
+import { useEffect, useRef, useState } from "react";
+import DocumentView from "./DocumentView";
+import WritingZone from "./WritingZone";
+import useInkDocument from "../hooks/useInkDocument";
+import useFocusBox from "../hooks/useFocusBox";
+import useDocumentSource from "../hooks/useDocumentSource";
+import { resolvePageStyle } from "../documents/pageStyles.js";
+import { browserNoteRepository } from "../storage/noteRepository.js";
+
+export default function SplitLayout({
+  activeTab,
+  onBack,
+  documentId: propDocumentId,
+  note,
+  railSlot,
+  panelSlot,
+  panelMode,
+  setPanelMode,
+  onPageCountChange,
+  onCurrentPageChange,
+  onPagesChange,
+  navigatePageRequest,
+  onNavigatePageHandled,
+  isImmersive,
+  inkControllerRef,
+  imageDropRequest,
+  onImageDropHandled,
+  onCircleToSearch,
+  armCircleSearchRequest,
+  onArmCircleSearchHandled,
+  openRequest,
+  onOpenHandled,
+  isActive = true,
+  hasRail = true,
+}) {
+  const documentId = String(note?.id ?? propDocumentId ?? "default");
+  const initialPageIds =
+    note?.kind === "imported" && Array.isArray(note.pages)
+      ? note.pages.map((page) => page.id)
+      : undefined;
+  const [isEraser, setIsEraser] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [showPageBreaks, setShowPageBreaks] = useState(true);
+  const [layoutMode, setLayoutMode] = useState("full"); // 'full' | 'split'
+  // The split toggle lives in App's "Mehr" menu, but the editor knows how to
+  // switch (the whiteboard seeds a focus box first), so it registers it here.
+  const layoutToggleRef = useRef(null);
+  const resolvedNoteStyle =
+    !note || note?.kind === "imported" ? undefined : resolvePageStyle(note);
+  const initialPageStyle = resolvedNoteStyle;
+  const initialInkColor = resolvedNoteStyle?.inkColor;
+  const inkController = useInkDocument({
+    documentId,
+    initialPageIds,
+    initialPageStyle,
+    initialColor: initialInkColor,
+    onPersisted:
+      !note || note.kind === "imported"
+        ? undefined
+        : () => {
+            const { title, subject, pageKind, format, background, ruling } = note;
+            browserNoteRepository.saveNote({ id: documentId, title, subject, pageKind, format, background, ruling });
+          },
+  });
+  const [paperStyle, setPaperStyle] = useState(
+    () => inkController.document.pages[0]?.ruling || "lined",
+  );
+  const {
+    sourceHandle,
+    loading: sourceLoading,
+    error: sourceError,
+    retry: retrySource,
+  } = useDocumentSource({ note });
+
+  // The chat panel lives up in App (it is a child of the glass rail), but its
+  // agent tools write to this document. A ref rather than a state callback:
+  // the controller object is new on every render, so lifting it as state would
+  // re-render this tree on every render of it.
+  // paperStyle isn't part of inkController (it's local UI state, not document
+  // state), but the agent's tools need it to snap text onto the page's ruling.
+  // The pages panel needs the imported file too: its thumbnails show the PDF
+  // page under the ink, and the ink pages alone carry no size for it.
+  if (inkControllerRef)
+    inkControllerRef.current = {
+      ...inkController,
+      paperStyle,
+      sourceHandle,
+      sourceType: note?.source?.type,
+      sourcePages: note?.kind === "imported" ? note.pages : null,
+      layoutMode,
+      toggleLayoutMode: () => layoutToggleRef.current?.(),
+    };
+
+  const toolState = {
+    color: inkController.color,
+    setColor: inkController.setColor,
+    rawColor: inkController.color,
+    tool: inkController.tool,
+    setTool: inkController.setTool,
+    isEraser,
+    setIsEraser,
+    lineWidth: inkController.penWidth,
+    rawLineWidth: inkController.penWidth,
+    setLineWidth: inkController.setPenWidth,
+    eraserWidth: inkController.eraserWidth,
+    setEraserWidth: inkController.setEraserWidth,
+    isSelectMode,
+    setIsSelectMode,
+    paperStyle,
+    setPaperStyle,
+    showPageBreaks,
+    setShowPageBreaks,
+    layoutMode,
+    setLayoutMode,
+    layoutToggleRef,
+  };
+
+  const focusBoxState = useFocusBox(
+    inkController.document.pages.map((page) => page.id),
+  );
+
+  const pagesCount = inkController.document.pages.length;
+  useEffect(() => {
+    onPageCountChange?.(pagesCount);
+  }, [pagesCount, onPageCountChange]);
+  useEffect(() => {
+    onPagesChange?.(inkController.document.pages.map((page) => page.id));
+  }, [inkController.document.pages, onPagesChange]);
+
+  if (activeTab === "smartCanvas") {
+    return (
+      <div
+        className={`split-layout ${layoutMode === "split" ? "" : "full-mode"}`}
+      >
+        <DocumentView
+          note={note}
+          sourceHandle={sourceHandle}
+          sourceLoading={sourceLoading}
+          sourceError={sourceError}
+          retrySource={retrySource}
+          inkController={inkController}
+          toolState={toolState}
+          focusBoxState={focusBoxState}
+          toolbarState={toolState}
+          isActive={isActive}
+          hasRail={hasRail}
+          onBack={onBack}
+          railSlot={railSlot}
+          panelSlot={panelSlot}
+          panelMode={panelMode}
+          setPanelMode={setPanelMode}
+          onCurrentPageChange={onCurrentPageChange}
+          isImmersive={isImmersive}
+          imageDropRequest={imageDropRequest}
+          onImageDropHandled={onImageDropHandled}
+          onCircleToSearch={onCircleToSearch}
+          armCircleSearchRequest={armCircleSearchRequest}
+          onArmCircleSearchHandled={onArmCircleSearchHandled}
+          navigatePageRequest={navigatePageRequest}
+          onNavigatePageHandled={onNavigatePageHandled}
+          openRequest={openRequest}
+          onOpenHandled={onOpenHandled}
+        />
+        {layoutMode === "split" && (
+          <WritingZone
+            note={note}
+            sourceHandle={sourceHandle}
+            sourceLoading={sourceLoading}
+            sourceError={sourceError}
+            retrySource={retrySource}
+            inkController={inkController}
+            toolState={toolState}
+            focusBoxState={focusBoxState}
+            toolbarState={toolState}
+          />
+        )}
+      </div>
+    );
+  }
+  return <div>Delegation Mode (TBD)</div>;
+}

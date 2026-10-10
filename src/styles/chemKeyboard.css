@@ -1,0 +1,139 @@
+/* Mimics the Samsung keyboard: flat, dark, edge to edge. */
+.chem-kb-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+}
+
+.chem-kb {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 72px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #181818;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.chem-kb-bar,
+.chem-kb-row {
+  display: flex;
+  gap: 7px;
+}
+
+.chem-kb-bar {
+  margin: 0 -72px 4px;
+  padding: 6px 16px;
+  background: #262626;
+}
+
+.chem-kb-row > .chem-key {
+  flex: 1 1 0;
+}
+
+.chem-key {
+  position: relative;
+  min-width: 0;
+  height: 46px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: #303030;
+  color: #f2f2f2;
+  font: 400 22px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.chem-key.space {
+  font-size: 15px;
+}
+
+.chem-hint {
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  font-size: 11px;
+  color: #8c8c8c;
+}
+
+.chem-kb-bar .chem-key {
+  height: 34px;
+  min-width: 52px;
+  padding: 0 12px;
+  background: #3a3a3a;
+  font-size: 16px;
+}
+
+.chem-key:active {
+  background: #4a4a4a;
+}
+
+.chem-key.on {
+  background: #4a4a4a;
+  color: #4a8dff;
+}
+
+.chem-key {
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+.chem-alts {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  padding: 4px;
+  border-radius: 10px;
+  background: #3c3c3c;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.chem-alts > span {
+  min-width: 46px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 24px;
+}
+
+.chem-alts > span.hover {
+  background: #4a8dff;
+}
+
+.chem-suggest {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.chem-kb-bar .chem-key.suggest {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 18px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.chem-suggest .chem-key + .chem-key {
+  border-left: 1px solid #3f3f3f;
+}
+
+.chem-kb-bar .chem-key.suggest:active {
+  background: #3a3a3a;
+}

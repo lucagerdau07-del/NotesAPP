@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.SchoolNotes" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF121212</item>
+    </style>
+</resources>

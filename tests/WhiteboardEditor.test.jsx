@@ -1,0 +1,467 @@
+// tests/WhiteboardEditor.test.jsx
+import '@testing-library/jest-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import WhiteboardEditor from '../src/components/WhiteboardEditor.jsx';
+import * as renderInk from '../src/ink/renderInk.js';
+
+vi.mock('../src/ink/imageObject.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  readImageObjectSource: vi.fn(async () => ({ src: 'data:image/png;base64,AAAA', width: 400, height: 200 })),
+}));
+
+afterEach(() => vi.restoreAllMocks());
+
+function createControllerDouble(overrides = {}) {
+  return {
+    document: {
+      version: 1,
+      documentId: 'wb-1',
+      pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+      strokes: [],
+      objects: [],
+      updatedAt: 0,
+    },
+    tool: 'pen',
+    color: '#EFECE4',
+    penWidth: 3,
+    eraserWidth: 15,
+    eraserMode: 'pixel',
+    inputMode: 'stylus',
+    commitStroke: vi.fn(),
+    removeStrokes: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    canUndo: false,
+    canRedo: false,
+    setColor: vi.fn(),
+    setPenWidth: vi.fn(),
+    setEraserWidth: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('WhiteboardEditor', () => {
+  it('sends an imported image under the ink, so writing on it stays visible', async () => {
+    const applyCommands = vi.fn();
+    const controller = createControllerDouble({ applyCommands, getDocument: () => controller.document });
+    const { container } = render(<WhiteboardEditor inkController={controller} />);
+    const input = container.querySelector('input[type="file"]');
+    fireEvent.change(input, { target: { files: [new File(['x'], 'foto.png', { type: 'image/png' })] } });
+
+    await waitFor(() => expect(applyCommands).toHaveBeenCalledTimes(1));
+    const commands = applyCommands.mock.calls[0][0];
+    expect(commands.map((command) => command.type)).toEqual(['add-object', 'reorder-layers']);
+    expect(commands[0].object.locked).toBe(true);
+  });
+
+  it('uses the document\'s background instead of the hardcoded dark default', () => {
+    const controller = createControllerDouble();
+    controller.document.pages[0].background = '#FFFFFF';
+    render(<WhiteboardEditor inkController={controller} />);
+    const root = screen.getByTestId('document-view');
+    expect(root.style.background).toContain('255, 255, 255');
+  });
+
+  it('renders a whiteboard canvas for the document\'s single page', () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    expect(screen.getByTestId('whiteboard-canvas')).toBeInTheDocument();
+  });
+
+  it('draws a stroke on mouse drag and commits it on release', () => {
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+    const stroke = commitStroke.mock.calls[0][0];
+    expect(stroke.pageId).toBe('wb-1-page-1');
+    expect(stroke.points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not redraw committed ink when a new draft starts', () => {
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+    renderSpy.mockClear();
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+
+    expect(renderSpy).not.toHaveBeenCalled();
+  });
+
+  it('paints only the newly appended draft segment on pointer move', () => {
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const committedStroke = {
+      id: 'committed',
+      pageId: 'wb-1-page-1',
+      tool: 'pen',
+      color: '#EFECE4',
+      width: 3,
+      opacity: 1,
+      points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+    };
+    const controller = createControllerDouble();
+    controller.document = { ...controller.document, strokes: [committedStroke] };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+    renderSpy.mockClear();
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    expect(renderSpy.mock.calls[0][1]).toMatchObject({
+      pageId: 'wb-1-page-1',
+      points: [{ x: 10, y: 10 }, { x: 40, y: 30 }],
+    });
+    expect(renderSpy.mock.calls[0][1].id).not.toBe('committed');
+
+    renderSpy.mockRestore();
+  });
+
+  it('previews pinch zoom without redrawing committed ink on every touch move', () => {
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+      callback(0);
+      return 1;
+    });
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    const canvas = screen.getByTestId('whiteboard-canvas');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    renderSpy.mockClear();
+
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 75, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+
+    expect(renderSpy).not.toHaveBeenCalled();
+    expect(canvas.style.transform).toContain('scale(1.5)');
+  });
+
+  it('commits the latest pinch position when a finger lifts before the queued frame', () => {
+    const queuedFrames = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+    const renderSpy = vi.spyOn(renderInk, 'renderInkStroke');
+    const controller = createControllerDouble();
+    controller.document = {
+      ...controller.document,
+      strokes: [{
+        id: 'committed',
+        pageId: 'wb-1-page-1',
+        tool: 'pen',
+        color: '#EFECE4',
+        width: 3,
+        opacity: 1,
+        points: [{ x: 0, y: 0 }, { x: 5, y: 5 }],
+      }],
+    };
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    renderSpy.mockClear();
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'touch', clientX: 75, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+    expect(queuedFrames).toHaveLength(1);
+
+    fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch', clientX: 225, clientY: 100 });
+
+    expect(renderSpy).toHaveBeenCalled();
+    expect(renderSpy.mock.calls.every((call) => (
+      call[2].scaleX === 1.5 && call[2].scaleY === 1.5
+    ))).toBe(true);
+    expect(screen.getByTestId('whiteboard-canvas').style.transform).toBe('');
+  });
+
+  // Regression: the drawing contact can be either finger of the pair — a
+  // pinch is usually started by touching a second finger down next to the one
+  // already writing, so it's finger 1, not the newly-landed finger 2, that
+  // owns the in-progress draft. Aborting only `event.pointerId` (finger 2)
+  // left finger 1's draft alive through the whole pinch, committing a stray
+  // dot the moment it lifted.
+  it('does not leave a stray dot from the writing finger when a second finger starts a pinch', () => {
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
+  it('wires undo/redo buttons to the controller', () => {
+    const undo = vi.fn();
+    const redo = vi.fn();
+    render(
+      <WhiteboardEditor
+        inkController={createControllerDouble({ undo, redo, canUndo: true, canRedo: true })}
+      />,
+    );
+    fireEvent.click(screen.getByTitle('Rückgängig'));
+    fireEvent.click(screen.getByTitle('Wiederholen'));
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(redo).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles eraser on and off', () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    const eraserBtn = screen.getByTitle('Radiergummi');
+    expect(eraserBtn).not.toHaveClass('active');
+    fireEvent.click(eraserBtn);
+    expect(eraserBtn.className).toContain('active');
+  });
+
+  it('pen is active by default, second tap opens settings, hand button owns move mode', () => {
+    const setInputMode = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ setInputMode })} />);
+    const penBtn = screen.getByTestId('pen-tool-btn');
+    expect(penBtn).toHaveClass('active');
+    fireEvent.click(penBtn);
+    expect(screen.getByTestId('pen-settings-popover')).toBeInTheDocument();
+    expect(setInputMode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('move-tool-btn'));
+    expect(setInputMode).toHaveBeenCalledWith('move');
+  });
+
+  it("has the document rail: the active color slot opens the color wheel", () => {
+    render(<WhiteboardEditor inkController={createControllerDouble()} />);
+    fireEvent.click(screen.getByTestId("color-slot-0"));
+    expect(screen.getByTestId("color-wheel-popover")).toBeInTheDocument();
+    expect(screen.getByTestId("layers-toggle-btn")).toBeInTheDocument();
+  });
+
+  it('lasso-selects a stroke drawn inside the loop and deletes it on Delete', () => {
+    const removeStrokes = vi.fn();
+    const controller = createControllerDouble({
+      removeStrokes,
+      document: {
+        version: 1, documentId: 'wb-1', pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+        strokes: [{ id: 's1', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 50 }, { x: 60, y: 60 }] }],
+        objects: [], updatedAt: 0,
+      },
+    });
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTestId('lasso-tool-btn'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 200, clientY: 0 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 200 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 200 });
+
+    expect(screen.getByTestId('lasso-selection-layer')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(removeStrokes).toHaveBeenCalledWith(['s1']);
+  });
+
+  describe('with a locked imported file on the board', () => {
+    const lockedDocument = () => ({
+      version: 1, documentId: 'wb-1', pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+      strokes: [{ id: 's1', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 50 }, { x: 60, y: 60 }] }],
+      objects: [{ id: 'pdf', pageId: 'wb-1-page-1', type: 'image', src: 'data:p', x: 0, y: 0, width: 300, height: 300, locked: true }],
+      inkLayerIndex: 1,
+      updatedAt: 0,
+    });
+    const setup = (overrides) => {
+      const controller = createControllerDouble({ document: lockedDocument(), ...overrides });
+      render(<WhiteboardEditor inkController={controller} />);
+      const surface = screen.getByTestId('whiteboard-surface');
+      surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+      return surface;
+    };
+
+    it('writes on it with the mouse instead of selecting it', () => {
+      const commitStroke = vi.fn();
+      setup({ commitStroke });
+      const file = screen.getByTestId('object-container');
+      fireEvent.pointerDown(file, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(file, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      fireEvent.pointerUp(file, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      expect(commitStroke).toHaveBeenCalledTimes(1);
+    });
+
+    it('lays a locked text under the ink like a background and writes through it', () => {
+      const commitStroke = vi.fn();
+      const document = lockedDocument();
+      delete document.inkLayerIndex;
+      document.objects = [{ id: 't', pageId: 'wb-1-page-1', type: 'text', text: 'Titel', x: 0, y: 0, width: 200, height: 40, color: '#fff', fontSize: 20, locked: true }];
+      setup({ document, commitStroke });
+      const text = screen.getByTestId('object-container');
+      const canvas = screen.getByTestId('whiteboard-canvas');
+      expect(text.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      fireEvent.pointerDown(text, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 });
+      fireEvent.pointerMove(text, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      fireEvent.pointerUp(text, { pointerId: 1, pointerType: 'mouse', clientX: 40, clientY: 30 });
+      expect(commitStroke).toHaveBeenCalledTimes(1);
+    });
+
+    it('places a text box on it with the text tool', () => {
+      const addObject = vi.fn();
+      setup({ addObject });
+      fireEvent.click(screen.getByTestId('text-tool-btn'));
+      const file = screen.getByTestId('object-container');
+      fireEvent.pointerDown(file, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+      fireEvent.pointerUp(file, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+      expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'text' }));
+    });
+
+    it('lasso marks the ink on it without taking the file along', () => {
+      const removeStrokes = vi.fn();
+      const removeObjects = vi.fn();
+      const surface = setup({ removeStrokes, removeObjects });
+      fireEvent.click(screen.getByTestId('lasso-tool-btn'));
+      fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 400, clientY: 0 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 400, clientY: 400 });
+      fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 400 });
+      fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 0, clientY: 400 });
+      fireEvent.keyDown(window, { key: 'Delete' });
+      expect(removeStrokes).toHaveBeenCalledWith(['s1']);
+      expect(removeObjects).not.toHaveBeenCalled();
+    });
+  });
+
+  it('places a shape from the design-tools popover as an ink stroke at world coordinates', () => {
+    const addObject = vi.fn();
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ addObject, commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTestId('design-tools-btn'));
+    fireEvent.click(screen.getByTestId('insert-rect'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+
+    // Baked into ink: no object (so no hitbox or handles), just a pen stroke.
+    expect(addObject).not.toHaveBeenCalled();
+    expect(commitStroke).toHaveBeenCalledTimes(1);
+    const stroke = commitStroke.mock.calls[0][0];
+    expect(stroke.tool).toBe('pen');
+    expect(stroke.pageId).toBe('wb-1-page-1');
+    const xs = stroke.points.map((p) => p.x);
+    const ys = stroke.points.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(200);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(150);
+  });
+
+  it('circle-to-search crops the dragged region, hands it up and leaves the board untouched', () => {
+    const addObject = vi.fn();
+    const commitStroke = vi.fn();
+    const onCircleToSearch = vi.fn();
+    const onArmCircleSearchHandled = vi.fn();
+    render(
+      <WhiteboardEditor
+        inkController={createControllerDouble({ addObject, commitStroke })}
+        armCircleSearchRequest={{ id: 'arm-1' }}
+        onArmCircleSearchHandled={onArmCircleSearchHandled}
+        onCircleToSearch={onCircleToSearch}
+      />,
+    );
+    expect(onArmCircleSearchHandled).toHaveBeenCalledWith('arm-1');
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 300, clientY: 250 });
+
+    expect(onCircleToSearch).toHaveBeenCalledTimes(1);
+    expect(onCircleToSearch.mock.calls[0][0]).toMatch(/^data:image\//);
+    expect(addObject).not.toHaveBeenCalled();
+    expect(commitStroke).not.toHaveBeenCalled();
+  });
+
+  it('still places a text box from the text tool as an object', () => {
+    const addObject = vi.fn();
+    const commitStroke = vi.fn();
+    render(<WhiteboardEditor inkController={createControllerDouble({ addObject, commitStroke })} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTestId('text-tool-btn'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+
+    expect(commitStroke).not.toHaveBeenCalled();
+    expect(addObject).toHaveBeenCalledWith(expect.objectContaining({ type: 'text' }));
+  });
+
+  it('bucket-fills inside a closed loop of strokes at the clicked world point', () => {
+    const addObject = vi.fn();
+    const controller = createControllerDouble({
+      addObject,
+      document: {
+        version: 1, documentId: 'wb-1', pages: [{ id: 'wb-1-page-1', kind: 'whiteboard' }],
+        // A small closed square of strokes centered near (100,100) in world space.
+        strokes: [
+          { id: 's1', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 50 }, { x: 150, y: 50 }] },
+          { id: 's2', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 150, y: 50 }, { x: 150, y: 150 }] },
+          { id: 's3', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 150, y: 150 }, { x: 50, y: 150 }] },
+          { id: 's4', pageId: 'wb-1-page-1', tool: 'pen', color: '#fff', width: 3, opacity: 1, points: [{ x: 50, y: 150 }, { x: 50, y: 50 }] },
+        ],
+        objects: [], updatedAt: 0,
+      },
+    });
+    render(<WhiteboardEditor inkController={controller} />);
+    const surface = screen.getByTestId('whiteboard-surface');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 });
+
+    fireEvent.click(screen.getByTestId('bucket-tool-btn'));
+    fireEvent.pointerDown(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(surface, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 });
+
+    expect(addObject).toHaveBeenCalledTimes(1);
+    expect(addObject.mock.calls[0][0].type).toBe('fill');
+  });
+});

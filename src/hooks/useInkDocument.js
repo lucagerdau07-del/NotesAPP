@@ -1,0 +1,441 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createInkDocument,
+  createInkHistory,
+  executeInkCommand,
+  executeInkCommands,
+  redoInkHistory,
+  undoInkHistory,
+} from "../ink/inkDocument.js";
+import { hydrateImages, loadImages } from "../ink/imageStore.js";
+import { browserInkRepository } from "../ink/inkRepository.js";
+import { INPUT_MODES } from "../ink/inputPolicy.js";
+
+const supportedTools = new Set(["pen", "fountain", "pencil", "highlighter"]);
+const defaultPreferences = {
+  tool: "pen",
+  color: "#EFECE4",
+  penWidth: 3,
+  eraserWidth: 15,
+  inputMode: "stylus",
+  eraserMode: "pixel",
+};
+
+function createHistoryForDocument(repository, documentId, initialPageIds, initialPageStyle) {
+  try {
+    return (
+      repository.loadHistory(documentId) ||
+      createInkHistory(createInkDocument(documentId, initialPageIds, initialPageStyle))
+    );
+  } catch {
+    return createInkHistory(createInkDocument(documentId, initialPageIds, initialPageStyle));
+  }
+}
+
+function loadPreferences(repository, documentId, initialColor) {
+  try {
+    const merged = {
+      documentId,
+      ...defaultPreferences,
+      ...repository.loadPreferences(documentId),
+    };
+    // loadPreferences() always synthesizes a full object, so it can't tell
+    // "nothing persisted" from "persisted, and it matches the default".
+    // hasPreferences() can, though - it checks raw storage. Only when nothing
+    // was ever saved does the preset's initialColor get to apply; any
+    // existing document keeps whatever color it saved, even if that happens
+    // to equal the default.
+    const hasSavedPreferences =
+      typeof repository.hasPreferences === "function" &&
+      repository.hasPreferences(documentId);
+    if (initialColor && !hasSavedPreferences) {
+      merged.color = initialColor;
+    }
+    return merged;
+  } catch {
+    return {
+      documentId,
+      ...defaultPreferences,
+      ...(initialColor ? { color: initialColor } : {}),
+    };
+  }
+}
+
+// Saving serializes the whole note, ~20ms on a Galaxy Tab A7 for a 400-stroke
+// page, so the default delay waits for a real pause instead of landing in the
+// gap before the next stroke. Writing that never pauses still saves this often,
+// which bounds what a crash can take with it.
+// ponytail: both numbers are knobs.
+const SAVE_DELAY_MS = 600;
+const SAVE_MAX_WAIT_MS = 5000;
+
+function saveSafely(save) {
+  try {
+    save();
+  } catch {
+    // Persistence failures must not affect the editable in-memory document.
+  }
+}
+
+export default function useInkDocument({
+  documentId,
+  initialPageIds,
+  initialPageStyle,
+  initialColor,
+  repository = browserInkRepository,
+  saveDelay = SAVE_DELAY_MS,
+  onPersisted,
+}) {
+  const activeDocumentId = String(documentId);
+  const documentIdRef = useRef(activeDocumentId);
+  const repositoryRef = useRef(repository);
+  documentIdRef.current = activeDocumentId;
+  repositoryRef.current = repository;
+
+  const [history, setHistory] = useState(() =>
+    createHistoryForDocument(repository, activeDocumentId, initialPageIds, initialPageStyle),
+  );
+  const [preferences, setPreferences] = useState(() =>
+    loadPreferences(repository, activeDocumentId, initialColor),
+  );
+
+  // A render-phase update makes the new note available in this same render,
+  // rather than letting callbacks briefly target the previously displayed note.
+  if (history.present.documentId !== activeDocumentId) {
+    setHistory(
+      createHistoryForDocument(repository, activeDocumentId, initialPageIds, initialPageStyle),
+    );
+  }
+  if (preferences.documentId !== activeDocumentId) {
+    setPreferences(loadPreferences(repository, activeDocumentId, initialColor));
+  }
+
+  // The agent needs the document *after* its own commands land, within the same
+  // tick — React state hasn't flushed yet at that point, so the ref is the
+  // source of truth for batched writes and every one of them chains off it.
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  const applyCommands = useCallback((commands) => {
+    const documentId = documentIdRef.current;
+    const base =
+      historyRef.current.present.documentId === documentId
+        ? historyRef.current
+        : createHistoryForDocument(repositoryRef.current, documentId);
+    const next = executeInkCommands(base, commands);
+    historyRef.current = next;
+    setHistory(next);
+    return next.present;
+  }, []);
+
+  const getDocument = useCallback(() => historyRef.current.present, []);
+
+  const applyCommand = useCallback((command) => {
+    setHistory((current) => {
+      const documentId = documentIdRef.current;
+      const currentRepository = repositoryRef.current;
+      const activeHistory =
+        current.present.documentId === documentId
+          ? current
+          : createHistoryForDocument(currentRepository, documentId);
+      return executeInkCommand(activeHistory, command);
+    });
+  }, []);
+
+  const commitStroke = useCallback(
+    (stroke) => {
+      applyCommand({ type: "commit-stroke", stroke });
+    },
+    [applyCommand],
+  );
+  const removeStrokes = useCallback(
+    (strokeIds) => {
+      applyCommand({ type: "remove-strokes", strokeIds });
+    },
+    [applyCommand],
+  );
+  const clearDocument = useCallback(() => {
+    applyCommand({ type: "clear-document" });
+  }, [applyCommand]);
+  const addObject = useCallback(
+    (object) => {
+      applyCommand({ type: "add-object", object });
+    },
+    [applyCommand],
+  );
+  const updateObject = useCallback(
+    (objectId, changes) => {
+      applyCommand({ type: "update-object", objectId, changes });
+    },
+    [applyCommand],
+  );
+  const removeObjects = useCallback(
+    (objectIds) => {
+      applyCommand({ type: "remove-objects", objectIds });
+    },
+    [applyCommand],
+  );
+  const addPage = useCallback(
+    (page) => {
+      applyCommand({ type: "add-page", page });
+    },
+    [applyCommand],
+  );
+  const removePage = useCallback(
+    (pageId) => {
+      applyCommand({ type: "remove-page", pageId });
+    },
+    [applyCommand],
+  );
+  const reorderPages = useCallback(
+    (pageIds) => {
+      applyCommand({ type: "reorder-pages", pageIds });
+    },
+    [applyCommand],
+  );
+  // One command for the whole lasso selection (strokes + objects together),
+  // so a single drag is a single undo step no matter how many items moved.
+  const transformSelection = useCallback(
+    (strokeIds, objectIds, transform) => {
+      applyCommand({ type: "transform-selection", strokeIds, objectIds, ...transform });
+    },
+    [applyCommand],
+  );
+  const recolorSelection = useCallback(
+    (strokeIds, objectIds, color) => {
+      applyCommand({ type: "recolor-selection", strokeIds, objectIds, color });
+    },
+    [applyCommand],
+  );
+  const reorderLayers = useCallback(
+    (newObjectIds, inkLayerIndex) => {
+      applyCommand({ type: "reorder-layers", newObjectIds, inkLayerIndex });
+    },
+    [applyCommand],
+  );
+  const setLayerLock = useCallback(
+    (target, objectIdOrLocked, maybeLocked) => {
+      const isInk = target === "ink";
+      const objectId = isInk ? undefined : objectIdOrLocked;
+      const locked = isInk ? objectIdOrLocked === true : maybeLocked === true;
+      applyCommand({ type: "set-layer-lock", target, objectId, locked });
+    },
+    [applyCommand],
+  );
+  const setLayerVisibility = useCallback(
+    (target, objectIdOrHidden, maybeHidden) => {
+      const isInk = target === "ink";
+      const objectId = isInk ? undefined : objectIdOrHidden;
+      const hidden = isInk ? objectIdOrHidden === true : maybeHidden === true;
+      applyCommand({ type: "set-layer-visibility", target, objectId, hidden });
+    },
+    [applyCommand],
+  );
+  const shiftLayerOrder = useCallback(
+    (objectId, direction) => {
+      applyCommand({ type: "shift-layer-order", objectId, direction });
+    },
+    [applyCommand],
+  );
+  const undo = useCallback(() => {
+    setHistory((current) =>
+      current.present.documentId === documentIdRef.current
+        ? undoInkHistory(current)
+        : current,
+    );
+  }, []);
+  const redo = useCallback(() => {
+    setHistory((current) =>
+      current.present.documentId === documentIdRef.current
+        ? redoInkHistory(current)
+        : current,
+    );
+  }, []);
+  const updatePreference = useCallback((key, value) => {
+    setPreferences((current) => {
+      const documentId = documentIdRef.current;
+      const activePreferences =
+        current.documentId === documentId
+          ? current
+          : loadPreferences(repositoryRef.current, documentId);
+      return activePreferences[key] === value
+        ? activePreferences
+        : { ...activePreferences, [key]: value };
+    });
+  }, []);
+  const setTool = useCallback(
+    (tool) => {
+      if (!supportedTools.has(tool)) return;
+      updatePreference("tool", tool);
+    },
+    [updatePreference],
+  );
+  const setColor = useCallback(
+    (color) => {
+      if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) return;
+      updatePreference("color", color);
+    },
+    [updatePreference],
+  );
+  const setPenWidth = useCallback(
+    (penWidth) => {
+      if (!Number.isFinite(penWidth) || penWidth <= 0) return;
+      updatePreference("penWidth", penWidth);
+    },
+    [updatePreference],
+  );
+  const setEraserWidth = useCallback(
+    (eraserWidth) => {
+      if (!Number.isFinite(eraserWidth) || eraserWidth <= 0) return;
+      updatePreference("eraserWidth", eraserWidth);
+    },
+    [updatePreference],
+  );
+  const setInputMode = useCallback(
+    (inputMode) => {
+      if (!INPUT_MODES.includes(inputMode)) return;
+      updatePreference("inputMode", inputMode);
+    },
+    [updatePreference],
+  );
+  const setEraserMode = useCallback(
+    (eraserMode) => {
+      if (eraserMode !== "pixel" && eraserMode !== "stroke") return;
+      updatePreference("eraserMode", eraserMode);
+    },
+    [updatePreference],
+  );
+
+  // onPersisted is a fresh closure on every caller render (it usually closes
+  // over the current documentId), so it can't sit in this effect's deps: that
+  // would restart the debounce timer on every unrelated re-render and could
+  // starve the actual save indefinitely. A ref keeps the effect keyed only on
+  // real document changes while still calling the latest callback.
+  const onPersistedRef = useRef(onPersisted);
+  onPersistedRef.current = onPersisted;
+
+  // The history as loaded: while it's still that object nothing was edited, so
+  // an untouched new note must not get indexed in the library.
+  const baselineRef = useRef({ id: activeDocumentId, history });
+  if (baselineRef.current.id !== activeDocumentId) {
+    baselineRef.current = { id: activeDocumentId, history };
+  }
+
+  // A note opened cold has its big images (an opened PDF) as IndexedDB stubs;
+  // fetch them, then swap them into the live history without counting it as an
+  // edit. Undo snapshots get the same swap or undo would bring stubs back.
+  useEffect(() => {
+    let live = true;
+    loadImages(historyRef.current.present).then((fetched) => {
+      const current = historyRef.current;
+      if (!live || !fetched || current.present.documentId !== activeDocumentId) return;
+      const next = {
+        ...current,
+        past: current.past.map(hydrateImages),
+        present: hydrateImages(current.present),
+        future: current.future.map(hydrateImages),
+      };
+      if (current === baselineRef.current.history)
+        baselineRef.current = { id: activeDocumentId, history: next };
+      historyRef.current = next;
+      setHistory(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [activeDocumentId]);
+
+  // When the oldest change not on disk yet was made; null once saved.
+  const unsavedSinceRef = useRef(null);
+  useEffect(() => {
+    const now = Date.now();
+    unsavedSinceRef.current ??= now;
+    const timer = setTimeout(() => {
+      unsavedSinceRef.current = null;
+      saveSafely(() => repository.saveHistory(activeDocumentId, history));
+      if (history !== baselineRef.current.history) onPersistedRef.current?.(activeDocumentId);
+    }, Math.min(saveDelay, unsavedSinceRef.current + SAVE_MAX_WAIT_MS - now));
+    return () => clearTimeout(timer);
+  }, [activeDocumentId, history, repository, saveDelay]);
+
+  // A stroke landing faster than saveDelay apart (continuous handwriting, no
+  // pause) never gets a quiet gap to debounce-save - the above effect just
+  // keeps restarting its timer. Without a flush, closing the note right
+  // after such a run cancels that pending save and silently drops
+  // everything since the last natural pause.
+  const flushPendingSave = useCallback(() => {
+    saveSafely(() => repositoryRef.current.saveHistory(documentIdRef.current, historyRef.current));
+    // The save this stands in for would also have listed a new note in the
+    // library; leaving within the delay must not orphan its first strokes.
+    if (unsavedSinceRef.current !== null && historyRef.current !== baselineRef.current.history)
+      onPersistedRef.current?.(documentIdRef.current);
+    unsavedSinceRef.current = null;
+  }, []);
+
+  // Empty deps: this only runs on true unmount, never on a same-instance
+  // document switch (which must NOT persist stale data under the old key -
+  // see the note-switch tests below).
+  useEffect(() => flushPendingSave, [flushPendingSave]);
+
+  // On a native shell (Capacitor/Android), closing or backgrounding the app
+  // pauses the WebView instead of unmounting React - the component tree
+  // stays alive, so the effect above never fires. The OS can then kill the
+  // process without warning once backgrounded, so this has to flush
+  // synchronously the moment the page is hidden, not on some later timer.
+  useEffect(() => {
+    document.addEventListener("visibilitychange", flushPendingSave);
+    globalThis.addEventListener?.("pagehide", flushPendingSave);
+    return () => {
+      document.removeEventListener("visibilitychange", flushPendingSave);
+      globalThis.removeEventListener?.("pagehide", flushPendingSave);
+    };
+  }, [flushPendingSave]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const { documentId, ...values } = preferences;
+      saveSafely(() => repository.savePreferences(documentId, values));
+    }, saveDelay);
+    return () => clearTimeout(timer);
+  }, [activeDocumentId, preferences, repository, saveDelay]);
+
+  return {
+    document: history.present,
+    applyCommands,
+    getDocument,
+    commitStroke,
+    removeStrokes,
+    clearDocument,
+    addObject,
+    updateObject,
+    removeObjects,
+    recolorSelection,
+    reorderLayers,
+    setLayerLock,
+    setLayerVisibility,
+    shiftLayerOrder,
+    inkLayerIndex: history.present.inkLayerIndex,
+    inkLayerHidden: history.present.inkLayerHidden === true,
+    inkLayerLocked: history.present.inkLayerLocked === true,
+    addPage,
+    removePage,
+    reorderPages,
+    transformSelection,
+    undo,
+    redo,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+    tool: preferences.tool,
+    setTool,
+    color: preferences.color,
+    setColor,
+    penWidth: preferences.penWidth,
+    setPenWidth,
+    eraserWidth: preferences.eraserWidth,
+    setEraserWidth,
+    inputMode: preferences.inputMode,
+    setInputMode,
+    eraserMode: preferences.eraserMode,
+    setEraserMode,
+  };
+}

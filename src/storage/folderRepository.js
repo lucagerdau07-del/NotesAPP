@@ -1,0 +1,107 @@
+const STORAGE_KEY = "folders.folders.v1";
+
+// Seeded once on first run so existing notes (subject: "Mathe", ...) keep
+// matching by id/name without a migration - see Library.jsx's matchesFolder.
+const DEFAULT_FOLDERS = [
+  { id: "mathe", name: "Mathe" },
+  { id: "chemie", name: "Chemie" },
+  { id: "kunst", name: "Kunst" },
+  { id: "pgw", name: "PGW" },
+  { id: "philosophie", name: "Philosophie" },
+  { id: "englisch", name: "Englisch" },
+  { id: "spanisch", name: "Spanisch" },
+].map((f) => ({ ...f, color: null, icon: null, createdAt: 0 }));
+
+export function createFolderRepository(storage, { now = Date.now } = {}) {
+  let sequence = 0;
+  const nextId = () =>
+    globalThis.crypto?.randomUUID?.() || `folder-${now()}-${sequence++}`;
+
+  const write = (folders) => {
+    try {
+      storage?.setItem?.(STORAGE_KEY, JSON.stringify({ version: 1, folders }));
+    } catch {
+      // Persistence failures must not block the in-memory list.
+    }
+    return folders;
+  };
+
+  const read = () => {
+    try {
+      const parsed = JSON.parse(storage?.getItem?.(STORAGE_KEY) || "null");
+      if (Array.isArray(parsed?.folders)) return parsed.folders;
+    } catch {
+      // fall through to seed defaults
+    }
+    return write(DEFAULT_FOLDERS);
+  };
+
+  return {
+    listFolders() {
+      return read();
+    },
+
+    createFolder({ name, color, icon, image, parentId }) {
+      const folder = {
+        id: nextId(),
+        name: String(name || "").trim(),
+        color: color || null,
+        icon: icon || null,
+        image: image || null,
+        parentId: parentId || null,
+        createdAt: now(),
+      };
+      write([...read(), folder]);
+      return folder;
+    },
+
+    renameFolder(id, { name, color, icon, image }) {
+      const key = String(id);
+      const folders = read().map((f) =>
+        f.id === key
+          ? {
+              ...f,
+              ...(name !== undefined ? { name: String(name).trim() } : {}),
+              ...(color !== undefined ? { color } : {}),
+              ...(icon !== undefined ? { icon } : {}),
+              ...(image !== undefined ? { image } : {}),
+            }
+          : f,
+      );
+      write(folders);
+      return folders.find((f) => f.id === key);
+    },
+
+    removeFolder(id) {
+      const folders = read();
+      const toRemove = folderWithDescendants(folders, id);
+      write(folders.filter((f) => !toRemove.has(f.id)));
+      return [...toRemove];
+    },
+  };
+}
+
+// A note belongs to a folder when its subject string matches the folder's id
+// or name (see Library.jsx's matchesFolder, which says the same).
+export function matchesFolder(note, folder) {
+  const subject = String(note?.subject || "").toLowerCase();
+  return !!subject && (subject === folder.name.toLowerCase() || subject === folder.id.toLowerCase());
+}
+
+// A folder's id plus the ids of every folder nested below it, at any depth.
+export function folderWithDescendants(folders, id) {
+  const ids = new Set([String(id)]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of folders) {
+      if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+        ids.add(f.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
+}
+
+export const browserFolderRepository = createFolderRepository(globalThis.localStorage);

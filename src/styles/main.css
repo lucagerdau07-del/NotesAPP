@@ -1,0 +1,6558 @@
+:root {
+  color-scheme: light;
+  --off-white: #F9F8F5;
+  --text-color: #2C2825;
+}
+
+@font-face {
+  font-family: 'MyHandwriting';
+  src: url('/fonts/handwriting.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Basic CSS reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: #FFFFFF;
+  background: #08080A;
+  min-height: 100vh;
+}
+
+.split-layout {
+  display: flex;
+  /* Not 100vw: inside a split-screen pane that is wider than the pane and
+     lets the pane scroll sideways. */
+  width: 100%;
+  height: 100vh;
+  gap: 16px;
+  padding: 16px 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: transparent;
+}
+
+.split-layout.full-mode .document-view {
+  width: 100%;
+}
+
+.document-view {
+  width: 75%;
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.62) 0%, rgba(16, 16, 20, 0.78) 40%, rgba(8, 8, 12, 0.90) 100%);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  border-radius: 24px;
+  box-shadow: 0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.writing-zone {
+  width: 25%;
+  background-color: rgba(10, 9, 13, 0.55);
+  backdrop-filter: blur(40px) saturate(1.7);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7);
+  background-image: radial-gradient(rgba(255,255,255,.1) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  border-radius: 24px;
+  box-shadow: 0 20px 42px -22px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08);
+  overflow: hidden;
+}
+
+.tab-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  background-color: var(--off-white);
+  border-radius: 999px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  gap: 8px;
+  z-index: 100;
+}
+
+.tab-bar button {
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 24px;
+  border-radius: 999px;
+  color: var(--text-color);
+  transition: background-color 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.tab-bar button.active {
+  background-color: #e5e3db;
+  font-weight: 600;
+}
+
+.writing-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  background-color: var(--off-white);
+  border-radius: 999px;
+  padding: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  gap: 8px;
+  z-index: 10;
+  align-items: center;
+}
+
+.color-btn-wrapper {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.color-btn-wrapper.active {
+  transform: scale(1.15);
+}
+
+.color-btn-wrapper.active .color-btn {
+  border-color: #A67C52;
+}
+
+.color-picker-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background-color: var(--off-white);
+  padding: 12px;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+}
+
+
+.color-btn {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 32px;
+  background-color: #d8d4c9;
+  margin: 0 4px;
+}
+
+.tool-btn {
+  border: none;
+  background: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-color);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tool-btn.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.tool-btn.active {
+  background-color: #e5e3db;
+  font-weight: 600;
+}
+
+.tool-btn.danger {
+  color: #D32F2F;
+}
+
+.tool-btn.danger:hover {
+  background-color: #ffebee;
+}
+
+.master-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.focus-box {
+  position: absolute;
+  z-index: 10;
+  cursor: grab;
+  border: 2px dashed rgba(0, 0, 0, 0.3);
+  background-color: rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.focus-box:active {
+  cursor: grabbing;
+}
+
+.lib-card, .lib-newnote {
+  transition: transform 0.15s ease;
+}
+.lib-card:hover, .lib-newnote:hover {
+  transform: translateY(-3px);
+}
+.lib-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #F1EEE7 !important;
+  transform: rotate(25deg);
+}
+.lib-plan-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #F1EEE7 !important;
+}
+.lib-plan-btn:focus-visible,
+.lib-settings-btn:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: 2px;
+}
+.lib-agent-done:hover {
+  background: rgba(255,255,255,.07);
+}
+@keyframes lib-agent-pulse {
+  0%, 100% { opacity: .35; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.35); }
+}
+.lib-agent-dot {
+  animation: lib-agent-pulse 2.2s ease-in-out infinite;
+}
+
+/* Masonry Board (Image 2 style) */
+/* Column count follows the space the grid really gets (the docked overview
+   column and the window/pane width both eat into it), not the viewport. */
+.lib-masonry-grid {
+  column-width: 320px;
+  column-gap: 16px;
+  width: 100%;
+}
+
+.lib-masonry-grid .lib-card {
+  break-inside: avoid;
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* List View */
+.lib-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.lib-list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  background: #0E0D13;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.95);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lib-list-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateX(4px);
+}
+
+.lib-list-title {
+  font: 700 14px 'Bricolage Grotesque', sans-serif;
+  color: #FFFFFF;
+  white-space: nowrap;
+}
+
+.lib-list-body {
+  flex: 1;
+  font: 400 12px 'Manrope', sans-serif;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lib-list-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 11px 'Manrope', sans-serif;
+  color: #FFFFFF;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Thematic Subject Decor & Hero Banners */
+.lib-thematic-banner {
+  position: relative;
+  width: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(30px);
+  animation: bannerFadeSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bannerFadeSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+
+
+.lib-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font: 600 12px 'Manrope', sans-serif;
+  color: #F1EEE7;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lib-filter-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Card Action Hover Buttons on Inspect Images */
+.lib-inspect-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(30, 28, 35, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lib-inspect-action-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #17161A;
+  transform: scale(1.1);
+}
+
+/* ==========================================================================
+   Liquid Glass & Fluted Reeded Glass Dark Background Theme (Image 1 Style)
+   ========================================================================== */
+
+/* Fluted Reeded Glass Textured Dark Background */
+/* ==========================================================================
+   Riffelglas-Hintergrund in drei Ebenen:
+   -3 Lichtfeld (stark weichgezeichnet)  ->  -2 breite Lamellen (weich)
+   ->  -1 Mikroraster (knackscharf, traegt die Aufloesung)
+   Alle Perioden sind teilerfremd gewaehlt, dadurch ueberlagern sie sich
+   ueber die ganze Flaeche unregelmaessig statt in einem sauberen Raster.
+   ========================================================================== */
+
+/* Lichtfeld: liegt ganz hinten und wird echt weichgezeichnet, damit das
+   Licht diffus im Glaskoerper steht statt als harte Verlaufskante. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -14%;
+  z-index: -2;
+  background-color: #0A0A0D;
+  background-image:
+    /* Kern-Vignette haelt die Mitte tiefschwarz */
+    radial-gradient(ellipse 40% 38% at 47% 53%, rgba(0, 0, 0, 0.42), transparent 78%),
+    /* Lichtbaeder an den Raendern */
+    radial-gradient(ellipse 34% 58% at 0% 44%, rgba(244, 244, 252, 1), transparent 70%),
+    radial-gradient(ellipse 42% 34% at 84% 0%, rgba(234, 234, 246, 0.96), transparent 70%),
+    radial-gradient(ellipse 30% 38% at 100% 32%, rgba(222, 222, 238, 0.88), transparent 70%),
+    radial-gradient(ellipse 42% 32% at 10% 100%, rgba(214, 214, 232, 0.84), transparent 72%),
+    radial-gradient(ellipse 32% 28% at 98% 100%, rgba(204, 204, 224, 0.72), transparent 70%),
+    /* Schwacher Grundschleier, damit die Lamellen auch abseits der Blooms Licht haben */
+    radial-gradient(ellipse 104% 104% at 48% 50%, transparent 20%, rgba(196, 196, 212, 0.86) 100%);
+  /* ponytail: statischer Vollbild-Blur, laeuft einmal auf der GPU. Wenn ein
+     schwaeheres Tablet ruckelt, Radius senken statt Layer entfernen. */
+  filter: blur(44px);
+  pointer-events: none;
+}
+/* Riffelglas-Lamellen: breite, weiche Zylinderlinsen im Overlay-Modus.
+   Sie brechen nur vorhandenes Licht, deshalb bleibt Schwarz schwarz. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -4px;
+  z-index: -1;
+  background-image:
+    /* 1. Waagerechte Lamellen — flacher, damit die Senkrechten fuehren */
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.30) 0px,
+      rgba(0, 0, 0, 0.10) 3.5px,
+      rgba(255, 255, 255, 0.13) 11px,
+      rgba(255, 255, 255, 0.04) 17px,
+      rgba(0, 0, 0, 0.12) 23px,
+      rgba(0, 0, 0, 0.30) 29px
+    ),
+
+    /* 2. Zweite senkrechte Lage, leicht verdreht und anders geteilt —
+       erzeugt die breite Moire-Schwebung ueber das ganze Bild */
+    repeating-linear-gradient(84.1deg,
+      rgba(0, 0, 0, 0.30) 0px,
+      rgba(0, 0, 0, 0.10) 2px,
+      rgba(255, 255, 255, 0.19) 6.5px,
+      rgba(255, 255, 255, 0.06) 10px,
+      rgba(0, 0, 0, 0.14) 14px,
+      rgba(0, 0, 0, 0.30) 16.9px
+    ),
+    /* 3. Senkrechte Hauptlamellen — jede Rippe eine Zylinderlinse:
+       Naht dunkel, Mitte Glanzkante, Rand wieder dunkel */
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, 0.62) 0px,
+      rgba(0, 0, 0, 0.30) 1.5px,
+      rgba(255, 255, 255, 0.10) 4px,
+      rgba(255, 255, 255, 0.44) 6.5px,
+      rgba(255, 255, 255, 0.14) 9px,
+      rgba(0, 0, 0, 0.22) 11.5px,
+      rgba(0, 0, 0, 0.48) 14px,
+      rgba(0, 0, 0, 0.62) 16px
+    );
+  /* Sub-Pixel-Blur nimmt den Lamellen die Druckraster-Haerte */
+  filter: blur(0.9px);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Generated reeded-glass plate. The restrained overlays keep white UI copy
+   legible while preserving the real refraction captured in the raster asset. */
+body::before {
+  inset: 0;
+  background-color: #08080A;
+  background-image:
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    linear-gradient(rgba(138, 212, 255, 0.08), rgba(138, 212, 255, 0.08)),
+    linear-gradient(180deg, rgba(4, 4, 7, 0.20), rgba(4, 4, 7, 0.34)),
+    url('../assets/reeded-glass-background.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: none;
+}
+
+body::after {
+  inset: 0;
+  background:
+    radial-gradient(ellipse 58% 54% at 50% 48%, transparent 30%, rgba(0, 0, 0, 0.24) 100%);
+  filter: none;
+  mix-blend-mode: normal;
+}
+
+
+
+
+/* Liquid Glass Capsule / Pill (Direct match for Image 1 center bar) */
+.liquid-glass-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 20px 48px -10px rgba(0, 0, 0, 0.95),
+    0 4px 16px rgba(0, 0, 0, 0.6);
+  color: #FFFFFF;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-pill:hover, .liquid-glass-pill:has(button:focus-visible) {
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 
+    inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 26px 56px -12px rgba(0, 0, 0, 0.98),
+    0 6px 22px rgba(0, 0, 0, 0.7);
+  transform: translateY(-1px);
+}
+
+/* Liquid Glass Circle (Image 1 close/action pod) */
+.liquid-glass-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(18, 18, 22, 0.82) 48%, rgba(8, 8, 12, 0.92) 100%);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 20px 48px -10px rgba(0, 0, 0, 0.95);
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+
+.liquid-glass-circle:hover {
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: 
+    inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 24px 54px -10px rgba(0, 0, 0, 0.98);
+  transform: scale(1.06);
+}
+
+/* Liquid Glass Panels (Sidebar, Agent, Banners) */
+.lib-glass {
+  position: relative;
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.68) 0%, rgba(16, 16, 20, 0.8) 35%, rgba(8, 8, 12, 0.92) 100%) !important;
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 28px 60px -20px rgba(0, 0, 0, 0.98) !important;
+}
+
+.lib-glass::before {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ==========================================================================
+   Liquid Glass WebGL Control Surfaces (Task 3)
+   The five liquid-glass controls (nav rail, Ask AI pill, reset circle,
+   view/sort pill, agent circle) start out on the CSS glass above — that
+   stays as the pre-init/error fallback. Once useLiquidGlass finishes
+   initializing, the root flips data-liquid-glass-state to "enhanced" and
+   each control gets a WebGL canvas injected as its first child; the CSS
+   fallback surface then steps aside so the canvas shows through.
+   ========================================================================== */
+
+/* Real DOM copy of the fixed body reeded-glass background, scoped inside the
+   liquid-glass root so the WebGL capture pass has something local to sample
+   ("capturable" — body::before is a fixed pseudo-element and isn't captured
+   the same way). Purely decorative, sits behind every control.
+
+   The plate itself is an <img> (.liquid-glass-scene-image) placed right before
+   .liquid-glass-scene, which only carries the overlays. Liquid Glass draws an
+   <img> root child straight onto its scene canvas; as a url() background the
+   2 MB PNG went through html-to-image instead — base64-inlined into a 2.6 MB
+   SVG and decoded again, ~1.5s on a Galaxy Tab A7 during which the controls
+   showed the dark CSS fallback instead of glass. */
+.liquid-glass-scene-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.liquid-glass-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Black fog: off-centre blobs with unequal size, strength and falloff so the
+     haze reads as drifting smoke, not a vignette. Pure gradients, no extra
+     layers for the glass capture to decode. */
+  background-image:
+    radial-gradient(ellipse 62% 46% at 18% 30%, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.55) 45%, transparent 78%),
+    radial-gradient(ellipse 42% 64% at 63% 78%, rgba(0, 0, 0, 0.88), rgba(0, 0, 0, 0.38) 52%, transparent 82%),
+    radial-gradient(ellipse 34% 28% at 86% 40%, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.2) 55%, transparent 76%),
+    radial-gradient(ellipse 78% 32% at 38% 8%, rgba(0, 0, 0, 0.6), transparent 76%),
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    linear-gradient(rgba(138, 212, 255, 0.08), rgba(138, 212, 255, 0.08)),
+    linear-gradient(180deg, rgba(4, 4, 7, 0.20), rgba(4, 4, 7, 0.34));
+}
+
+/* The Library positions its own content above the scene explicitly; the
+   Settings shell lays its children out in normal flow, where a z-index:0
+   scene would paint over them. */
+.settings-shell > .liquid-glass-scene-image,
+.settings-shell > .liquid-glass-scene {
+  z-index: -1;
+}
+
+.liquid-glass-scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 58% 54% at 50% 48%, transparent 30%, rgba(0, 0, 0, 0.24) 100%);
+}
+
+/* The library injects the shader canvas as a z-index:-1 child, and a negative
+   z-index child paints *after* its parent's own background — so the canvas sits
+   on top of the CSS glass fallback, not behind it. Its first shader renders run
+   while the scene it samples is still empty, which puts a flat near-black panel
+   over the fallback: the black step between "fake" CSS glass and real glass on
+   load. Measured on reload — canvas opaque, mean RGB 10, still in "loading".
+   Keep it out of the paint until the root reports the scene captured. */
+[data-liquid-glass-state]:not([data-liquid-glass-state="enhanced"])
+  > [data-liquid-glass-control] > canvas {
+  visibility: hidden;
+}
+
+/* Enhanced state: the WebGL canvas renders the refraction, so the CSS glass
+   fallback (gradient fill, blur, border, shadow) steps aside for the five
+   controls. The library injects the canvas as z-index:-1 inside the control,
+   so unrelated content already paints above it in normal DOM order — focus
+   outlines and inner button "active" states need no extra stacking rules. */
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::before {
+  display: none;
+}
+
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] > canvas {
+  pointer-events: none;
+}
+
+/* The refraction shader has no idea what's behind it — over a light page
+   (a whiteboard's white paper, a light PDF) it refracts pale pixels and the
+   white icon/text on top nearly vanishes. Real glass never actually goes
+   fully clear either: Apple's material keeps a constant dark fill under the
+   refraction so content stays legible over any background, light or dark.
+   In the document view with a light or near-white background, keep this scrim
+   so controls remain legible; everywhere else (Library, Settings, dark notes),
+   the authentic crystal-clear Liquid Glass shines through. */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > [data-liquid-glass-control]::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  /* 0.82 matches the CSS fallback gradient's own near-black end (line 515)
+     so enhanced and fallback read the same over light backgrounds. */
+  background: rgba(10, 10, 14, 0.82);
+  pointer-events: none;
+}
+
+/* A flat fill hides the reeded texture the rail gets for free: the rail sits
+   over .liquid-glass-scene and refracts it, while the title/action pills sit
+   over the full-bleed white page and refract nothing but paper. Carry the
+   scene's own reeded image in their scrim instead of a flat black, so all
+   three controls read as the same material. background-attachment: fixed
+   locks it to the viewport, which is where .liquid-glass-scene (inset 0 on a
+   100vw/100vh shell) has it too, so the ribbing lines up across controls. */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-title-pill::after,
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-actions-pill::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-title-pill::after,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-actions-pill::after {
+  background-color: #08080A;
+  background-image:
+    linear-gradient(rgba(8, 8, 12, 0.74), rgba(8, 8, 12, 0.74)),
+    radial-gradient(ellipse 76% 64% at 82% 12%, rgba(138, 212, 255, 0.18), transparent 66%),
+    radial-gradient(ellipse 64% 72% at 4% 92%, rgba(138, 212, 255, 0.11), transparent 70%),
+    url('../assets/reeded-glass-background.png');
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/* A light whiteboard should read like the dark document view: smooth dark
+   glass with its rim, not the reeded scrim, which hides the refraction
+   entirely. Darken the refraction itself instead, so white paper behind the
+   controls comes out as dark glass and the white icons keep their contrast. */
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]::after {
+  content: none;
+}
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > [data-liquid-glass-control] > canvas {
+  filter: brightness(0.12);
+}
+
+/* Glass catches the light along its rim. The shader draws that rim, but the
+   scrim over light documents and the darkened whiteboard canvas both swallow
+   it, so the editor's rail and pills carry their own on top: a 1px ring,
+   bright where the light hits (top-left, mirrored bottom-right), nearly clear
+   along the sides. Overrides the fallback's top shine line (.editor-sidebar::before). */
+[data-liquid-glass-state="enhanced"] > :is(.editor-sidebar, .editor-title-pill, .editor-actions-pill)::before {
+  display: block;
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6),
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    rgba(255, 255, 255, 0.35)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* The WebGL canvas replaces the CSS glass's own border/shadow as the focus
+   affordance (see .liquid-glass-pill:focus-within above), so give every
+   enhanced control an explicit focus ring back. */
+[data-liquid-glass-state="enhanced"] > [data-liquid-glass-control]:has(button:focus-visible) {
+  outline: 2px solid var(--subj-accent, #FFFFFF);
+  outline-offset: 2px;
+}
+/* Settings/editor controls have no --subj-accent (Library-only) and their own
+   buttons already show a clear active/hover state, so skip the ring here. */
+[data-liquid-glass-state="enhanced"] > .settings-topbar:focus-within,
+[data-liquid-glass-state="enhanced"] > .settings-sidebar:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-title-pill:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-actions-pill:focus-within,
+[data-liquid-glass-state="enhanced"] > .editor-sidebar:focus-within {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-liquid-glass-control],
+  [data-liquid-glass-control] * {
+    transition: none !important;
+    animation: none !important;
+  }
+  [data-liquid-glass-control]:hover,
+  [data-liquid-glass-control]:focus-within {
+    transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   Liquid Glass Cards & Subject Tiles (Fächer & Datei-Karten)
+   ========================================================================== */
+
+.lib-card {
+  position: relative;
+  background: linear-gradient(165deg, rgba(34, 34, 40, 0.72) 0%, rgba(14, 14, 18, 0.85) 50%, rgba(8, 8, 12, 0.95) 100%) !important;
+  backdrop-filter: blur(36px) saturate(1.7) brightness(1.05) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(1.7) brightness(1.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 20px;
+  box-shadow: 
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.85),
+    0 22px 48px -20px rgba(0, 0, 0, 0.95) !important;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease !important;
+  overflow: hidden;
+}
+
+.lib-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.lib-card:hover {
+  transform: translateY(-4px) scale(1.01) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  box-shadow: 
+    inset 0 2px 1.5px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 30px 62px -16px rgba(0, 0, 0, 0.98) !important;
+}
+
+
+
+
+
+
+
+
+/* Audio Waveform Live Pulse Animation (Image 1 Audio Waves) */
+@keyframes wavePulse {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.7; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+.liquid-wave-bar {
+  display: inline-block;
+  width: 2.5px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  animation: wavePulse 1.2s ease-in-out infinite;
+}
+.liquid-wave-bar:nth-child(1) { height: 10px; animation-delay: 0s; }
+.liquid-wave-bar:nth-child(2) { height: 16px; animation-delay: 0.2s; }
+.liquid-wave-bar:nth-child(3) { height: 12px; animation-delay: 0.4s; }
+.liquid-wave-bar:nth-child(4) { height: 18px; animation-delay: 0.15s; }
+.liquid-wave-bar:nth-child(5) { height: 8px; animation-delay: 0.35s; }
+
+.editor-shell {
+  position: relative;
+  /* Fills its containing pane - a single .workspace-pane at full window
+     size when only one document is open, a narrower one in split view. */
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.workspace {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: #050506;
+  overflow: hidden;
+}
+
+.workspace-pane {
+  position: relative;
+  height: 100%;
+  min-width: 280px;
+  overflow: hidden;
+}
+
+.workspace-divider {
+  flex: 0 0 7px;
+  position: relative;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.05);
+  touch-action: none;
+  z-index: 250;
+}
+
+.workspace-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 46px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.26);
+  transition: background 0.15s ease;
+}
+
+.workspace-divider:hover::after,
+.workspace-divider.is-resizing::after {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.split-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: rgba(4, 4, 6, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-picker {
+  width: min(420px, 88vw);
+  max-height: min(560px, 82vh);
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.96) 0%, rgba(18, 18, 22, 0.98) 48%, rgba(8, 8, 12, 0.99) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 30px 70px -14px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+}
+
+.split-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 10px;
+  font: 700 14px "Bricolage Grotesque", sans-serif;
+  color: #FFFFFF;
+}
+
+.split-picker-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.split-picker-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.split-picker-search {
+  margin: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.split-picker-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #FFFFFF;
+  font: 500 13px Manrope, sans-serif;
+}
+
+.split-picker-search input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.split-picker-list {
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+
+.split-picker-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font: 500 12.5px Manrope, sans-serif;
+}
+
+.split-picker-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: #FFFFFF;
+  cursor: pointer;
+  text-align: left;
+}
+
+.split-picker-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.split-picker-row-title {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px Manrope, sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-picker-row-subject {
+  font: 500 11px ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.split-picker-row-when {
+  font: 500 10.5px ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+
+.editor-title-pill, .editor-actions-pill {
+  position: absolute;
+  top: 20px;
+  height: 46px;
+  border-radius: 23px;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.94) 0%, rgba(18, 18, 22, 0.96) 48%, rgba(8, 8, 12, 0.98) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 20px 48px -10px rgba(0, 0, 0, 0.95),
+    0 4px 16px rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  color: #FFFFFF;
+  font-family: Manrope, sans-serif;
+}
+
+.editor-title-pill {
+  left: 104px;
+  transition: left 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0 18px;
+  gap: 11px;
+}
+
+.editor-actions-pill {
+  right: 26px;
+  padding: 0 8px;
+  gap: 3px;
+}
+
+.editor-actions-pill .rail-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+}
+
+.editor-title {
+  font: 700 14px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -.02em;
+}
+
+.editor-title-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  padding: 0;
+  min-width: 0;
+  max-width: 40vw;
+}
+
+.editor-back-btn {
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  border: none;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #FFFFFF;
+  cursor: pointer;
+}
+
+.editor-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.editor-subject {
+  font: 400 11.5px Manrope, sans-serif;
+  color: rgba(233,230,223,.5);
+  white-space: nowrap;
+  /* The page counter changes while scrolling. With proportional digits the
+     pill grew or shrank by a pixel at nearly every page ("1/12" 311px, "2/12"
+     314px), which the glass reads as a resize and answers by re-capturing the
+     whole document behind it: ~800ms of frozen main thread on a Galaxy Tab A7,
+     once per page scrolled past. Fixed-width digits keep the pill still. */
+  font-variant-numeric: tabular-nums;
+  min-width: 5ch;
+}
+
+.editor-shell.immersive .editor-title-pill,
+.editor-shell.immersive .editor-actions-pill,
+.editor-shell.immersive .editor-sidebar {
+  display: none;
+}
+
+.immersive-exit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.94) 0%, rgba(18, 18, 22, 0.96) 48%, rgba(8, 8, 12, 0.98) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 300;
+}
+
+/* Split-screen shows one tool rail at a time - only the focused pane's, so
+   drawing tools, color swatches and the agent/browser/pages/calculator
+   panels aren't duplicated in every open document. Kept mounted (not
+   unmounted) so its portal target for the document's own toolbar stays
+   valid; unfocused panes just fall back to their title pill sitting where
+   the rail would have been. */
+.editor-sidebar.rail-hidden {
+  display: none;
+}
+
+.editor-title-pill.no-rail {
+  left: 24px;
+}
+
+.editor-body {
+  position: absolute;
+  inset: 0;
+}
+.editor-body .split-layout {
+  height: 100vh;
+  padding: 0;
+  gap: 0;
+}
+.editor-body .document-view {
+  border-radius: 0;
+  background: radial-gradient(ellipse 120% 90% at 85% 100%, rgba(40, 58, 92, 0.55) 0%, rgba(20, 26, 38, 0.4) 35%, rgba(10, 12, 18, 0.9) 70%, rgba(6, 7, 10, 0.98) 100%);
+  box-shadow: none;
+  /* Ohne dieses Reset blurrt die Vollflächen-Ansicht die Glastextur dahinter weg. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.editor-body .writing-zone {
+  margin: 78px 26px 0 0;
+  border-radius: 22px 22px 0 0;
+}
+
+.editor-sidebar {
+  position: absolute;
+  left: 8px;
+  top: 12px;
+  bottom: 12px;
+  width: 72px;
+  border-radius: 30px;
+  background: linear-gradient(170deg, rgba(38,38,44,.68) 0%, rgba(16,16,20,.8) 35%, rgba(8,8,12,.92) 100%);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255,255,255,.45),
+    inset 0 -1.5px 2px 0 rgba(0,0,0,.9),
+    0 28px 60px -20px rgba(0,0,0,.98);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+  /* No width transition: every frame of it re-renders the rail's WebGL glass
+     (~200ms each on a Galaxy Tab A7, so the "animation" showed ~4 frames), and
+     while shrinking it still overlapped the title pill, which triggered a
+     ~1s html-to-image capture of the whole rail on every close. */
+  /* Sibling of .editor-body in the shell, so it needs the same stacking level
+     as the pills to stay clickable above the full-bleed editor body. */
+  z-index: 200;
+}
+
+/* One glass control grown wider — the tool column keeps a fixed width so
+   the buttons never move, the chat fills the rest. */
+.editor-sidebar.panel-open {
+  width: min(clamp(520px, 42vw, 800px), calc(100vw - 24px));
+  /* The shell is a window or a split pane - never open wider than it is. */
+  max-width: calc(100% - 16px);
+  border-radius: 30px;
+}
+
+/* The assistant cuts the glass down to an L (rail + input band, see
+   lShapePath in AiChatPanel.jsx) so its messages float over the document.
+   The canvas is clipped to the L; the box's own CSS glass and rims step aside
+   for .rail-chat-shape, which draws the fill (fallback / light-doc scrim) and
+   the rim along the L instead of the rectangle. */
+.editor-sidebar[data-mode="agent"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.editor-sidebar[data-mode="agent"]::before,
+.editor-sidebar[data-mode="agent"]::after {
+  content: none !important;
+}
+
+.editor-sidebar[data-mode="agent"] > canvas {
+  clip-path: var(--agent-clip, none);
+}
+
+.editor-sidebar[data-mode="agent"] .rail-resize-handle {
+  top: auto;
+  height: var(--agent-band, 100%);
+}
+
+.editor-sidebar.browser-fullscreen {
+  width: calc(100% - 16px);
+}
+
+.editor-sidebar.is-resizing {
+  user-select: none;
+}
+
+.rail-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  z-index: 260;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rail-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 3px;
+  height: 46px;
+  transform: translateY(-50%);
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.34);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.editor-sidebar:hover .rail-resize-handle::after,
+.editor-sidebar.is-resizing .rail-resize-handle::after,
+.rail-resize-handle:focus-visible::after {
+  opacity: 1;
+}
+
+.rail-btn.confirm {
+  background: rgba(216, 97, 91, 0.25);
+  color: #d8615b;
+}
+
+.rail-layers-slot {
+  display: contents;
+}
+
+.rail-layers-slot[hidden] {
+  display: none;
+}
+
+.rail-tools {
+  flex: 0 0 72px;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  /* Every rail item is 36px tall and never shrinks, so one 4px gap is the
+     pitch between all of them; 18 buttons + 3 dividers fit an 800px tablet. */
+  gap: 3px;
+  /* Item size shrinks with the viewport so all 18 buttons + 3 dividers always
+     fit without scrolling: (100vh - rail margins/padding - dividers - gaps) / 18. */
+  --rail-item: clamp(24px, calc((100vh - 125px) / 18), 36px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+/* The open assistant shows the note title in its own header instead — the
+   floating title pill would otherwise float disconnected next to it. */
+.editor-title-pill.panel-open {
+  display: none;
+}
+
+.rail-ai-btn {
+  color: #F1EEE7;
+}
+
+.rail-ai-btn.active {
+  background: linear-gradient(140deg, #FFFFFF, #6B6B72);
+  color: #15151a;
+}
+
+/* Plain flex child of the single glass control. Must stay unpositioned and
+   free of opacity/transform: .rail-chat-shape positions against the sidebar
+   and has to share its stacking context to sit between canvas and content. */
+.rail-chat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 12px;
+  color: #F1EEE7;
+  font-family: Manrope, sans-serif;
+}
+
+.rail-chat-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.rail-chat-shape path {
+  fill: url(#rail-chat-shape-fill);
+  stroke: url(#rail-chat-shape-rim);
+  stroke-width: 1;
+}
+
+[data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: none;
+}
+
+/* Same scrim the rectangle gets over light pages (see [data-liquid-glass-control]::after). */
+[data-liquid-glass-state="enhanced"][data-document-theme="light"] > .editor-sidebar .rail-chat-shape path,
+.editor-shell.light-doc[data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: rgba(10, 10, 14, 0.82);
+}
+
+.editor-shell.light-doc[data-whiteboard][data-liquid-glass-state="enhanced"] > .editor-sidebar .rail-chat-shape path {
+  fill: none;
+}
+
+/* --- Floating chat ------------------------------------------------------
+   Everything above the band sits straight on the document, so each piece
+   carries its own small glass: dark cards for the assistant, a light bubble
+   with a tail for the user. */
+.rail-chat {
+  --chat-glass: rgba(18, 18, 23, 0.74);
+  --chat-glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  --chat-glass-drop: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+  /* Cards that change while you watch (streamed text, step list, the ticking
+     status) skip backdrop blur: re-blurring the page behind them on every
+     change was the stutter on a Galaxy Tab A7. A denser fill stands in. */
+  --chat-card: rgba(20, 20, 25, 0.92);
+  --chat-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --chat-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Floats over the top of the message list (negative margin) so long
+   conversations scroll up underneath it instead of ending at a hard edge. */
+.rail-chat .rail-chat-head {
+  position: relative;
+  z-index: 2;
+  margin-bottom: -66px;
+  align-self: flex-end;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--chat-glass);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  animation: rail-chat-drop-in 0.5s var(--chat-out) 0.18s both;
+}
+
+.rail-chat .rail-chat-messages {
+  margin: 0 -6px;
+  padding: 58px 6px 2px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  scrollbar-width: none;
+}
+
+/* Short conversations hug the input band, like a chat; long ones scroll. */
+.rail-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: auto;
+}
+
+.rail-chat .rail-chat-msg {
+  padding: 11px 15px;
+  border-radius: 20px;
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+}
+
+.rail-chat .rail-chat-msg.assistant {
+  align-self: stretch;
+  max-width: 100%;
+  padding: 13px 17px 12px;
+  border-radius: 22px;
+  animation: rail-chat-rise 0.5s var(--chat-out) both;
+}
+
+/* Height is set from the content (AssistantAnswer) and eased, so a new line
+   grows the card; content-box so that height excludes the padding. */
+.rail-chat .rail-chat-answer {
+  box-sizing: content-box;
+  overflow-x: visible;
+  overflow-y: clip;
+  transition: height 0.24s var(--chat-out);
+}
+
+.rail-chat .rail-chat-msg.user {
+  max-width: 82%;
+  margin-right: 8px;
+  padding: 10px 30px 10px 15px;
+  border-radius: 20px 20px 5px 20px;
+  /* The tail sits in the bottom-right corner, so it takes the gradient's end colour. */
+  --bubble-end: #6A4FE8;
+  background: linear-gradient(135deg, #7C9DFF 0%, #7468F2 55%, var(--bubble-end) 100%);
+  color: #FFFFFF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 1px rgba(20, 0, 80, 0.25),
+    0 12px 28px -12px rgba(76, 60, 210, 0.75);
+  transform-origin: 100% 100%;
+  animation: rail-chat-pop 0.48s var(--chat-spring) both;
+}
+
+/* The tail: a corner of the bubble's colour with a quarter circle cut out of
+   it, curling out from the bubble's bottom-right edge. */
+.rail-chat .rail-chat-msg.user::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--bubble-end);
+  -webkit-mask: radial-gradient(circle at 100% 0, transparent 13.5px, #000 14px);
+  mask: radial-gradient(circle at 100% 0, transparent 13.5px, #000 14px);
+}
+
+.rail-chat .rail-chat-msg.user .rail-chat-copy {
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rail-chat .rail-chat-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-chat-welcome-title {
+  font: 700 17px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, #FFFFFF 20%, #B9C6FF 60%, #FFFFFF 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rail-chat-sheen 3.2s ease-in-out 0.4s infinite;
+}
+
+.rail-chat .rail-chat-empty {
+  color: rgba(241, 238, 231, 0.62);
+}
+
+.rail-chat .rail-chat-empty-wrap {
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.rail-chat .rail-chat-empty-wrap .rail-chat-welcome {
+  align-self: stretch;
+  margin-bottom: 4px;
+}
+
+/* Suggestions read as replies you could send: ghost user bubbles. */
+.rail-chat .rail-chat-suggestion {
+  margin-right: 8px;
+  padding: 8px 14px;
+  border-radius: 18px 18px 5px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 18, 23, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #F1EEE7;
+  font: 500 12.5px Manrope, sans-serif;
+  transform-origin: 100% 100%;
+  animation: rail-chat-pop 0.5s var(--chat-spring) calc(0.22s + var(--i, 0) * 0.07s) both;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s var(--chat-spring);
+}
+
+.rail-chat .rail-chat-suggestion:hover {
+  background: rgba(244, 242, 238, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.rail-chat .rail-chat-suggestion:active {
+  transform: scale(0.95);
+}
+
+.rail-chat .rail-chat-steps,
+.rail-chat .rail-chat-status {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 9px 14px;
+  border-radius: 16px;
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  box-sizing: border-box;
+}
+
+.rail-chat .rail-chat-steps {
+  align-self: stretch;
+  padding: 6px;
+  border-radius: 20px;
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+/* Folded, the run shrinks to a pill that only summarises it. */
+.rail-chat .rail-chat-steps.folded {
+  align-self: flex-start;
+  border-radius: 999px;
+}
+
+.rail-chat .rail-chat-status {
+  border-radius: 999px;
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+.rail-chat .rail-chat-doccard {
+  background: var(--chat-card);
+  box-shadow: var(--chat-glass-rim), var(--chat-glass-drop);
+  animation: rail-chat-rise 0.5s var(--chat-out) both;
+}
+
+.rail-chat .rail-chat-messages .rail-chat-error {
+  background: rgba(60, 20, 22, 0.92);
+  animation: rail-chat-rise 0.4s var(--chat-out) both;
+}
+
+/* The input slides out of the rail together with the band it sits in. */
+.rail-chat-dock {
+  display: flex;
+  flex-direction: column;
+  animation: rail-chat-dock-in 0.56s var(--chat-out) 0.04s both;
+}
+
+@keyframes rail-chat-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-pop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.6); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-drop-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-dock-in {
+  from { opacity: 0; transform: translateX(-36px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-step-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rail-chat-sheen {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0 0; }
+}
+
+@keyframes rail-chat-fade-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.rail-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rail-chat-head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rail-chat-title {
+  font: 700 14px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.rail-chat-subtitle {
+  font: 400 11.5px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-chat-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+}
+
+.rail-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rail-chat-empty {
+  margin: 0;
+  color: rgba(241, 238, 231, 0.45);
+}
+
+.rail-chat-msg {
+  padding: 8px 11px;
+  border-radius: 14px;
+  max-width: 88%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: rgba(255, 255, 255, 0.08);
+  user-select: text;
+}
+
+.rail-chat-msg.user {
+  position: relative;
+  align-self: flex-end;
+  padding-right: 26px;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
+}
+
+.rail-chat-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 122, 51, 0.35);
+  background: rgba(255, 122, 51, 0.1);
+}
+
+.rail-chat-attachment img {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.rail-chat-attachment-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #FFB27A;
+  font: 500 11.5px Manrope, sans-serif;
+}
+
+.rail-chat-attachment-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgba(241, 238, 231, 0.6);
+  cursor: pointer;
+}
+
+.rail-chat-attachment-remove:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #F1EEE7;
+}
+
+.rail-chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 12px 12px 18px;
+  border-radius: 24px;
+  /* Sits inside the rail, which is already a WebGL glass control; the shader
+     only handles direct children of the glass root, so this nested surface
+     gets the same material in CSS: clear tint, blur, and the editor's rim. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: none;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 32px -8px rgba(0, 0, 0, 0.55);
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Rim light, same ring as the enhanced rail/pills (bright top-left and bottom-right). */
+.rail-chat-input::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6),
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.1) 70%,
+    rgba(255, 255, 255, 0.35)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  opacity: 0.8;
+}
+
+.rail-chat-input:focus-within::before {
+  opacity: 1;
+}
+
+.rail-chat-input-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rail-chat-input-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  margin-left: -8px;
+  position: relative;
+}
+
+.rail-chat-input-tools .rail-chat-model-selector {
+  min-width: 0;
+}
+
+.rail-chat-input-tools .rail-chat-model-btn {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.rail-chat-input-tools .rail-chat-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-chat-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: 400 13px Manrope, sans-serif;
+  outline: none;
+}
+
+.rail-chat-input button {
+  border: none;
+  cursor: pointer;
+}
+
+.rail-chat-send-btn,
+.rail-chat-input button.rail-chat-send-btn {
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 36px !important;
+  border: none !important;
+  border-radius: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #FFFFFF !important;
+  cursor: pointer !important;
+  /* Liquid glass: clear tint, blur, bright top rim, dark bottom rim. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0.18)) !important;
+  backdrop-filter: blur(14px) saturate(1.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 16px -4px rgba(0, 0, 0, 0.5);
+  /* Springs up to full size once there is something to send. */
+  transition: opacity 0.2s ease, transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.rail-chat-send-btn:disabled,
+.rail-chat-input button.rail-chat-send-btn:disabled {
+  opacity: 0.35 !important;
+  cursor: default !important;
+  transform: scale(0.84);
+}
+
+.rail-chat-send-btn:not(:disabled):active {
+  transform: scale(0.92);
+  transition-duration: 0.1s;
+}
+
+.rail-chat-circle-search {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.85) !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rail-chat-circle-search:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+}
+
+/* Model selector dropdown (Antigravity-style) */
+.rail-chat-model-selector {
+  position: relative;
+}
+
+.rail-chat-model-btn,
+.rail-chat-input button.rail-chat-model-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(241, 238, 231, 0.78) !important;
+  font: 500 12px / 1 'Inter', Manrope, sans-serif !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.rail-chat-model-btn:hover,
+.rail-chat-input button.rail-chat-model-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-model-name {
+  pointer-events: none;
+}
+
+.rail-chat-fast-btn {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.6) !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rail-chat-fast-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-fast-btn svg {
+  display: block;
+}
+
+.rail-chat-fast-btn.active {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.07) 55%, rgba(255, 255, 255, 0.16)) !important;
+  backdrop-filter: blur(14px) saturate(1.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+  color: #FFFFFF !important;
+}
+
+.rail-chat-model-chevron {
+  transition: transform 0.18s ease;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.rail-chat-model-chevron.open {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.rail-chat-model-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  background: #19191E;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 250;
+  backdrop-filter: blur(18px);
+  animation: rail-chat-model-menu-in 0.15s ease-out;
+}
+
+@keyframes rail-chat-model-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rail-chat-model-option,
+.rail-chat-input button.rail-chat-model-option {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: rgba(241, 238, 231, 0.8) !important;
+  font: 400 12px / 1 'Inter', Manrope, sans-serif !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  flex: 0 0 auto !important;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.rail-chat-model-option:hover,
+.rail-chat-input button.rail-chat-model-option:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+}
+
+.rail-chat-model-option.active,
+.rail-chat-input button.rail-chat-model-option.active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+}
+
+.rail-chat-model-check {
+  color: #FF7A33;
+  flex-shrink: 0;
+}
+
+/* Header variant (home-screen agent panel): glass pill, menu drops downward */
+.agent-model-select .rail-chat-model-btn {
+  height: 32px !important;
+  padding: 0 11px 0 13px !important;
+  gap: 8px !important;
+  border-radius: 9999px !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  color: #FFFFFF !important;
+  font: 700 14px / 1 "Bricolage Grotesque", Manrope, sans-serif !important;
+}
+.agent-model-select .rail-chat-model-menu {
+  bottom: auto;
+  top: calc(100% + 8px);
+  min-width: 230px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(28, 28, 34, 0.82);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.agent-model-select .rail-chat-model-option {
+  height: 40px !important;
+  padding: 0 12px !important;
+  border-radius: 11px !important;
+  font: 600 13.5px / 1 "Bricolage Grotesque", Manrope, sans-serif !important;
+}
+.agent-model-select .rail-chat-model-option.active {
+  background: rgba(255, 122, 51, 0.16) !important;
+}
+
+.rail-chat-head-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.rail-chat-history {
+  position: relative;
+}
+
+.rail-chat-history-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1c1c22;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.rail-chat-history-new {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: rgba(241, 238, 231, 0.85);
+  font: 600 12px Manrope, sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rail-chat-history-new:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rail-chat-history-empty {
+  padding: 8px 9px;
+  color: rgba(241, 238, 231, 0.4);
+  font: 400 12px Manrope, sans-serif;
+}
+
+.rail-chat-history-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9px;
+}
+
+.rail-chat-history-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rail-chat-history-item.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rail-chat-history-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: rgba(241, 238, 231, 0.8);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-chat-history-item-title {
+  font: 500 12.5px Manrope, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.rail-chat-history-item-when {
+  font: 400 10.5px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.4);
+}
+
+.rail-chat-history-rename-input {
+  flex: 1;
+  min-width: 0;
+  margin: 4px 9px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #F1EEE7;
+  font: 500 12.5px Manrope, sans-serif;
+  outline: none;
+}
+
+.rail-chat-history-item-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rail-chat-history-item:hover .rail-chat-history-item-actions {
+  opacity: 1;
+}
+
+.rail-chat-history-item-actions button {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgba(241, 238, 231, 0.55);
+  cursor: pointer;
+}
+
+.rail-chat-history-item-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #F1EEE7;
+}
+
+.rail-chat-history-item-delete:hover {
+  color: #E8A0A0 !important;
+}
+
+/* Agent vs. Chat — a segmented control, not two panels. */
+.rail-chat-empty-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rail-chat-suggestion {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(241, 238, 231, 0.8);
+  font: 400 12px Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.rail-chat-msg.assistant {
+  position: relative;
+  max-width: 100%;
+  padding-bottom: 6px;
+}
+
+.rail-chat-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(241, 238, 231, 0.6);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.rail-chat-msg.assistant:hover .rail-chat-copy,
+.rail-chat-msg.user:hover .rail-chat-copy {
+  opacity: 1;
+}
+
+/* Card for a document the agent created online (Google Docs). */
+.rail-chat-doccard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.rail-chat-doccard:hover {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.rail-chat-doccard:active {
+  transform: scale(0.985);
+}
+
+.rail-chat-doccard-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: #4285f4;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.35);
+}
+
+.rail-chat-doccard-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rail-chat-doccard-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rail-chat-doccard-sub {
+  font: 400 11px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.55);
+}
+
+.rail-chat-doccard-open {
+  flex: none;
+  color: rgba(241, 238, 231, 0.55);
+}
+
+/* The step list is the progress indicator: the number of steps isn't known
+   ahead of the run, so there is nothing a bar could fill. Each tool call is a
+   node on a small timeline: an icon for the kind of work, a spinning ring while
+   it runs, a check (or cross) that pops in when it lands. */
+.rail-chat-steps {
+  display: flex;
+  flex-direction: column;
+  font: 400 12px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.75);
+}
+
+.rail-chat-steps-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 12px 5px 5px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: rgba(241, 238, 231, 0.78);
+  font: 600 12px Manrope, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.rail-chat-steps-head:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rail-chat-steps-stack {
+  display: flex;
+  flex: none;
+}
+
+.rail-chat-steps-stack > span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  margin-left: -7px;
+  border-radius: 50%;
+  border: 2px solid #141419;
+  background: #262a3d;
+  color: #C3CDFF;
+}
+
+.rail-chat-steps-stack > span:first-child {
+  margin-left: 0;
+}
+
+.rail-chat-steps-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rail-chat-steps-failed {
+  color: #EBA3A3;
+}
+
+.rail-chat-steps-chevron {
+  flex: none;
+  color: rgba(241, 238, 231, 0.5);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rail-chat-steps-chevron.open {
+  transform: rotate(180deg);
+}
+
+.rail-chat-steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 4px 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rail-chat-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 5px 0;
+  animation: rail-chat-step-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Connector down to the next node. */
+.rail-chat-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 33px;
+  bottom: -3px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(rgba(143, 168, 255, 0.4), rgba(255, 255, 255, 0.07));
+}
+
+.rail-chat-step-badge {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: rgba(241, 238, 231, 0.85);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.rail-chat-step.running .rail-chat-step-badge {
+  background: rgba(124, 140, 255, 0.2);
+  color: #E2E7FF;
+}
+
+.rail-chat-step.running .rail-chat-step-badge::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: #93A9FF;
+  border-right-color: rgba(147, 169, 255, 0.3);
+  animation: rail-chat-spin 0.9s linear infinite;
+}
+
+.rail-chat-step.failed .rail-chat-step-badge {
+  background: rgba(232, 110, 110, 0.16);
+  color: #F2AFAF;
+}
+
+.rail-chat-step-mark {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #141419;
+  background: #5CD08C;
+  color: #0B1A10;
+  animation: rail-chat-mark-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.rail-chat-step.failed .rail-chat-step-mark {
+  background: #E77474;
+  color: #2A0B0B;
+}
+
+.rail-chat-step-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.rail-chat-step-label {
+  font: 500 12.5px / 1.35 Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.88);
+  overflow-wrap: anywhere;
+  transition: color 0.3s ease;
+}
+
+.rail-chat-step.running .rail-chat-step-label {
+  background: linear-gradient(90deg, rgba(241, 238, 231, 0.45) 25%, #FFFFFF 50%, rgba(241, 238, 231, 0.45) 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rail-chat-shimmer 1.4s linear infinite;
+}
+
+.rail-chat-step.failed .rail-chat-step-label {
+  color: #F0B4B4;
+}
+
+/* Result line: a small mono chip under the label. */
+.rail-chat-step-detail {
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(241, 238, 231, 0.5);
+  font: 400 11px / 1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: rail-chat-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* An error message is worth reading in full. */
+.rail-chat-step.failed .rail-chat-step-detail {
+  background: rgba(232, 110, 110, 0.1);
+  color: #E8A0A0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@keyframes rail-chat-mark-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.rail-chat-spin {
+  display: inline-block;
+  transform-origin: 50% 50%;
+  -webkit-transform-origin: 50% 50%;
+  animation: rail-chat-spin 0.8s linear infinite;
+  -webkit-animation: rail-chat-spin 0.8s linear infinite;
+}
+
+@keyframes rail-chat-spin {
+  0% { transform: rotate(0deg); -webkit-transform: rotate(0deg); }
+  100% { transform: rotate(360deg); -webkit-transform: rotate(360deg); }
+}
+@-webkit-keyframes rail-chat-spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+.rail-chat-status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 2px;
+  font: 400 11.5px Manrope, sans-serif;
+}
+
+.rail-chat-status-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(241, 238, 231, 0.35) 25%,
+    rgba(241, 238, 231, 0.95) 50%,
+    rgba(241, 238, 231, 0.35) 75%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rail-chat-shimmer 1.4s linear infinite;
+}
+
+@keyframes rail-chat-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.rail-chat-status-pen {
+  flex-shrink: 0;
+  overflow: visible;
+  color: rgba(241, 238, 231, 0.75);
+}
+
+.rail-chat-pen-glyph {
+  transform-origin: 4px 20px;
+  animation: rail-chat-write 0.6s ease-in-out infinite;
+}
+
+@keyframes rail-chat-write {
+  0%, 100% { transform: rotate(-10deg) translateX(0); }
+  50% { transform: rotate(12deg) translateX(1px); }
+}
+
+.rail-chat-status-globe {
+  flex-shrink: 0;
+  color: rgba(241, 238, 231, 0.75);
+  animation: rail-chat-spin 1.8s linear infinite;
+}
+
+.rail-chat-status-meta {
+  color: rgba(241, 238, 231, 0.4);
+  font: 400 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.rail-chat-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 160, 160, 0.35);
+  background: rgba(232, 160, 160, 0.12);
+  color: #F0C9C9;
+  font-size: 12px;
+}
+
+.rail-chat-input textarea {
+  width: 100%;
+  min-height: 24px;
+  max-height: 120px;
+  border: none;
+  background: none;
+  color: #FFFFFF;
+  font: 400 15px / 1.4 'Inter', Manrope, sans-serif;
+  outline: none;
+  resize: none;
+  padding: 2px 2px 2px 2px;
+  box-sizing: border-box;
+}
+
+.rail-chat-input textarea::placeholder {
+  color: rgba(241, 238, 231, 0.42);
+}
+
+/* Markdown in chat answers */
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md-p { margin: 6px 0; }
+.md-heading { margin: 10px 0 4px; font: 700 13.5px 'Bricolage Grotesque', sans-serif; }
+.md-list { margin: 6px 0; padding-left: 18px; }
+.md-list li { margin: 2px 0; }
+.md-quote {
+  margin: 6px 0;
+  padding-left: 9px;
+  border-left: 2px solid rgba(255, 255, 255, 0.5);
+  color: rgba(241, 238, 231, 0.75);
+}
+.md-rule { border: none; border-top: 1px solid rgba(255, 255, 255, 0.14); margin: 10px 0; }
+.md a { color: #7FE3F2; }
+.md code {
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
+  font: 400 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.md-code {
+  margin: 8px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+}
+.md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font: 600 10.5px Manrope, sans-serif;
+  color: rgba(241, 238, 231, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+}
+.md-code-head button {
+  border: none;
+  background: none;
+  color: rgba(241, 238, 231, 0.65);
+  font: 600 10.5px Manrope, sans-serif;
+  cursor: pointer;
+}
+.md-code pre {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+.md-code code { background: none; padding: 0; }
+.md-table-wrap { overflow-x: auto; max-width: 100%; margin: 8px 0; }
+.md-table { border-collapse: collapse; font-size: 12px; }
+.md-table th,
+.md-table td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px 8px;
+  text-align: left;
+}
+.md-table th { background: rgba(255, 255, 255, 0.06); }
+
+/* Dezente Scrollbars (dunkles Theme) */
+.editor-shell *::-webkit-scrollbar,
+.lib-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.editor-shell *::-webkit-scrollbar-track,
+.lib-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.editor-shell *::-webkit-scrollbar-thumb,
+.lib-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.12);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.editor-shell *::-webkit-scrollbar-thumb:hover,
+.lib-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,.24);
+  background-clip: content-box;
+}
+.editor-shell *, .lib-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.16) transparent;
+}
+
+/* Glanzkante oben auf Glaspanels */
+.editor-sidebar::before,
+.editor-title-pill::before,
+.editor-actions-pill::before {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  pointer-events: none;
+}
+
+.rail-btn {
+  width: var(--rail-item, 36px);
+  height: var(--rail-item, 36px);
+  flex-shrink: 0;
+  border-radius: 13px;
+  border: none;
+  background: none;
+  color: rgba(255,255,255,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+/* Nur mit echtem Hover: auf Touch bleibt :hover nach dem Tippen hängen und
+   sähe wie ein aktiver Modus aus. */
+@media (hover: hover) {
+  .rail-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,.09);
+    color: #F1EEE7;
+  }
+}
+
+.rail-btn.active {
+  background: rgba(255,255,255,.18);
+  color: #F1EEE7;
+}
+
+.rail-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.rail-btn {
+  position: relative;
+}
+
+/* Ecke nur am aktiven Tool: nochmal tippen öffnet seine Einstellungen. */
+.rail-btn.has-settings.active::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  opacity: 0.9;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+.rail-btn-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3ED598;
+  color: #0B0F0D;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.rail-divider {
+  width: 34px;
+  height: 1px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,.14);
+  /* The rail's own gap already spaces it evenly from both neighbours. */
+  margin: 0;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(28,28,32,.92);
+  border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: 0 12px 32px rgba(0,0,0,.35);
+}
+
+.export-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: #F1EEE7;
+  font: 500 13px sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-menu button:hover {
+  background: rgba(255,255,255,.1);
+}
+
+.rail-color-wrapper {
+  position: relative;
+  /* Same 36px slot as .rail-btn so the rail's gap is the pitch everywhere. */
+  width: var(--rail-item, 36px);
+  height: var(--rail-item, 36px);
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.rail-color-wrapper.active {
+  transform: scale(1.12);
+}
+
+.rail-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.rail-color-wrapper.active .rail-color-light {
+  box-shadow: 0 0 0 2px #1D1B21, 0 0 0 4px rgba(255,255,255,.4);
+}
+
+.rail-color-light {
+  width: 24px;
+  height: 24px;
+}
+
+/* Floating Settings Popovers in Editor */
+.editor-popover {
+  position: absolute;
+  left: 92px;
+  background: rgba(26, 24, 30, 0.94);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 24px 50px -12px rgba(0, 0, 0, 0.85);
+  color: #E9E6DF;
+  font-family: 'Manrope', sans-serif;
+  z-index: 1000;
+  padding: 16px;
+  animation: popoverFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateX(-8px) scale(0.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.editor-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.editor-popover-title {
+  font: 700 13px/1 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.01em;
+  color: #F1EEE7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-popover-close {
+  background: none;
+  border: none;
+  color: rgba(233, 230, 223, 0.45);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.editor-popover-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #F1EEE7;
+}
+
+/* Tool types grid */
+.tool-types-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.tool-type-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: rgba(233, 230, 223, 0.7);
+  font: 500 11.5px 'Manrope', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tool-type-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #F1EEE7;
+}
+
+.tool-type-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #F1EEE7;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Thickness controls */
+.thickness-presets {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.thickness-preset-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.thickness-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.thickness-preset-btn.active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.thickness-dot {
+  border-radius: 50%;
+  background: #EFECE4;
+}
+
+/* Range Slider */
+.thickness-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.thickness-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.thickness-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #E9E6DF;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.thickness-val {
+  font: 600 11px ui-monospace, monospace;
+  color: rgba(233, 230, 223, 0.6);
+  width: 36px;
+  text-align: right;
+}
+
+.thickness-val-input {
+  font: 600 11px ui-monospace, monospace;
+  color: #E9E6DF;
+  width: 44px;
+  padding: 4px 2px;
+  text-align: right;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.thickness-val-input::-webkit-outer-spin-button,
+.thickness-val-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.thickness-slider-wrap:has(.thickness-val-input) .thickness-val {
+  width: auto;
+}
+
+/* Stroke preview box */
+.stroke-preview-box {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  background: #141317;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Color Wheel Popover Specifics */
+.color-slots-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 14px;
+}
+
+.slot-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+}
+
+.slot-circle.active {
+  transform: scale(1.22);
+  box-shadow: 0 0 0 2px #1D1B21, 0 0 0 4px rgba(255, 255, 255, 0.6);
+}
+
+/* Customizing react-colorful */
+.editor-popover .react-colorful {
+  width: 200px;
+  height: 150px;
+  border-radius: 12px;
+  margin: 0 auto 12px auto;
+}
+
+.editor-popover .react-colorful__saturation {
+  border-radius: 10px 10px 0 0;
+}
+
+.editor-popover .react-colorful__hue {
+  height: 18px;
+  border-radius: 0 0 10px 10px;
+}
+
+.editor-popover .react-colorful__pointer {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Presets palette in color popover */
+.color-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.color-preset-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  padding: 0;
+}
+
+.color-preset-btn:hover {
+  transform: scale(1.15);
+}
+
+.color-preset-btn.active {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px #1D1B21, 0 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.color-preset-add {
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.color-preset-add:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Hex input row */
+.hex-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+
+.hex-preview-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.hex-text-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font: 600 12px ui-monospace, monospace;
+  color: #F1EEE7;
+  width: 100%;
+}
+
+/* Paper Style Toast / Badge */
+.paper-toast {
+  position: absolute;
+  top: 74px;
+  left: 92px;
+  background: rgba(26, 24, 30, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 6px 14px;
+  font: 600 12px 'Manrope', sans-serif;
+  color: #F1EEE7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  animation: toastFade 0.2s ease-out;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.zoom-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 24, 30, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 6px 14px;
+  font: 600 12px 'Manrope', sans-serif;
+  color: #F1EEE7;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  animation: toastFade 0.2s ease-out;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+@keyframes toastFade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Settings Screen Styles (Hybrid V2)
+   ========================================================================== */
+
+.settings-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  /* transparent, damit die geriffelte Glastextur aus body::before durchscheint */
+  background: radial-gradient(circle at 12% 8%, rgba(10,132,255,.08), transparent 24%),
+              radial-gradient(circle at 88% 88%, rgba(90,200,250,.04), transparent 26%);
+  color: #FFFFFF;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 16px;
+  /* Grid rather than a nested wrapper: the top bar and sidebar are WebGL glass,
+     and the library only accepts direct children of the root as glass. */
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px 16px;
+  box-sizing: border-box;
+}
+
+.settings-topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-radius: 24px;
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.68) 0%, rgba(16, 16, 20, 0.8) 35%, rgba(8, 8, 12, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9), 0 28px 60px -20px rgba(0, 0, 0, 0.98);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  grid-column: 1 / -1;
+}
+
+.settings-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #FFFFFF;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.settings-back-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.settings-title {
+  font: 700 15px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+
+.settings-done-btn {
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: #0a84ff;
+  border: none;
+  color: #FFFFFF;
+  font: 700 12px 'Manrope', sans-serif;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 14px rgba(10,132,255,.35);
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.settings-done-btn:hover {
+  transform: translateY(-1px);
+  opacity: 0.95;
+}
+
+.settings-sidebar {
+  border-radius: 22px;
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.68) 0%, rgba(16, 16, 20, 0.8) 35%, rgba(8, 8, 12, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9), 0 28px 60px -20px rgba(0, 0, 0, 0.98);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.settings-nav-label {
+  margin: 8px 10px 4px;
+  color: #FFFFFF;
+  font: 700 9.5px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-nav-item {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: none;
+  border: none;
+  color: #FFFFFF;
+  font: 600 12.5px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.settings-nav-item:hover {
+  background: rgba(255,255,255,0.08);
+  color: #FFFFFF;
+}
+
+.settings-nav-item.active {
+  background: rgba(255,255,255,.16);
+  color: #FFFFFF;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
+}
+
+.settings-content {
+  overflow-y: auto;
+  padding: 22px 28px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(170deg, rgba(38, 38, 44, 0.68) 0%, rgba(16, 16, 20, 0.8) 35%, rgba(8, 8, 12, 0.92) 100%);
+  box-shadow: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9), 0 28px 60px -20px rgba(0, 0, 0, 0.98);
+  backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7) brightness(1.05);
+}
+
+.settings-detail-title {
+  margin: 0;
+  font: 800 24px 'Bricolage Grotesque', sans-serif;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+}
+
+.settings-detail-copy {
+  margin: 5px 0 0;
+  color: #FFFFFF;
+  font: 400 13px 'Manrope', sans-serif;
+  line-height: 1.45;
+}
+
+.settings-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 16px;
+}
+
+.settings-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #30d158;
+  box-shadow: 0 0 0 4px rgba(48,209,88,.15);
+}
+
+.settings-status strong {
+  font-size: 13px;
+  color: #FFFFFF;
+}
+
+.settings-status span {
+  color: #FFFFFF;
+  font-size: 11.5px;
+}
+
+.settings-group {
+  width: min(600px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 18px;
+  background: #141319;
+}
+
+.settings-row {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.settings-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-row-clickable:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.settings-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  color: #FFFFFF;
+  font: 700 13.5px 'Manrope', sans-serif;
+}
+
+.settings-row-copy {
+  margin-top: 3px;
+  color: #FFFFFF;
+  font: 400 11.5px 'Manrope', sans-serif;
+  line-height: 1.35;
+}
+
+.settings-action-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #0a84ff;
+  border: none;
+  color: #FFFFFF;
+  font: 700 12px 'Manrope', sans-serif;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 4px 12px rgba(10,132,255,.24);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.settings-action-btn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.settings-action-btn:disabled {
+  opacity: 0.45;
+  transform: none;
+  cursor: default;
+}
+
+.settings-action-btn:focus-visible,
+.settings-switch:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: 2px;
+}
+
+.settings-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: none;
+  background: #3a3942;
+  cursor: pointer;
+  transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 2px 5px rgba(0,0,0,.35);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-switch.on {
+  background: #30d158;
+}
+
+.settings-switch.on::after {
+  transform: translateX(18px);
+}
+
+.settings-chevron {
+  color: #FFFFFF;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 300;
+}
+
+/* Advanced Subpage */
+.settings-advanced-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-back-icon-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(10,132,255,.15);
+  color: #64adff;
+  border: none;
+  cursor: pointer;
+}
+
+.settings-section-caption {
+  margin: 16px 4px 8px;
+  color: #FFFFFF;
+  font: 700 10.5px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-control-row {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+}
+
+.settings-control-row + .settings-control-row {
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.settings-control-title {
+  color: #FFFFFF;
+  font: 700 13px 'Manrope', sans-serif;
+}
+
+.settings-control-copy {
+  margin-top: 3px;
+  color: #FFFFFF;
+  font: 400 11px 'Manrope', sans-serif;
+}
+
+.settings-slider-container {
+  width: 100%;
+}
+
+.settings-range-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #3a3942;
+  outline: none;
+}
+
+.settings-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  border: 1px solid rgba(0,0,0,0.2);
+}
+
+.settings-text-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: #FFFFFF;
+  font: 500 12.5px 'Manrope', sans-serif;
+  outline: none;
+}
+
+.settings-text-input:focus {
+  border-color: rgba(10,132,255,.6);
+}
+
+.settings-text-input::placeholder {
+  color: rgba(255,255,255,.35);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  width: min(600px, 100%);
+  margin-top: 14px;
+}
+
+.settings-secondary-btn {
+  flex: 1;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.12);
+  color: #FFFFFF;
+  text-align: center;
+  font: 700 12px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-secondary-btn:hover {
+  background: rgba(255,255,255,.16);
+  color: #FFFFFF;
+}
+
+.settings-secondary-btn.danger {
+  color: #ff6961;
+}
+
+.settings-secondary-btn.danger:hover {
+  background: rgba(255,105,97,0.18);
+}
+
+/* Modals */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  animation: popoverFadeIn 0.18s ease-out;
+}
+
+.settings-modal-card {
+  width: 380px;
+  background: #0E0D13;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.9);
+  color: #FFFFFF;
+}
+
+.settings-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 13, 18, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 16px;
+  padding: 10px 20px;
+  color: #FFFFFF;
+  font: 600 13px 'Manrope', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.8);
+  z-index: 9999;
+  animation: toastFade 0.2s ease-out;
+}
+
+
+
+
+/* ==========================================================================
+   Agent Panel (Liquid Glass)
+   ========================================================================== */
+/* Positioning wrapper only — the chat card and the input pill are two
+   visually distinct surfaces (own background/border/shadow each) stacked
+   with a real gap, not one continuous box. */
+.agent-panel {
+  position: absolute;
+  left: var(--lib-left, 106px);
+  top: 20px;
+  bottom: 86px;
+  width: min(440px, calc(100% - var(--lib-left, 106px) - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  z-index: 20;
+  transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
+}
+
+.agent-panel-card {
+  flex: 1;
+  min-height: 0;
+  border-radius: 30px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Same glass as the folder cards' front pane (.lib-folder-front). The tablet
+   WebView ignores backdrop-filter, so ::after is a blurred copy of the reeded
+   background (fixed, so it lines up with what sits behind the panel) with the
+   grey tint baked in; ::before adds the light catching the top-left. */
+.lib-glass.agent-panel-card {
+  isolation: isolate;
+  border-radius: 26px;
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -14px 24px -14px rgba(0, 0, 0, 0.45),
+    0 18px 34px -14px rgba(0, 0, 0, 0.85) !important;
+}
+.lib-glass.agent-panel-card::after {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(34, 36, 42, 0.5), rgba(34, 36, 42, 0.5)),
+    url("../assets/reeded-glass-background.png") center / cover fixed;
+  filter: blur(3px) saturate(1.3);
+}
+.lib-glass.agent-panel-card::before {
+  inset: 0;
+  height: auto;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05) 30%, rgba(255, 255, 255, 0) 55%);
+}
+
+/* Stundenplan: clearer glass than the chat card - lighter tint so the reeded
+   background reads through, stronger sheen and rim light. */
+.lib-glass.agent-panel-card.untis-card::after {
+  background:
+    linear-gradient(rgba(10, 11, 14, 0.58), rgba(10, 11, 14, 0.58)),
+    url("../assets/reeded-glass-background.png") center / cover fixed;
+  filter: blur(2px) saturate(1.2) brightness(0.8);
+}
+.lib-glass.agent-panel-card.untis-card::before {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 32%, rgba(255, 255, 255, 0) 60%);
+}
+/* Grid runs edge to edge: no inset at the sides or bottom of the card. */
+.untis-card .agent-panel-body {
+  padding: 0;
+}
+.untis-card .agent-panel-body > .agent-card {
+  margin: 0 14px;
+}
+.lib-glass.agent-panel-card.untis-card {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Anstehend: no box at all, content floats on the page background. */
+.lib-glass.agent-panel-card.agent-panel-card-bare {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.agent-panel-card-bare .agent-panel-body {
+  padding-left: 0;
+  padding-right: 0;
+}
+.agent-panel-card-bare .agent-panel-head {
+  padding-left: 4px;
+}
+.lib-glass.agent-panel-card.agent-panel-card-bare::before,
+.lib-glass.agent-panel-card.agent-panel-card-bare::after {
+  display: none;
+}
+
+.agent-panel[data-open="false"] {
+  transform: translateX(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The agent panel opened by pulling the Ask-AI pill down: instead of sliding
+   in from the side, it grows straight down out of the pill via clip-path,
+   like a drop being pulled into the full window. --drop (0-1) is written
+   live to this element's inline style during the drag (see Library.jsx);
+   removing that inline value on release lets this transition snap it the
+   rest of the way open or closed. */
+.agent-panel.agent-panel-drop {
+  --drop: 0;
+  clip-path: inset(0 0 calc(100% - var(--drop) * 100%) 0 round 30px);
+  opacity: var(--drop);
+  transition: clip-path 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.32s ease;
+}
+.agent-panel.agent-panel-drop[data-open="false"] {
+  transform: none;
+}
+.agent-panel.agent-panel-drop[data-open="true"] {
+  --drop: 1;
+}
+
+.agent-panel-head {
+  padding: 18px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-badge {
+  margin-left: auto;
+  font: 600 9.5px ui-monospace, monospace;
+  letter-spacing: .06em;
+  color: #FFFFFF;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.agent-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.agent-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.08);
+}
+
+.agent-panel-body {
+  padding: 0 14px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+.agent-panel-body::-webkit-scrollbar {
+  width: 8px;
+}
+.agent-panel-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.agent-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+.agent-panel-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.agent-panel-body.rail-chat-messages {
+  padding-bottom: 14px;
+}
+
+.agent-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0.03) 100%);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1.5px 0 rgba(0, 0, 0, 0.7),
+    0 14px 30px -18px rgba(0, 0, 0, 0.95);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.agent-card:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
+}
+
+.upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  border: none;
+  cursor: pointer;
+}
+.upcoming-row:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.82);
+  outline-offset: 2px;
+}
+.upcoming-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.55);
+}
+.upcoming-row[data-kind="exam"] .upcoming-icon {
+  color: oklch(0.75 0.16 25);
+}
+.upcoming-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.upcoming-title {
+  font: 600 12.5px/1.3 Manrope, sans-serif;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upcoming-meta {
+  overflow: hidden;
+  font: 600 9.5px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.upcoming-source {
+  overflow: hidden;
+  font: 500 10px/1.3 Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.58);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-card-new {
+  animation: agent-card-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes agent-card-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  font: 700 9.5px ui-monospace, monospace;
+  letter-spacing: .05em;
+  color: #FFFFFF;
+}
+
+.agent-progress {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.agent-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.55));
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+}
+
+/* ==========================================================================
+   WebUntis week grid (Stundenplan panel)
+   ========================================================================== */
+/* Panel head: date badge, title + range, ← Heute → segmented control. */
+.untis-head {
+  gap: 10px;
+}
+
+.untis-date-badge {
+  flex: none;
+  width: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.untis-date-badge span {
+  display: block;
+  padding: 3px 0 2px;
+  font: 700 8px Manrope, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.untis-date-badge b {
+  display: block;
+  padding: 3px 0 4px;
+  font: 700 14px Manrope, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.untis-head-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.untis-head-title span {
+  font: 700 15px "Bricolage Grotesque", sans-serif;
+  line-height: 1.1;
+  color: #fff;
+}
+.untis-head-title small {
+  font: 500 10px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.42);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.untis-nav {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.untis-nav button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: 600 11.5px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.72);
+}
+.untis-nav button + button {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.untis-nav button:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* The grid is a dark calendar card: hairline cells, chips with a tinted fill
+   and a 1px border of the subject colour. */
+.untis-grid {
+  --untis-axis: 34px;
+  --untis-pad: 8px;
+  --untis-line: rgba(255, 255, 255, 0.13);
+  display: flex;
+  flex-direction: column;
+  /* Grows to the panel, but never below its content: the panel body scrolls
+     instead of the overflow:hidden card clipping the lessons. */
+  flex: 1 0 auto;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  /* Glass, not a dark slab: the panel card already blurs the reeded
+     background behind it (the tablet WebView has no backdrop-filter), so this
+     only adds a light sheen and a little depth on top. */
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 40%, rgba(8, 10, 14, 0.5));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -12px 20px -14px rgba(0, 0, 0, 0.45);
+}
+
+.untis-grid-head {
+  display: grid;
+  grid-template-columns: var(--untis-axis) repeat(5, 1fr);
+  padding-right: var(--untis-pad);
+  border-bottom: 1px solid var(--untis-line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.untis-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 0;
+  border-left: 1px solid var(--untis-line);
+}
+.untis-day-head span:first-child {
+  font: 600 10.5px Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.45);
+}
+.untis-day-head span:last-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  font: 600 11.5px Manrope, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.78);
+}
+/* Today reads by contrast, not by hue: a grey disc behind the date. */
+.untis-day-head.is-today span:first-child {
+  color: rgba(255, 255, 255, 0.75);
+}
+.untis-day-head.is-today span:last-child {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.untis-grid-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--untis-axis) repeat(5, 1fr);
+  flex: 1;
+  min-height: 180px;
+  /* Slim margin between the lesson blocks and the card edge (right, bottom). */
+  padding: 0 var(--untis-pad) var(--untis-pad) 0;
+}
+
+.untis-gridlines {
+  position: absolute;
+  top: 0;
+  bottom: var(--untis-pad);
+  left: var(--untis-axis);
+  right: 0;
+  pointer-events: none;
+}
+.untis-gridlines > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--untis-line);
+}
+
+.untis-time-axis {
+  position: relative;
+}
+
+.untis-time-mark {
+  position: absolute;
+  left: 0;
+  right: 5px;
+  transform: translateY(-50%);
+  text-align: right;
+  font: 600 9px Manrope, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+/* The column line and the today tint run on into the grid padding (bottom, and
+   right for the last day) so they reach the card edge; lessons stay inset. */
+.untis-day-col {
+  position: relative;
+}
+.untis-day-col::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * var(--untis-pad));
+  border-left: 1px solid var(--untis-line);
+  pointer-events: none;
+}
+.untis-day-col:last-child::before {
+  right: calc(-1 * var(--untis-pad));
+}
+.untis-day-col.is-today::before {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Colour comes inline (text, border, fill) from the subject palette; the room
+   line just dims the same text colour. */
+.untis-lesson {
+  position: absolute;
+  box-sizing: border-box;
+  margin-top: 1px;
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 3px 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+  min-height: 14px;
+  z-index: 1;
+  /* Frosted chip: blur whatever is behind it, plus a rim and sheen. The tablet
+     WebView ignores backdrop-filter and falls back to the plain tinted fill. */
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 12px rgba(255, 255, 255, 0.06),
+    0 4px 10px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* Events sit under the lessons of their day and wrap their label. */
+.untis-lesson.is-event {
+  z-index: 0;
+}
+.untis-lesson.is-event .untis-lesson-subject {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.untis-lesson-subject {
+  font: 700 10.5px Manrope, sans-serif;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.untis-lesson-room {
+  font: 500 9.5px Manrope, sans-serif;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Entfall must be spotted at a glance: red fill and border, struck subject, label. */
+.untis-lesson.is-cancelled {
+  border-style: dashed;
+}
+/* Thick red cross corner to corner; non-scaling-stroke keeps it 3.5px at any block size. */
+.untis-lesson.is-cancelled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M0 0L100 100M100 0L0 100' stroke='%23ff453a' stroke-width='3.5' stroke-linecap='round' vector-effect='non-scaling-stroke' fill='none'/></svg>") center / 100% 100% no-repeat;
+}
+.untis-lesson.is-cancelled .untis-lesson-subject {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.6);
+}
+.untis-lesson-entfall {
+  font: 800 8.5px Manrope, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Thematic Subject Decor Band (top chrome reacts to selected subject)
+   ========================================================================== */
+.subject-topdeco {
+  position: absolute;
+  left: 106px;
+  top: 0;
+  height: 84px;
+  border-radius: 0 0 34px 34px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transform: translateY(-14px);
+  transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), right 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
+}
+.subject-topdeco[data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.subject-topdeco-pattern {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  animation: subject-deco-drift 26s linear infinite;
+}
+@keyframes subject-deco-drift {
+  from { background-position: 0 0; }
+  to { background-position: 120px 0; }
+}
+
+.subject-topdeco-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(760px 200px at 6% 0%, var(--subj-accent-soft), transparent 72%),
+    radial-gradient(520px 180px at 62% 0%, var(--subj-accent-soft), transparent 70%);
+}
+
+.subject-chip {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 52px;
+  padding: 0 16px 0 13px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(42, 42, 48, 0.72) 0%, rgba(16, 16, 20, 0.86) 100%);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid var(--subj-accent-soft);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 18px 44px -12px rgba(0, 0, 0, 0.95),
+    0 0 30px -8px var(--subj-accent-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  animation: subject-chip-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes subject-chip-in {
+  from { opacity: 0; transform: translateX(-16px) scale(0.94); max-width: 0; }
+  to { opacity: 1; transform: none; max-width: 420px; }
+}
+
+.subject-chip-mark {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font: 700 14px/1 "Bricolage Grotesque", serif;
+  color: #0B0B0F;
+  background: var(--subj-accent);
+  box-shadow: 0 0 16px -2px var(--subj-accent-soft);
+}
+
+.subject-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.subject-chip-text strong {
+  font: 700 13px "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+}
+.subject-chip-text em {
+  font: 700 8.5px ui-monospace, monospace;
+  font-style: normal;
+  letter-spacing: .14em;
+  color: var(--subj-accent);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.subject-chip-count {
+  margin-left: 2px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font: 700 10.5px ui-monospace, monospace;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Top chrome picks up the subject accent */
+[data-subject]:not([data-subject="all"]) .liquid-glass-pill {
+  border-color: var(--subj-accent-soft);
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9),
+    0 20px 48px -10px rgba(0, 0, 0, 0.95),
+    0 0 26px -6px var(--subj-accent-soft);
+}
+[data-subject]:not([data-subject="all"]) .liquid-glass-circle {
+  border-color: var(--subj-accent-soft);
+}
+[data-subject]:not([data-subject="all"]) .lib-agent-dot,
+[data-subject]:not([data-subject="all"]) .agent-progress > span {
+  background: var(--subj-accent);
+}
+
+/* ==========================================================================
+   Library File Import & Drop Overlay Styles
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.lib-file-open {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 26px;
+  cursor: pointer;
+  /* Not "all": the cluster's right offsets are chained to this button's
+     measured width, which must not animate when the tier drops its label. */
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+.lib-file-open:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+.lib-file-open:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.library-file-drop-overlay {
+  position: absolute;
+  inset: 16px;
+  border-radius: 28px;
+  border: 2px dashed rgba(138, 212, 255, 0.7);
+  background: rgba(14, 13, 18, 0.85);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  pointer-events: none;
+  animation: dropOverlayFade 0.2s ease-out;
+}
+
+.library-file-drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #FFFFFF;
+}
+
+.library-import-alert {
+  animation: toastFade 0.2s ease-out;
+}
+
+
+/* Text tool settings */
+.text-setting-label {
+  font: 600 10px ui-monospace, monospace;
+  letter-spacing: .06em;
+  color: rgba(233, 230, 223, 0.5);
+  margin-bottom: 6px;
+}
+
+.text-style-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.text-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.text-row .text-setting-label {
+  flex: none;
+  width: 54px;
+  margin: 0;
+}
+
+.text-row .text-style-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+
+.text-row .text-color-btn {
+  height: 28px;
+}
+
+.text-row .thickness-val {
+  flex: none;
+  width: 44px;
+}
+
+.text-select {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: #F1EEE7;
+  font: 500 12px 'Manrope', sans-serif;
+  color-scheme: dark;
+}
+
+.text-style-btn {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: rgba(233, 230, 223, 0.7);
+  font: 500 11.5px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-style-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #F1EEE7;
+}
+
+.text-style-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #F1EEE7;
+}
+
+.text-color-btn {
+  flex: 1;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.text-color-btn.active {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+/* Formatting bar while a text box is being edited: pinned to the top of the
+   window, clear of whichever keyboard (native or the chemistry one) is up. */
+.rich-toolbar {
+  position: fixed;
+  /* Below the editor's top pills (title, actions), not over them. */
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2600;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  background: rgba(26, 24, 30, 0.94);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rich-toolbar-row,
+.rich-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rich-toolbar-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.rich-toolbar-group {
+  flex: none;
+}
+
+.rich-tool-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(233, 230, 223, 0.78);
+  font: 700 12px 'Manrope', sans-serif;
+  cursor: pointer;
+}
+
+.rich-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #F1EEE7;
+}
+
+.rich-tool-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #F1EEE7;
+}
+
+.rich-toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rich-swatch {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+}
+
+.rich-swatch-none {
+  background:
+    linear-gradient(135deg, transparent 46%, #D8615B 46% 54%, transparent 54%),
+    rgba(255, 255, 255, 0.06);
+}
+
+.text-snap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  color: rgba(233, 230, 223, 0.7);
+  font: 500 11.5px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-snap-toggle.active {
+  background: rgba(62, 123, 216, 0.22);
+  border-color: rgba(62, 123, 216, 0.55);
+  color: #F1EEE7;
+}
+
+.text-insert-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px;
+  color: #F1EEE7;
+  font: 600 12px 'Manrope', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.text-insert-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rail-chat[hidden] {
+  display: none;
+}
+
+/* Integrated sidebar browser ------------------------------------------------ */
+.pdf-link-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pdf-link-layer a {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: 3px;
+}
+
+.pdf-link-layer a:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rail-browser {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1eee7;
+  font-family: Manrope, sans-serif;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+  /* The toolbar's icon buttons are fixed-width and don't shrink, so at a
+     dragged-narrow rail width they must overflow their own panel — this lets
+     the same narrow-layout rules below key off the panel's own width instead
+     of the viewport's, which stayed wide while only the rail got dragged in. */
+  container-type: inline-size;
+}
+
+.rail-browser[hidden] {
+  display: none;
+}
+
+.rail-pages {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1eee7;
+  font-family: Manrope, sans-serif;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+}
+
+.rail-pages[hidden] {
+  display: none;
+}
+
+.pages-panel-header {
+  flex: 0 0 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pages-panel-title {
+  font: 700 13px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pages-panel-list {
+  position: relative; /* so card.offsetTop below is relative to this list, not some further ancestor */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pages-panel-card {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #15151a;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pages-panel-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pages-panel-card.active {
+  border-color: #3e7bd8;
+}
+
+.pages-panel-card.dragging {
+  /* Transform itself is driven imperatively (pointer-follow + FLIP settle);
+     this only adds the "lifted" look on top of it. */
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.4);
+  z-index: 5;
+}
+
+.pages-panel-thumb {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Imported file page underneath, ink render on top - both fill the page box. */
+.pages-panel-thumb img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.pages-panel-card,
+.pages-panel-card * {
+  -webkit-user-drag: none;
+}
+
+.pages-panel-card-footer {
+  /* Touch drags start here; without this the list scroll claims the gesture
+     and the browser cancels the pointer after a few pixels. */
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pages-panel-card-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(241, 238, 231, 0.55);
+}
+
+.pages-panel-card-label .grip {
+  opacity: 0.6;
+}
+
+.pages-panel-card.active .pages-panel-card-label {
+  color: #f1eee7;
+}
+
+.pages-panel-delete {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.45);
+  cursor: pointer;
+}
+
+.pages-panel-delete:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.pages-panel-delete:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.pages-panel-delete.confirm {
+  background: rgba(216, 97, 91, 0.25);
+  color: #d8615b;
+}
+
+.pages-panel-add {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px;
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.pages-panel-add:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+/* No background of its own — same single glass control as .rail-chat, so the
+   toolbar reads as real WebGL glass instead of a flat CSS panel on top of it. */
+.browser-toolbar {
+  flex: 0 0 54px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 8px 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.browser-icon-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.72);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.1s ease;
+}
+
+.browser-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.browser-icon-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.browser-icon-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.browser-icon-btn:focus-visible,
+.browser-toolbar input:focus-visible,
+.browser-home button:focus-visible,
+.browser-dialog button:focus-visible,
+.browser-dialog input:focus-visible,
+.browser-history-search input:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.browser-address-form {
+  flex: 1 1 130px;
+  min-width: 80px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(241, 238, 231, 0.48);
+}
+
+.browser-address-form:focus-within {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.48);
+}
+
+.browser-address-form input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f1eee7;
+  font: 500 12px/1.2 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.browser-address-form input::placeholder {
+  color: rgba(241, 238, 231, 0.38);
+}
+
+.browser-spin {
+  flex: 0 0 auto;
+  animation: rail-chat-spin 0.9s linear infinite;
+}
+
+.browser-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.browser-home {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.browser-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(4, 5, 7, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.browser-segment button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.54);
+  font: 600 11.5px/1 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.browser-segment button.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.browser-home-section {
+  margin-top: 28px;
+}
+
+.browser-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 17px;
+}
+
+.browser-section-head h2,
+.browser-error h2,
+.browser-dialog h2 {
+  margin: 2px 0 0;
+  color: #fff;
+  font: 700 18px/1.15 "Bricolage Grotesque", Manrope, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+.browser-eyebrow {
+  color: rgba(241, 238, 231, 0.42);
+  font: 700 9.5px/1 ui-monospace, monospace;
+  letter-spacing: 0.09em;
+}
+
+.browser-text-action {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #59cfe8;
+  font: 600 11px/1 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-text-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.browser-text-action:disabled {
+  opacity: 0.35;
+}
+
+.browser-text-action.danger,
+.browser-shortcut-menu .danger,
+.browser-dialog .danger {
+  color: #ff8179;
+}
+
+.browser-shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px 10px;
+}
+
+.browser-shortcut {
+  position: relative;
+  min-width: 0;
+}
+
+.browser-shortcut-open {
+  width: 100%;
+  min-height: 98px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.86);
+  font: 500 11.5px/1.3 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-shortcut-open:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.browser-shortcut-open > span:last-child {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.browser-favicon {
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.browser-shortcut-icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(220, 226, 230, 0.86));
+  color: #172229;
+  box-shadow: inset 0 1px #fff, 0 8px 20px rgba(0, 0, 0, 0.2);
+  font: 700 19px/1 "Bricolage Grotesque", sans-serif;
+}
+
+.browser-shortcut > .browser-icon-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+}
+
+.browser-shortcut:hover > .browser-icon-btn,
+.browser-shortcut:focus-within > .browser-icon-btn {
+  opacity: 1;
+}
+
+.browser-shortcut-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  z-index: 5;
+  width: 112px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(24, 25, 29, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.46);
+}
+
+.browser-shortcut-menu button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(241, 238, 231, 0.82);
+  text-align: left;
+  font: 500 10.5px/1 Manrope, sans-serif;
+}
+
+.browser-shortcut-menu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.browser-shortcut-menu button:disabled {
+  opacity: 0.3;
+}
+
+.browser-empty {
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.13);
+  border-radius: 17px;
+  color: rgba(241, 238, 231, 0.38);
+  text-align: center;
+}
+
+.browser-empty.compact {
+  min-height: 130px;
+}
+
+.browser-empty strong {
+  color: rgba(241, 238, 231, 0.72);
+  font: 600 12px/1.2 Manrope, sans-serif;
+}
+
+.browser-empty span {
+  max-width: 220px;
+  font: 400 11px/1.45 Manrope, sans-serif;
+}
+
+.browser-history-search {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 0 11px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(241, 238, 231, 0.42);
+}
+
+.browser-history-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f1eee7;
+  font: 500 12px/1 Manrope, sans-serif;
+}
+
+.browser-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-history-list > button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(241, 238, 231, 0.48);
+  text-align: left;
+  cursor: pointer;
+}
+
+.browser-history-list > button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.browser-history-mark {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.browser-history-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.browser-history-copy strong,
+.browser-history-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-history-copy strong {
+  color: rgba(241, 238, 231, 0.88);
+  font: 600 11.5px/1.2 Manrope, sans-serif;
+}
+
+.browser-history-copy small {
+  font: 400 9.5px/1.2 Manrope, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.browser-viewport {
+  position: absolute;
+  inset: 0;
+  /* No fill: on Android the native WebView sits on top of this box with its
+     bottom-right corner rounded, and a fill here shows through that corner.
+     The iframe fallback paints its own white. */
+}
+
+.browser-viewport[hidden] {
+  display: none;
+}
+
+.browser-viewport iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #fff;
+}
+
+.browser-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  text-align: center;
+}
+
+.browser-error-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 13px;
+  border-radius: 15px;
+  background: rgba(255, 129, 121, 0.12);
+  color: #ff8179;
+}
+
+.browser-error p {
+  max-width: 260px;
+  margin: 9px 0 4px;
+  color: rgba(241, 238, 231, 0.62);
+  font: 400 12px/1.5 Manrope, sans-serif;
+}
+
+.browser-error small {
+  max-width: 280px;
+  overflow-wrap: anywhere;
+  color: rgba(241, 238, 231, 0.36);
+  font: 400 9.5px/1.4 Manrope, sans-serif;
+}
+
+.browser-error-actions,
+.browser-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.browser-error-actions button,
+.browser-dialog-actions button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1eee7;
+  font: 600 11px/1 Manrope, sans-serif;
+  cursor: pointer;
+}
+
+.browser-error-actions button:first-child,
+.browser-dialog-actions button[type="submit"] {
+  background: linear-gradient(140deg, #ffffff, #6b6b72);
+  border-color: rgba(255, 255, 255, 0.38);
+  color: #15151a;
+}
+
+.browser-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(3, 4, 6, 0.72);
+  backdrop-filter: blur(12px);
+  overscroll-behavior: contain;
+}
+
+.browser-dialog {
+  width: min(100%, 330px);
+  padding: 16px;
+  border-radius: 17px;
+  background: rgba(34, 35, 40, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.58);
+}
+
+.browser-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.browser-dialog > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 11px;
+  color: rgba(241, 238, 231, 0.58);
+  font: 600 10.5px/1 Manrope, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.browser-dialog input {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font: 500 12px/1 Manrope, sans-serif;
+}
+
+.browser-dialog p {
+  margin: 10px 0 0;
+  color: rgba(241, 238, 231, 0.6);
+  font: 400 12px/1.5 Manrope, sans-serif;
+}
+
+@container (max-width: 460px) {
+  .browser-toolbar {
+    gap: 1px;
+    padding-inline: 5px;
+  }
+
+  .browser-icon-btn {
+    flex-basis: 30px;
+    width: 30px;
+  }
+
+  .browser-toolbar > .browser-icon-btn:nth-of-type(4),
+  .browser-toolbar > .browser-icon-btn:nth-of-type(6) {
+    display: none;
+  }
+
+  .browser-home {
+    padding-inline: 14px;
+  }
+}
+
+
+/* ==========================================================================
+   Study Plan & Glossary
+   ========================================================================== */
+
+.plan-screen {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 20px 24px 40px;
+  color: #ffffff;
+  font-family: "Manrope", sans-serif;
+}
+
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.plan-head .settings-back-btn {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.plan-title {
+  margin: 0;
+  font: 800 34px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.plan-head .settings-back-btn:focus-visible,
+.plan-chip:focus-visible,
+.plan-screen .settings-text-input:focus-visible {
+  outline: 2px solid #8ad4ff;
+  outline-offset: 2px;
+}
+
+.plan-hint {
+  font: 500 12.5px/1.45 "Manrope", sans-serif;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-subject-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+
+.plan-chip {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font: 600 11px/1.25 "Manrope", sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.plan-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.plan-chip.active {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.glossary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.glossary-grid .plan-term {
+  margin-bottom: 0;
+}
+
+.plan-term {
+  min-width: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 11px 13px;
+  margin-bottom: 8px;
+}
+
+.plan-term-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.plan-term-name {
+  min-width: 0;
+  font: 700 13px/1.35 "Manrope", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.plan-term-subject {
+  flex: 0 1 auto;
+  min-width: 0;
+  font: 600 9.5px/1.35 ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.plan-term-body {
+  margin-top: 5px;
+  font: 500 12px/1.4 "Manrope", sans-serif;
+  color: rgba(255, 255, 255, 0.75);
+  overflow-wrap: anywhere;
+}
+
+
+@media (max-width: 520px) {
+  .plan-screen {
+    padding: 14px 16px 32px;
+  }
+
+  .plan-title {
+    font-size: 28px;
+  }
+
+  .plan-term-head {
+    align-items: flex-start;
+  }
+}
+
+/* ==========================================================================
+   Calculator Panel & Casio fx-991DEX Simulator
+   ========================================================================== */
+
+.rail-calculator {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1eee7;
+  font-family: Manrope, sans-serif;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  animation: rail-chat-fade-in 0.22s ease 0.1s both;
+  overflow: hidden;
+}
+
+.rail-calculator[hidden] {
+  display: none;
+}
+
+.calculator-panel-header {
+  flex: 0 0 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.calculator-panel-title {
+  font: 700 13px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calculator-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-popover-icon-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.editor-popover-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.calculator-insert-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f5f9;
+  font: 600 11.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.calculator-insert-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+.calculator-insert-pill:active {
+  transform: scale(0.96);
+}
+
+.calculator-insert-pill.success {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.calculator-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 12px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.casio-device-container {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 478 / 1024;
+  user-select: none;
+  margin: 0 auto;
+}
+
+.casio-base-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.65));
+  pointer-events: none;
+}
+
+/* Casio LCD Display */
+.casio-screen-overlay {
+  position: absolute;
+  background: #cad6c4;
+  background-image: 
+    radial-gradient(rgba(0,0,0,0.035) 1px, transparent 0),
+    linear-gradient(180deg, #d2dcce 0%, #c4d1be 100%);
+  background-size: 3px 3px, 100% 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5% 4.5% 2%;
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.38), 
+    inset 0 0 1px rgba(0, 0, 0, 0.55);
+  color: #1a271e;
+  font-family: 'Consolas', 'Courier New', ui-monospace, monospace;
+  pointer-events: none;
+}
+
+.casio-lcd-header {
+  height: 18%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1px;
+}
+
+.casio-indicators {
+  display: flex;
+  align-items: center;
+  gap: 6.5px;
+}
+
+.casio-ind {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #1a271e;
+  line-height: 1;
+}
+
+.casio-ind.ghost {
+  opacity: 0.12;
+}
+
+.casio-ind.active {
+  opacity: 0.95;
+}
+
+.casio-natural-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-angle-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.2px solid #1a271e;
+  padding: 0 2px;
+  font-size: 7.5px;
+  height: 9.5px;
+  line-height: 8px;
+  font-weight: 800;
+  box-sizing: border-box;
+}
+
+.casio-history-arrow {
+  font-size: 0.55rem;
+  margin-left: 2px;
+}
+
+.casio-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.casio-solar-dot {
+  font-size: 0.55rem;
+  opacity: 0.7;
+}
+
+.casio-lcd-expression {
+  height: 46%;
+  display: flex;
+  align-items: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  color: #1a271e;
+  padding-left: 2px;
+}
+
+.casio-lcd-expression::-webkit-scrollbar {
+  display: none;
+}
+
+/* Authentic Casio Block Cursor */
+.casio-lcd-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 13px;
+  background-color: #1a271e;
+  animation: casio-cursor-blink 0.85s steps(2, start) infinite;
+  margin: 0 1.5px;
+  vertical-align: -1px;
+}
+
+.casio-slot-contents {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 1. Fraction Template */
+.casio-natural-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 2.5px;
+  font-size: 0.88em;
+}
+
+.casio-frac-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14px;
+  padding: 0 2px;
+}
+
+.casio-frac-bar {
+  width: 100%;
+  min-width: 13px;
+  height: 1.5px;
+  background-color: #141c14;
+  margin: 1px 0;
+}
+
+.casio-frac-den {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 14px;
+  padding: 0 2px;
+}
+
+/* 2. Square Root Template */
+.casio-natural-sqrt {
+  display: inline-flex;
+  align-items: flex-start;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.casio-sqrt-hook {
+  width: 9px;
+  height: 18px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.casio-sqrt-content {
+  border-top: 1.3px solid #1a271e;
+  margin-left: -1px;
+  margin-top: 0.9px;
+  padding: 2px 2px 0 2px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 3. Power Template */
+.casio-natural-pow {
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.casio-pow-base {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-pow-exp {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72em;
+  transform: translateY(-0.55em);
+  margin-left: 1px;
+}
+
+.casio-pow-exp .casio-placeholder-box {
+  width: 7px;
+  height: 10px;
+  border-width: 1.2px;
+}
+
+/* 4. Integral Template */
+.casio-natural-integral {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.casio-int-symbol {
+  font-size: 1.35em;
+  line-height: 1;
+  font-weight: 600;
+  margin-right: 1px;
+}
+
+.casio-int-limits {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 28px;
+  margin-right: 3px;
+}
+
+.casio-int-upper .casio-placeholder-box,
+.casio-int-lower .casio-placeholder-box {
+  width: 7px;
+  height: 9px;
+  border-width: 1.2px;
+  margin: 0;
+}
+
+.casio-int-body {
+  display: inline-flex;
+  align-items: center;
+}
+
+.casio-int-dx {
+  font-style: italic;
+  font-size: 0.9em;
+  margin-left: 2px;
+}
+
+@keyframes casio-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.casio-lcd-error {
+  font-weight: 700;
+  color: #101610;
+}
+
+.casio-lcd-result {
+  height: 38%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.casio-result-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0b110b;
+}
+
+.casio-result-fraction-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  line-height: 1;
+}
+
+.casio-result-fraction-minus {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0b110b;
+  margin-right: 2px;
+}
+
+.casio-result-fraction {
+  margin: 0 1px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.casio-result-fraction .casio-frac-num,
+.casio-result-fraction .casio-frac-den {
+  min-height: 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0b110b;
+  padding: 0 3px;
+}
+
+.casio-result-fraction .casio-frac-bar {
+  height: 1.8px;
+  background-color: #0b110b;
+  min-width: 14px;
+  margin: 1px 0;
+}
+
+/* Hitboxes */
+.casio-hitbox-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.casio-hitbox {
+  position: absolute;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.08s, transform 0.06s;
+}
+
+.casio-hitbox:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.casio-hitbox.pressed,
+.casio-hitbox:active {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+  transform: scale(0.96);
+}
+
+.casio-shape-circle {
+  border-radius: 50%;
+}
+
+.casio-shape-rounded {
+  border-radius: 6px;
+}
+
+.casio-shape-num {
+  border-radius: 8px;
+}
+
+
+/* Fat scrollbar thumb, shown only while a finger holds the right-hand strip of
+   a document (see useScrollbarGrip). Positioned by the hook, never by React. */
+.scroll-grip-thumb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2000;
+  transition: opacity 0.12s ease, width 0.14s ease;
+}
+
+.scroll-grip-thumb.is-gripped {
+  width: 12px;
+  opacity: 1;
+}
+
+/* Left-hand scrubber: slim horizontal track at the very top-left quarter. */
+.scroll-scrubber {
+  position: fixed;
+  top: 4px;
+  left: 12px;
+  width: calc(25vw - 24px);
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  touch-action: none;
+  z-index: 2000;
+}
+
+/* Invisible fat hit area so the slim track is still easy to grab. */
+.scroll-scrubber::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0 -22px;
+}
+
+.scroll-scrubber-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: none;
+  pointer-events: none;
+  transition: background 0.12s ease;
+}
+
+.scroll-scrubber.is-gripped .scroll-scrubber-thumb {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.scroll-scrubber.is-idle {
+  opacity: 0.35;
+}
+
+@keyframes comment-flash {
+  0%, 75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+}
+
+
+/* IServ button: the glass rim (inset highlight/shade) is painted over the logo, not under it */
+.lib-iserv::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.9);
+}
+
+
+/* ==========================================================================
+   Width tiers: xs <480, sm <720, md <1100, lg (see hooks/useWidthTier.js).
+   The tier is the element's own width, so a split-screen pane and a narrow
+   window adapt the same way.
+   ========================================================================== */
+
+/* --- Editor (window or pane) --- */
+.editor-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .rail-btn-optional {
+  display: none;
+}
+
+/* The pills are absolutely placed, so cap the title pill before it runs
+   under the actions pill: 3 buttons (126px) + 26px inset + gap, or 4 with
+   the pane's close button. */
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .editor-title-pill {
+  --actions-reserve: 164px;
+  min-width: 0;
+  max-width: max(64px, calc(100% - 104px - var(--actions-reserve)));
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]):not([data-panes="1"]) .editor-title-pill {
+  --actions-reserve: 198px;
+}
+
+.editor-shell:is([data-tier="sm"], [data-tier="xs"]) .editor-title-pill.no-rail {
+  max-width: max(64px, calc(100% - 24px - var(--actions-reserve)));
+}
+
+.editor-shell[data-tier="xs"] :is(.editor-subject, .editor-title-sep) {
+  display: none;
+}
+
+/* --- Library --- */
+.lib-root {
+  --lib-left: 106px;
+  --lib-content-left: 570px;
+  --lib-top: 82px;
+}
+
+/* Below lg the overview column no longer sits beside the cards (the clock
+   button slides it over them), so they start right after the rail. */
+.lib-root:not([data-tier="lg"]) {
+  --lib-content-left: var(--lib-left);
+}
+
+.lib-root:not([data-tier="lg"]) .lib-btn-label {
+  display: none;
+}
+
+.lib-root:not([data-tier="lg"]) :is(.lib-newnote, .lib-file-open) {
+  width: 52px;
+  padding: 0 !important;
+  justify-content: center;
+}
+
+.lib-overview-btn[data-active="true"] {
+  background: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+.lib-root .liquid-control-search[data-agent-open="true"] {
+  max-width: calc(100% - var(--lib-left) - 24px);
+}
+
+/* sm/xs: slim rail, and the header splits into two rows - search on top,
+   view/sort + actions below. */
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) {
+  --lib-left: 74px;
+  --lib-top: 146px;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-navigation {
+  left: 8px !important;
+  width: 56px !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-search:not([data-agent-open="true"]) {
+  right: 24px;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) :is(.liquid-control-view-sort, .lib-newnote, .lib-file-open) {
+  top: 84px !important;
+}
+
+.lib-root:is([data-tier="sm"], [data-tier="xs"]) .liquid-control-view-sort {
+  right: auto !important;
+  left: var(--lib-left);
+}
+
+.lib-root[data-tier="xs"] .liquid-control-view-sort {
+  display: none;
+}
+
+/* --- Settings --- */
+@media (max-width: 640px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .settings-topbar > span {
+    display: none;
+  }
+
+  .settings-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .settings-nav-label {
+    display: none;
+  }
+
+  .settings-nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .settings-content {
+    padding: 16px;
+  }
+}
+
+/* Textbook shelf inside a subject folder (Library.jsx BookTile). */
+.lib-shelf-title {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  margin: 0 0 14px;
+  font: 700 21px/1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+.lib-shelf-title span {
+  font: 600 9.5px ui-monospace, monospace;
+  letter-spacing: 0.11em;
+}
+.lib-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px 20px;
+  margin: 0 0 30px;
+  padding: 6px 4px 6px 2px;
+}
+.lib-book {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 118px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-book-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 118px;
+  height: 160px;
+  overflow: hidden;
+  border-radius: 3px 9px 9px 3px;
+  background: var(--subj-accent, #3b5b8c);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    14px 16px 28px -10px rgba(0, 0, 0, 0.6);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lib-book-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Spine: a darker band with a fold highlight, like the book icon. */
+.lib-book-spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 11px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22) 70%, rgba(255, 255, 255, 0.28) 85%, rgba(0, 0, 0, 0.12));
+}
+.lib-book:active .lib-book-cover,
+.lib-book:hover .lib-book-cover {
+  transform: translateY(-3px);
+}
+.lib-book-title {
+  font: 700 12.5px/1.2 "Bricolage Grotesque", sans-serif;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.lib-book-add .lib-book-cover {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+}
+.lib-book-add-label {
+  font: 600 10px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.lib-book-add:disabled {
+  cursor: progress;
+}
+
+/* Folder card (Library.jsx FolderCard): sheets stacked behind a frosted front. */
+.lib-folder {
+  position: relative;
+  flex: none;
+  width: 210px;
+  height: 156px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-folder-sheet {
+  position: absolute;
+  height: 96px;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 -5px 10px -3px rgba(0, 0, 0, 0.55);
+  transform: translateY(var(--lift, 0)) perspective(500px) rotateX(var(--lean));
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* The sheets fan out between an upright back and the leaning front, all hinged
+   on the card's bottom edge (156px minus each sheet's top). */
+.lib-folder-sheet-0 { top: 0; left: 26px; right: 26px; --lean: -3deg; transform-origin: 50% 156px; }
+.lib-folder-sheet-1 { top: 8px; left: 18px; right: 18px; --lean: -7deg; transform-origin: 50% 148px; }
+.lib-folder-sheet-0.is-empty { opacity: 0.45; }
+.lib-folder-sheet-1.is-empty { opacity: 0.75; }
+/* Less lean than the front, so it must start narrower than the front's 196px
+   or it pokes out at the sides (equal width only at 137px above the hinge). */
+.lib-folder-sheet-image { top: 17px; left: 12px; right: 12px; height: 132px; --lean: -11deg; transform-origin: 50% 139px; }
+/* The front leans toward the viewer, hinged at its bottom edge: the top comes
+   out ~7% wider, so the pane is inset 7px to keep that within the card. The
+   solid 5px shadow is the glass's thickness along the bottom. */
+.lib-folder-front {
+  position: absolute;
+  inset: 30px 7px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 0 17px 18px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  background: rgba(40, 42, 48, 0.35);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -10px 18px -10px rgba(0, 0, 0, 0.45),
+    0 5px 0 rgba(112, 116, 124, 0.6),
+    0 22px 34px -14px rgba(0, 0, 0, 0.85);
+  transform-origin: 50% 100%;
+  transform: perspective(500px) rotateX(-15deg);
+  transition: transform 0.2s ease;
+}
+/* Blurred copy of the picture sheet: the front starts 13px below the sheet
+   and its inset + 1px border shift it in, hence -14px / 4px against 17px / 12px. */
+.lib-folder-frost {
+  position: absolute;
+  top: -14px;
+  left: 4px;
+  right: 4px;
+  height: 132px;
+  z-index: -1;
+  border-radius: 14px;
+  filter: blur(12px) saturate(1.4) brightness(1.08);
+}
+/* Sheen: light catching the top-left of the pane, fading toward the bottom. */
+.lib-folder-front::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07) 38%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.05), transparent 30%);
+  pointer-events: none;
+}
+.lib-folder-name {
+  position: relative;
+  font: 700 19px/1.1 "Bricolage Grotesque", sans-serif;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.lib-folder-count {
+  position: relative;
+  font: 500 12.5px/1.2 Manrope, sans-serif;
+  color: rgba(255, 255, 255, 0.62);
+}
+.lib-folder:hover .lib-folder-sheet-0 { --lift: -6px; }
+.lib-folder:hover .lib-folder-sheet-1 { --lift: -4px; }
+.lib-folder:hover .lib-folder-sheet-image { --lift: -2px; }
+.lib-folder:active .lib-folder-front { transform: perspective(500px) rotateX(-15deg) scale(0.98); }
+.lib-add-folder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  align-self: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.lib-add-folder:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}

@@ -1,0 +1,5 @@
+shapely
+Pillow
+fonttools
+pytest
+uharfbuzz

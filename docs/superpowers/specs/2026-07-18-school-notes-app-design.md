@@ -1,0 +1,44 @@
+# Ergonomic AI Notes App for School
+
+## 1. Project Goal
+To build a powerful, custom note-taking application specifically designed for school use on a tablet (Galaxy Tab A7). The app solves a major hardware limitation (lack of active stylus palm rejection) through an innovative ergonomic UI and integrates AI deeply for in-class assistance and asynchronous research.
+
+## 2. Core Architecture & UI Layout
+The application will utilize a web-based architecture (HTML/CSS/JS or a framework like React/Next.js) optimized for touch interfaces.
+
+### 2.1 The Ergonomic Split-Screen (Palm Rejection Solution)
+Because the target hardware registers all input as capacitive touch (`pointerType === 'touch'`), the UI is split to physically isolate the writing hand from the document view.
+*   **Left Side (approx. 75% width): The Document View**
+    *   Displays the full notes document.
+    *   Handles touch gestures (pinch-to-zoom, pan, scroll) completely independently.
+    *   Does *not* accept regular pen input, but **allows Highlighter (Textmarker)** und selection tools.
+    *   AI interactions (explanations, popups) are displayed directly over this Left Side.
+    *   Displays an interactive **"Focus Box"** indicating the current area being edited. The user can tap anywhere to place it, and drag its corners to resize it (e.g., to perfectly fit a gap in a worksheet).
+*   **Right Side (approx. 25% width): The Writing Zone**
+    *   A dedicated, isolated canvas meant for handwriting.
+    *   The user's right hand rests off-screen on the physical table, and the stylus writes in this column.
+    *   Strokes drawn here are scaled and injected into the "Focus Box" on the Left Side document in real-time.
+    *   **Auto-Advance (Continuous Writing):** There is a "Trigger Zone" near the right edge of the Writing Column. When the stylus enters this zone, the Focus Box on the left automatically shifts forward, and the Writing Zone clears room on the left (treadmill effect), allowing the user to write infinitely long words without lifting their hand.
+
+### 2.2 Corrections & Navigation
+*   To edit previously written text, the user taps/pans the Document View (Left Side) and taps the desired location.
+*   The Focus Box snaps to that location, and the Writing Zone (Right Side) clears (or shows the existing strokes in that area) to allow corrections.
+
+## 3. AI Features & Modes
+The app features two main tabs to handle different cognitive loads during school.
+
+### 3.1 Tab 1: Smart Canvas (Primary Mode)
+*   **Focus:** In-class use. Non-intrusive, fast assistance.
+*   **Functionality:** The user can select handwritten text (via OCR) or typed text on the Left Side document and press "Erklären" (Explain).
+*   **AI Action:** The AI quickly performs a web search in the background and displays a concise explanation, definition, or translation in a sidebar/popup overlay. This keeps the user in the context of their notes without opening a full browser.
+
+### 3.2 Tab 2: Delegation Assistant (Secondary Mode)
+*   **Focus:** Complex research, asynchronous tasks.
+*   **Functionality:** A chat-like interface where the user assigns complex tasks (e.g., "Research the causes of the French Revolution and create a summary with sources").
+*   **AI Action:** The AI acts as an autonomous agent, steering a headless browser or executing complex searches in the background. It generates a comprehensive document while the user returns to Tab 1 to continue following the class.
+
+## 4. Technical Requirements
+*   **Frontend:** Touch-optimized web framework.
+*   **Canvas Management:** HTML5 Canvas API with isolated touch event listeners (preventing default touch behaviors on the drawing side, allowing native scrolling/zooming on the document side).
+*   **AI Integration:** Connection to an LLM API (e.g., Gemini/OpenAI) for the Smart Canvas features and agentic capabilities for the Delegation tab.
+*   **Data Structure:** Vector-based stroke storage for the notes to allow scaling and corrections.

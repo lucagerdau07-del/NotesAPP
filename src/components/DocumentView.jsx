@@ -1,0 +1,4039 @@
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
+import {
+  Eraser,
+  Highlighter,
+  PenLine,
+  X,
+  Palette,
+  Sliders,
+  PenTool,
+  Pencil,
+  Plus,
+  ArrowUpRight,
+  Minus,
+  Square,
+  Circle,
+  Type,
+  Image as ImageIcon,
+  Link2,
+  Shapes,
+  Bold,
+  Italic,
+  ScanSearch,
+} from "lucide-react";
+import { HexColorPicker } from "react-colorful";
+import useLongPress from "../hooks/useLongPress";
+import useInkPointer from "../hooks/useInkPointer";
+import { loadPalmProfile, palmGuardFromProfile } from "../ink/palmSettings.js";
+import { mapViewportPoint, pagePointToViewport } from "../ink/pageCoordinates";
+import { changedInkRegion, renderInkDocument, renderInkStroke, resizeInkCanvas } from "../ink/renderInk";
+import useScrollbarGrip, { useLeftHandScrubber } from "./document/useScrollbarGrip.js";
+import { calculateDocumentMetrics } from "../documents/documentLayout";
+import { renderRegionFromDocument } from "../documents/notePreview.js";
+import { INPUT_MODES } from "../ink/inputPolicy";
+import { inkWriteOptions, resolveInkTool } from "../ink/pointerOptions.js";
+import DocumentPage from "./document/DocumentPage";
+import PageObjectLayer from "./document/PageObjectLayer";
+import CommentLayer, { CommentFlash } from "./document/CommentLayer";
+import useComments from "../hooks/useComments";
+import LayerDrawer from "./document/LayerDrawer.jsx";
+import LassoSelectionLayer from "./document/LassoSelectionLayer";
+import WhiteboardEditor from "./WhiteboardEditor.jsx";
+import useEraserRing, { eraserRingStyle } from "../hooks/useEraserRing";
+import ToolRail, { TEXT_TOOL } from "./ToolRail.jsx";
+import { pageObjectsOf, isPointInsideObject, createPageObject } from "../ink/pageObjects";
+import { shapeToInkStroke } from "../ink/shapeInk.js";
+import { resolveInkLayerIndex } from "../ink/inkDocument";
+import { readImageObjectSource, readImageObjectSourceFromDataUrl } from "../ink/imageObject";
+import { isPdfFile, pdfPageCommands, readPdfPages } from "../ink/pdfObject";
+import { removeImageBackground } from "../ink/imageBackground";
+import { FLOW_MARGIN, FONT_STACKS, snapTextToGrid } from "../ink/textStyle";
+import { plainTextOf, richHtmlOf } from "../ink/richText";
+import { rasterizePageWalls, floodFill, fillResultToDataUrl, hexToRgb } from "../ink/bucketFill";
+import { strokesInLasso, objectsInLasso, selectionBounds, mapLassoPoint } from "../ink/lasso";
+import { useBrowserLink } from "../browser/BrowserLinkContext.jsx";
+import { isLightBackground, readableInk } from "../documents/pageStyles.js";
+
+
+// Default footprint per type, in page units. Inserts land centered on the
+// visible area, so these only decide how big the thing starts out.
+export const DESIGN_TOOLS = [
+  { id: "arrow", name: "Pfeil", icon: <ArrowUpRight size={15} />, width: 180, height: 90 },
+  { id: "line", name: "Linie", icon: <Minus size={15} />, width: 200, height: 0 },
+  { id: "rect", name: "Rahmen", icon: <Square size={15} />, width: 200, height: 130 },
+  { id: "ellipse", name: "Kreis", icon: <Circle size={15} />, width: 170, height: 170 },
+  { id: "image", name: "Bild / PDF", icon: <ImageIcon size={15} />, width: 260, height: 180 },
+  { id: "link", name: "Link", icon: <Link2 size={15} />, width: 230, height: 30 },
+];
+
+// Circle-to-search: an armed placingTool exactly like the shape tools (same
+// drag-a-box mechanic, already wired for pointerDown/Move/Up) — only its
+// pointerUp handling differs, see the draftPlacement branch below.
+export const CIRCLE_SEARCH_TOOL = {
+  id: "circleSearch",
+  name: "Bereich",
+  icon: <ScanSearch size={15} />,
+  width: 200,
+  height: 130,
+};
+// Its visible mark: a bright, unmistakably-not-user-drawn accent so it reads
+// as "sent to the assistant", not as an actual shape.
+export const SEARCH_MARK_COLOR = "#FF7A33";
+export const SEARCH_CROP_OPTIONS = { maxDimension: 900, mimeType: "image/jpeg", quality: 0.82 };
+
+export function DesignToolsPopover({ onInsert, onClose, top = 120 }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".design-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover design-tools-popover"
+      style={{ top, width: 250 }}
+      data-testid="design-tools-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Shapes size={14} /> Einfügen
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+      <div className="tool-types-grid">
+        {DESIGN_TOOLS.map((item) => (
+          <button
+            key={item.id}
+            className="tool-type-btn"
+            data-testid={`insert-${item.id}`}
+            onClick={() => onInsert(item)}
+          >
+            {item.icon}
+            <span>{item.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TEXT_COLORS = ["#EFECE4", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#141418"];
+const ALIGNMENTS = [
+  { id: "left", name: "Links" },
+  { id: "center", name: "Mitte" },
+  { id: "right", name: "Rechts" },
+];
+
+// Edits the selected text object when there is one, otherwise the defaults the
+// next insert will use — same controls either way.
+export function TextSettingsPopover({ style, onStyleChange, paperStyle, onInsert, hasSelection, onClose, top = 120, canFlow = false }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".text-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  const snapHint = { lined: "Linien", grid: "Karo", dotted: "Punktraster" }[paperStyle] ||
+    "unsichtbarem Raster";
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover text-settings-popover"
+      style={{ top, width: 270, maxHeight: `calc(100% - ${top}px - 8px)`, overflowY: "auto" }}
+      data-testid="text-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Type size={14} /> {hasSelection ? "Text bearbeiten" : "Text-Einstellungen"}
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="text-row">
+        <span className="text-setting-label">SCHRIFT</span>
+        <select
+          className="text-select"
+          value={style.fontFamily ?? FONT_STACKS[0].id}
+          data-testid="text-font-select"
+          onChange={(e) => onStyleChange({ fontFamily: e.target.value })}
+        >
+          {FONT_STACKS.map((font) => (
+            <option key={font.id} value={font.id}>
+              {font.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="text-row">
+        <span className="text-setting-label">GRÖSSE</span>
+        <input
+          type="range"
+          min="8"
+          max="96"
+          step="1"
+          value={style.fontSize}
+          disabled={style.snapToLines}
+          onChange={(e) => onStyleChange({ fontSize: parseInt(e.target.value, 10) })}
+          className="thickness-slider"
+          data-testid="text-size-slider"
+        />
+        <span className="thickness-val">{style.snapToLines ? "Raster" : `${style.fontSize}px`}</span>
+      </div>
+
+      <div className="text-row">
+        <span className="text-setting-label">STIL</span>
+        <select
+          className="text-select"
+          value={style.textAlign ?? "left"}
+          data-testid="text-align-select"
+          onChange={(e) => onStyleChange({ textAlign: e.target.value })}
+        >
+          {ALIGNMENTS.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+        <button
+          className={`text-style-btn ${style.bold ? "active" : ""}`}
+          data-testid="text-bold"
+          title="Fett"
+          onClick={() => onStyleChange({ bold: !style.bold })}
+        >
+          <Bold size={14} />
+        </button>
+        <button
+          className={`text-style-btn ${style.italic ? "active" : ""}`}
+          data-testid="text-italic"
+          title="Kursiv"
+          onClick={() => onStyleChange({ italic: !style.italic })}
+        >
+          <Italic size={14} />
+        </button>
+      </div>
+
+      <div className="text-row">
+        <span className="text-setting-label">FARBE</span>
+        {TEXT_COLORS.map((swatch) => (
+          <button
+            key={swatch}
+            className={`text-color-btn ${
+              style.color?.toLowerCase() === swatch.toLowerCase() ? "active" : ""
+            }`}
+            style={{ background: swatch }}
+            title={swatch}
+            onClick={() => onStyleChange({ color: swatch })}
+          />
+        ))}
+      </div>
+
+      <div className="text-row">
+        <span className="text-setting-label">LAGE</span>
+        <select
+          className="text-select"
+          value={style.snapToLines ? String(Math.min(style.lineStep || 1, 2)) : "free"}
+          data-testid="text-snap-select"
+          onChange={(e) =>
+            onStyleChange(
+              e.target.value === "free"
+                ? { snapToLines: false }
+                : { snapToLines: true, lineStep: Number(e.target.value) },
+            )
+          }
+        >
+          <option value="free">Frei platzieren</option>
+          <option value="1">Auf {snapHint}, 1 Zeile</option>
+          <option value="2">Auf {snapHint}, 2 Zeilen</option>
+        </select>
+      </div>
+
+      {canFlow && (
+        <div className="text-row">
+          <span className="text-setting-label">BREITE</span>
+          <select
+            className="text-select"
+            value={style.flow ? "page" : "free"}
+            data-testid="text-width-select"
+            title="Seitenbreite: Text, der unten nicht mehr passt, läuft auf der nächsten Seite weiter"
+            onChange={(e) => onStyleChange({ flow: e.target.value === "page" })}
+          >
+            <option value="free">Frei</option>
+            <option value="page">Seitenbreite</option>
+          </select>
+        </div>
+      )}
+
+      {!hasSelection && (
+        <button className="text-insert-btn" data-testid="text-insert-btn" onClick={onInsert}>
+          <Plus size={14} /> Text einfügen
+        </button>
+      )}
+    </div>
+  );
+}
+
+const SHAPE_COLORS = ["#141418", "#3E7BD8", "#D8615B", "#4FA66B", "#D4A937", "#EFECE4"];
+const STROKE_WIDTHS = [2, 3, 5];
+const STROKE_STYLES = [
+  { id: "solid", label: "Durchgehend", dash: "0" },
+  { id: "dashed", label: "Gestrichelt", dash: "6 4" },
+  { id: "dotted", label: "Gepunktet", dash: "1.5 4" },
+];
+const ARROW_TYPES = [
+  { id: "straight", label: "Gerade" },
+  { id: "curved", label: "Kurve" },
+  { id: "elbow", label: "Eckig" },
+];
+
+// Edits the selected rect/ellipse/line/arrow object — same "no selection, no
+// popover" shape as text minus the insert button, since these objects are
+// already inserted via the shapes popover with the current pen color/width.
+export function ShapeSettingsPopover({ object, onChange, onClose, top = 120 }) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".shape-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  if (!object) return null;
+  const isLineLike = object.type === "line" || object.type === "arrow";
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover shape-settings-popover"
+      style={{ top, width: 250 }}
+      data-testid="shape-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Square size={14} /> Form-Einstellungen
+        </span>
+        <button className="editor-popover-close" onClick={onClose} title="Schließen">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="text-setting-label">FARBE</div>
+      <div className="text-style-row">
+        {SHAPE_COLORS.map((swatch) => (
+          <button
+            key={swatch}
+            className={`text-color-btn ${
+              object.color?.toLowerCase() === swatch.toLowerCase() ? "active" : ""
+            }`}
+            style={{ background: swatch }}
+            title={swatch}
+            onClick={() => onChange({ color: swatch })}
+          />
+        ))}
+      </div>
+
+      <div className="text-setting-label">STRICHSTÄRKE</div>
+      <div className="thickness-presets">
+        {STROKE_WIDTHS.map((w) => (
+          <button
+            key={w}
+            className={`thickness-preset-btn ${object.strokeWidth === w ? "active" : ""}`}
+            onClick={() => onChange({ strokeWidth: w })}
+            title={`${w}px`}
+          >
+            <span style={{ width: 14, height: Math.max(1, w), background: "currentColor", borderRadius: 2 }} />
+          </button>
+        ))}
+      </div>
+
+      <div className="text-setting-label">STRICHSTIL</div>
+      <div className="text-style-row">
+        {STROKE_STYLES.map((s) => (
+          <button
+            key={s.id}
+            className={`text-style-btn ${object.strokeStyle === s.id ? "active" : ""}`}
+            title={s.label}
+            onClick={() => onChange({ strokeStyle: s.id })}
+            style={{ flex: 1 }}
+          >
+            <svg width="28" height="10" viewBox="0 0 28 10">
+              <line x1="2" y1="5" x2="26" y2="5" stroke="currentColor" strokeWidth="2" strokeDasharray={s.dash} strokeLinecap="round" />
+            </svg>
+          </button>
+        ))}
+      </div>
+
+      {object.type === "rect" && (
+        <>
+          <div className="text-setting-label">ECKEN</div>
+          <div className="text-style-row">
+            <button
+              className={`text-style-btn ${object.rounded ? "" : "active"}`}
+              onClick={() => onChange({ rounded: false })}
+              style={{ flex: 1 }}
+              title="Scharf"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16"><rect x="2" y="2" width="16" height="12" fill="none" stroke="currentColor" strokeWidth="2" /></svg>
+            </button>
+            <button
+              className={`text-style-btn ${object.rounded ? "active" : ""}`}
+              onClick={() => onChange({ rounded: true })}
+              style={{ flex: 1 }}
+              title="Rund"
+            >
+              <svg width="20" height="16" viewBox="0 0 20 16"><rect x="2" y="2" width="16" height="12" rx="5" fill="none" stroke="currentColor" strokeWidth="2" /></svg>
+            </button>
+          </div>
+        </>
+      )}
+
+      {isLineLike && (
+        <>
+          <div className="text-setting-label">PFEILTYP</div>
+          <div className="text-style-row">
+            {ARROW_TYPES.map((t) => (
+              <button
+                key={t.id}
+                className={`text-style-btn ${object.arrowType === t.id ? "active" : ""}`}
+                title={t.label}
+                onClick={() => onChange({ arrowType: t.id })}
+                style={{ flex: 1, fontSize: 11 }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-setting-label">PFEILSPITZEN</div>
+          <div className="text-style-row">
+            <button
+              className={`text-style-btn ${object.startArrowhead === "arrow" ? "active" : ""}`}
+              onClick={() => onChange({ startArrowhead: object.startArrowhead === "arrow" ? "none" : "arrow" })}
+              style={{ flex: 1, fontSize: 11 }}
+            >
+              Start
+            </button>
+            <button
+              className={`text-style-btn ${object.endArrowhead === "arrow" ? "active" : ""}`}
+              onClick={() => onChange({ endArrowhead: object.endArrowhead === "arrow" ? "none" : "arrow" })}
+              style={{ flex: 1, fontSize: 11 }}
+            >
+              Ende
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="text-setting-label">DECKKRAFT ({object.opacity ?? 100}%)</div>
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min="10"
+          max="100"
+          step="5"
+          value={object.opacity ?? 100}
+          onChange={(e) => onChange({ opacity: parseInt(e.target.value, 10) })}
+          className="thickness-slider"
+        />
+        <span className="thickness-val">{object.opacity ?? 100}%</span>
+      </div>
+    </div>
+  );
+}
+
+export function PenSettingsPopover({
+  tool,
+  setTool,
+  rawLineWidth,
+  setLineWidth,
+  penColor,
+  onClose,
+  setIsEraser,
+  setIsSelectMode,
+  inputMode,
+  setInputMode,
+  top = 120,
+}) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".pen-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  const isHighlighter = tool === "highlighter";
+  const thicknessPresets = isHighlighter
+    ? [10, 16, 24, 32, 44]
+    : [1.5, 3, 5, 8, 14];
+  // Zoomed in far, a 1px pen is a fat line: allow hairlines down to 0.1.
+  const widthMin = isHighlighter ? 8 : 0.1;
+  const widthMax = isHighlighter ? 48 : 20;
+  const widthStep = isHighlighter ? 1 : 0.1;
+
+  const tools = [
+    { id: "pen", name: "Stift", icon: <PenLine size={15} /> },
+    { id: "fountain", name: "Füller", icon: <PenTool size={15} /> },
+    { id: "highlighter", name: "Marker", icon: <Highlighter size={15} /> },
+    { id: "pencil", name: "Bleistift", icon: <Pencil size={15} /> },
+  ];
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover pen-settings-popover"
+      style={{ top, width: 250 }}
+      data-testid="pen-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Sliders size={14} /> Stift-Einstellungen
+        </span>
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Tool selector */}
+      <div className="tool-types-grid">
+        {tools.map((t) => (
+          <button
+            key={t.id}
+            className={`tool-type-btn ${tool === t.id ? "active" : ""}`}
+            onClick={() => {
+              setTool?.(t.id);
+              setIsEraser?.(false);
+              setIsSelectMode?.(false);
+              if (inputMode === "move") setInputMode?.("stylus");
+            }}
+          >
+            {t.icon}
+            <span>{t.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Thickness Presets */}
+      <div
+        style={{
+          font: "600 10px ui-monospace, monospace",
+          letterSpacing: ".06em",
+          color: "rgba(233,230,223,0.5)",
+          marginBottom: 6,
+        }}
+      >
+        STRICHSTÄRKE ({rawLineWidth || 3}px)
+      </div>
+      <div className="thickness-presets">
+        {thicknessPresets.map((val) => (
+          <button
+            key={val}
+            className={`thickness-preset-btn ${Math.abs((rawLineWidth || 3) - val) < 0.5 ? "active" : ""}`}
+            onClick={() => setLineWidth?.(val)}
+            title={`${val}px`}
+          >
+            <span
+              className="thickness-dot"
+              style={{
+                width: Math.max(
+                  3,
+                  Math.min(20, val * (isHighlighter ? 0.38 : 1.3)),
+                ),
+                height: Math.max(
+                  3,
+                  Math.min(20, val * (isHighlighter ? 0.38 : 1.3)),
+                ),
+                background: penColor,
+              }}
+            />
+          </button>
+        ))}
+      </div>
+
+      {/* Continuous Slider */}
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min={widthMin}
+          max={widthMax}
+          step={widthStep}
+          value={rawLineWidth || 3}
+          onChange={(e) => setLineWidth?.(parseFloat(e.target.value))}
+          className="thickness-slider"
+        />
+        {/* Typed, not live: a controlled field would snap back mid-keystroke
+            ("0" is no valid width on the way to "0.5"), so commit on blur. */}
+        <input
+          key={rawLineWidth}
+          type="number"
+          min={widthMin}
+          max={widthMax}
+          step={widthStep}
+          defaultValue={rawLineWidth || 3}
+          onBlur={(e) => {
+            const typed = parseFloat(e.target.value);
+            if (!Number.isFinite(typed)) {
+              e.target.value = rawLineWidth || 3;
+              return;
+            }
+            setLineWidth?.(Math.min(widthMax, Math.max(widthMin, Math.round(typed * 10) / 10)));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+          className="thickness-val-input"
+          data-testid="pen-width-input"
+        />
+        <span className="thickness-val">px</span>
+      </div>
+
+      {/* Stroke Preview */}
+      <div className="stroke-preview-box">
+        <svg
+          width="220"
+          height="36"
+          viewBox="0 0 220 36"
+          style={{ overflow: "visible" }}
+        >
+          <path
+            d="M 15 18 Q 65 4, 110 18 T 205 18"
+            fill="none"
+            stroke={penColor}
+            strokeWidth={
+              isHighlighter ? (rawLineWidth || 3) * 1.5 : rawLineWidth || 3
+            }
+            strokeOpacity={isHighlighter ? 0.45 : tool === "pencil" ? 0.75 : 1}
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+export function EraserSettingsPopover({
+  eraserMode,
+  setEraserMode,
+  eraserWidth,
+  setEraserWidth,
+  onClose,
+  top = 120,
+}) {
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".eraser-rail-btn")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover pen-settings-popover"
+      style={{ top, width: 220 }}
+      data-testid="eraser-settings-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Eraser size={14} /> Radiergummi
+        </span>
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="tool-types-grid">
+        <button
+          className={`tool-type-btn ${eraserMode !== "stroke" ? "active" : ""}`}
+          onClick={() => setEraserMode?.("pixel")}
+        >
+          <Eraser size={15} />
+          <span>Pixel</span>
+        </button>
+        <button
+          className={`tool-type-btn ${eraserMode === "stroke" ? "active" : ""}`}
+          onClick={() => setEraserMode?.("stroke")}
+        >
+          <Eraser size={15} />
+          <span>Strich</span>
+        </button>
+      </div>
+
+      <div
+        style={{
+          font: "600 10px ui-monospace, monospace",
+          letterSpacing: ".06em",
+          color: "rgba(233,230,223,0.5)",
+          marginBottom: 6,
+        }}
+      >
+        GRÖSSE ({eraserWidth || 15}px)
+      </div>
+      <div className="thickness-slider-wrap">
+        <input
+          type="range"
+          min="4"
+          max="60"
+          step="1"
+          value={eraserWidth || 15}
+          onChange={(e) => setEraserWidth?.(parseFloat(e.target.value))}
+          className="thickness-slider"
+        />
+        <span className="thickness-val">{eraserWidth || 15}px</span>
+      </div>
+    </div>
+  );
+}
+
+function PresetSwatch({ color, isActive, onSelect, onDelete }) {
+  const isLongPressRef = useRef(false);
+  const timerRef = useRef(null);
+
+  const handlePointerDown = () => {
+    isLongPressRef.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onDelete();
+    }, 450);
+  };
+
+  const cancelPress = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  return (
+    <button
+      className={`color-preset-btn ${isActive ? "active" : ""}`}
+      style={{ backgroundColor: color }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={cancelPress}
+      onPointerLeave={cancelPress}
+      onPointerCancel={cancelPress}
+      onClick={() => {
+        if (isLongPressRef.current) {
+          isLongPressRef.current = false;
+          return;
+        }
+        onSelect();
+      }}
+      title={`${color} (gedrückt halten zum Löschen)`}
+    />
+  );
+}
+
+export function ColorWheelPopover({
+  customColors,
+  activePickerIndex,
+  setActivePickerIndex,
+  onColorChange,
+  onClose,
+  top = 220,
+}) {
+  const popoverRef = useRef(null);
+  const curColor = customColors[activePickerIndex] || "#EFECE4";
+  const [hexInputValue, setHexInputValue] = useState(curColor);
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [savedColors, setSavedColors] = useState([
+    "#EFECE4",
+    "#A09D95",
+    "#484441",
+    "#3E7BD8",
+    "#2AA9DF",
+    "#4FA66B",
+    "#84CC16",
+    "#D4A937",
+    "#E87A38",
+    "#D8615B",
+    "#E05285",
+    "#9353D3",
+  ]);
+
+  useEffect(() => {
+    setHexInputValue(curColor);
+  }, [curColor]);
+
+  useEffect(() => {
+    const handleDown = (e) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target) &&
+        !e.target.closest?.(".rail-color-wrapper")
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handleDown);
+    return () => document.removeEventListener("pointerdown", handleDown);
+  }, [onClose]);
+
+  const handleHexSubmit = (val) => {
+    setHexInputValue(val);
+    if (/^#[0-9A-F]{6}$/i.test(val)) {
+      onColorChange(activePickerIndex, val);
+      setSelectedPreset(null);
+    }
+  };
+
+  return (
+    <div
+      ref={popoverRef}
+      className="editor-popover color-wheel-popover"
+      style={{ top, width: 232 }}
+      data-testid="color-wheel-popover"
+    >
+      <div className="editor-popover-header">
+        <span className="editor-popover-title">
+          <Palette size={14} /> Farbrad & Palette
+        </span>
+        <button
+          className="editor-popover-close"
+          onClick={onClose}
+          title="Schließen"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Quick Slot Selector */}
+      <div className="color-slots-selector">
+        {customColors.map((col, idx) => (
+          <div
+            key={idx}
+            className={`slot-circle ${activePickerIndex === idx ? "active" : ""}`}
+            style={{ backgroundColor: col }}
+            onClick={() => {
+              setActivePickerIndex(idx);
+              setSelectedPreset(null);
+            }}
+            title={`Slot ${idx + 1} anpassen`}
+          />
+        ))}
+      </div>
+
+      {/* Color Wheel Picker */}
+      <HexColorPicker
+        color={curColor}
+        onChange={(newColor) => {
+          onColorChange(activePickerIndex, newColor);
+          setHexInputValue(newColor.toUpperCase());
+          setSelectedPreset(null);
+        }}
+      />
+
+      {/* Color Presets Palette */}
+      <div className="color-presets-grid">
+        {savedColors.map((pCol) => (
+          <PresetSwatch
+            key={pCol}
+            color={pCol}
+            isActive={selectedPreset?.toLowerCase() === pCol.toLowerCase()}
+            onSelect={() => {
+              onColorChange(activePickerIndex, pCol);
+              setHexInputValue(pCol);
+              setSelectedPreset(pCol);
+            }}
+            onDelete={() =>
+              setSavedColors((prev) => prev.filter((c) => c !== pCol))
+            }
+          />
+        ))}
+        <button
+          className="color-preset-btn color-preset-add"
+          onClick={() =>
+            setSavedColors((prev) =>
+              prev.some((c) => c.toLowerCase() === curColor.toLowerCase())
+                ? prev
+                : [...prev, curColor],
+            )
+          }
+          title="Aktuelle Farbe speichern"
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+
+      {/* Hex Code Input */}
+      <div className="hex-input-row">
+        <span
+          className="hex-preview-dot"
+          style={{ backgroundColor: curColor }}
+        />
+        <input
+          type="text"
+          className="hex-text-input"
+          value={hexInputValue}
+          onChange={(e) => handleHexSubmit(e.target.value)}
+          placeholder="#FFFFFF"
+          maxLength={7}
+        />
+      </div>
+    </div>
+  );
+}
+
+export const baseWidth = 800;
+export const pageHeight = baseWidth * 1.414;
+const PAGE_GAP = 28;
+const EMPTY_STROKES = [];
+const maxPages = 20;
+// How far the move tool can carry the page past the point where its own edge
+// meets the viewport edge, as a share of the viewport — the page always keeps
+// at least the rest of that width on screen, so it can never be pushed out of
+// sight. Below this distance from center a release springs back instead.
+const DOC_EDGE_SLACK_RATIO = 0.25;
+const DOC_SNAP_THRESHOLD_X = 24;
+// ponytail: how far (as a share of their start distance) two fingers may drift
+// apart or together and still count as a pan. Calibration knob: raise it if
+// scrolling still zooms, lower it if a small deliberate pinch feels sticky.
+const PINCH_DEAD_ZONE = Math.log(1.08);
+// Imported pages only allocate the visible slice of a canvas (see
+// pageCanvasSlice), so their memory cost stops following the zoom. A note's one
+// ink canvas is capped at MAX_CANVAS_DIMENSION and just gets blurry past ~5x.
+const MAX_ZOOM = 6;
+const MAX_ZOOM_IMPORTED = 16;
+
+// Two fingers never keep their distance exactly while they pan, and
+// committing that drift on release re-lays-out the document, reallocates the
+// ink canvas and redraws every stroke — after every scroll. So the zoom stays
+// put inside the dead zone, catches up across the next dead zone's width, and
+// follows the fingers exactly beyond that: no jump anywhere, and a real pinch
+// lands where it always did.
+export function pinchZoomRatio(distanceRatio) {
+  const stretch = Math.log(distanceRatio);
+  const size = Math.abs(stretch);
+  if (size < PINCH_DEAD_ZONE) return 1;
+  if (size >= 2 * PINCH_DEAD_ZONE) return distanceRatio;
+  return Math.exp(Math.sign(stretch) * 2 * (size - PINCH_DEAD_ZONE));
+}
+// Same clearance split mode reserves with a static margin (see the scroll
+// container's own margin below) — the floating title/action pills at the top
+// of the screen are that tall. Full mode instead runs the page edge-to-edge
+// under them by default and adds this as extra *scrollable* headroom, so the
+// page can still be pulled down far enough to work the first line free.
+const TOP_UI_CLEARANCE = 78;
+
+// Where the page's own left edge sits, untouched by any offset. text-align
+// centers it only while it still fits: once it is wider than the viewport the
+// browser pins the edge at 0 rather than letting it hang off to the left
+// (measured in Chrome — a 1600px page in an 800px box reports left 0, not -400).
+// Assuming it keeps sliding is what walked the page sideways per zoom step.
+export function pageLeftEdgeX(viewportWidth, pageWidth) {
+  return Math.max(0, (viewportWidth - pageWidth) / 2);
+}
+
+// Fitted, the page rests centered and may be nudged either way by the slack.
+// Overflowing, it starts flush left with the whole overflow hidden to the
+// right, so the travel that reveals anything runs one way only.
+export function clampDocOffsetX(offsetX, viewportWidth, pageWidth) {
+  const slack = viewportWidth * DOC_EDGE_SLACK_RATIO;
+  const overflow = Math.max(0, pageWidth - viewportWidth);
+  return Math.max(-overflow - slack, Math.min(slack, offsetX));
+}
+
+// Where a pinch has to leave the page horizontally to keep the point between
+// the fingers under them, plus the translate that shows it before the new
+// layout exists. Both read the same edge, so the preview and what it commits to
+// cannot disagree — a mismatch there is a jump on release.
+export function pinchAnchorX({
+  centerX,
+  startCenterX,
+  startOffsetX,
+  viewportWidth,
+  startPageWidth,
+  pageWidth,
+}) {
+  const startEdge = pageLeftEdgeX(viewportWidth, startPageWidth);
+  const edge = pageLeftEdgeX(viewportWidth, pageWidth);
+  const scale = pageWidth / startPageWidth;
+  const anchor = (startCenterX - startEdge - startOffsetX) * scale;
+  const offsetX = clampDocOffsetX(centerX - edge - anchor, viewportWidth, pageWidth);
+  return { offsetX, translateX: edge + offsetX - startEdge };
+}
+
+const emptyDocument = {
+  version: 1,
+  documentId: "",
+  pages: [{ id: "empty-page-1" }],
+  strokes: [],
+  updatedAt: 0,
+};
+const DEFAULT_PAGE_BACKGROUND =
+  "linear-gradient(170deg, rgba(26,26,31,0.97) 0%, rgba(14,14,18,0.98) 40%, rgba(7,7,10,0.99) 100%)";
+
+function clampFocusBoxToPage(focusBox) {
+  const width = Math.min(baseWidth, Math.max(0, focusBox.width));
+  const height = Math.min(pageHeight, Math.max(0, focusBox.height));
+  return {
+    ...focusBox,
+    x: Math.min(baseWidth - width, Math.max(0, focusBox.x)),
+    y: Math.min(pageHeight - height, Math.max(0, focusBox.y)),
+    width,
+    height,
+  };
+}
+
+function moveFocusBoxWithinPage(focusBox, dx, dy) {
+  return clampFocusBoxToPage({
+    ...focusBox,
+    x: focusBox.x + dx,
+    y: focusBox.y + dy,
+  });
+}
+
+function relativePoint(element, event) {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+function focusRectToViewport(layout, focusBox) {
+  if (!focusBox) return null;
+  const origin = pagePointToViewport(layout, focusBox.pageId, focusBox);
+  if (!origin) return null;
+  return {
+    x: origin.x,
+    y: origin.y,
+    width: focusBox.width * layout.zoom,
+    height: focusBox.height * layout.zoom,
+  };
+}
+
+export default function DocumentView({
+  note,
+  sourceHandle,
+  sourceLoading,
+  sourceError,
+  retrySource,
+  inkController,
+  focusBoxState,
+  toolbarState,
+  onBack,
+  railSlot,
+  panelSlot,
+  panelMode,
+  setPanelMode,
+  onCurrentPageChange,
+  isImmersive,
+  imageDropRequest,
+  onImageDropHandled,
+  onCircleToSearch,
+  armCircleSearchRequest,
+  onArmCircleSearchHandled,
+  navigatePageRequest,
+  onNavigatePageHandled,
+  openRequest,
+  onOpenHandled,
+  isActive = true,
+  hasRail = true,
+}) {
+  const openLink = useBrowserLink();
+  // In split-screen a pane's own keyboard/paste shortcuts must stay silent
+  // while another pane is focused - see the effects further down that read
+  // this instead of taking isActive as a dependency (so they don't need to
+  // be torn down and rebuilt on every focus change).
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+  if (inkController?.document?.pages?.[0]?.kind === "whiteboard") {
+    return (
+      <WhiteboardEditor
+        inkController={inkController}
+        toolbarState={toolbarState}
+        focusBoxState={focusBoxState}
+        railSlot={railSlot}
+        panelSlot={panelSlot}
+        panelMode={panelMode}
+        setPanelMode={setPanelMode}
+        openRequest={openRequest}
+        onOpenHandled={onOpenHandled}
+        onCircleToSearch={onCircleToSearch}
+        armCircleSearchRequest={armCircleSearchRequest}
+        onArmCircleSearchHandled={onArmCircleSearchHandled}
+        isActive={isActive}
+      />
+    );
+  }
+
+  const {
+    color,
+    setColor,
+    isEraser,
+    setIsEraser,
+    lineWidth,
+    rawLineWidth,
+    setLineWidth,
+    eraserWidth,
+    setEraserWidth,
+    isSelectMode,
+    setIsSelectMode,
+    paperStyle,
+    setPaperStyle,
+    layoutMode,
+    setLayoutMode,
+    layoutToggleRef,
+    rawColor,
+    tool,
+    setTool,
+    showPageBreaks: rawShowPageBreaks,
+    setShowPageBreaks,
+  } = toolbarState || {};
+  const showPageBreaks = note?.kind === 'imported' ? true : rawShowPageBreaks;
+  const inkDocument = inkController?.document || emptyDocument;
+  const pageObjects = pageObjectsOf(inkDocument);
+  const pageIds = inkDocument.pages.map((page) => page.id);
+  const pagesCount = pageIds.length;
+  const canUndo = inkController?.canUndo;
+  const canRedo = inkController?.canRedo;
+  const penColor = rawColor ?? color;
+  const isFullMode = layoutMode !== "split";
+  if (layoutToggleRef)
+    layoutToggleRef.current = () => {
+      setIsSelectMode?.(false);
+      setLayoutMode?.(isFullMode ? "split" : "full");
+    };
+  const [customColors, setCustomColors] = useState([
+    "#EFECE4",
+    "#3E7BD8",
+    "#D8615B",
+  ]);
+  const [activePickerIndex, setActivePickerIndex] = useState(0);
+  const [isPenSettingsOpen, setIsPenSettingsOpen] = useState(false);
+  const [isEraserSettingsOpen, setIsEraserSettingsOpen] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [isDesignToolsOpen, setIsDesignToolsOpen] = useState(false);
+  const [isTextSettingsOpen, setIsTextSettingsOpen] = useState(false);
+  const [isShapeSettingsOpen, setIsShapeSettingsOpen] = useState(false);
+  const [localLayersOpen, setLocalLayersOpen] = useState(false);
+  const isLayersOpen = setPanelMode ? panelMode === "layers" : localLayersOpen;
+  const toggleLayers = () =>
+    setPanelMode
+      ? setPanelMode((prev) => (prev === "layers" ? null : "layers"))
+      : setLocalLayersOpen((prev) => !prev);
+  const openLayers = () =>
+    setPanelMode ? setPanelMode("layers") : setLocalLayersOpen(true);
+  const closeLayers = () =>
+    setPanelMode ? setPanelMode(null) : setLocalLayersOpen(false);
+  const [popoverTop, setPopoverTop] = useState(120);
+  const documentViewRef = useRef(null);
+  const designButtonRef = useRef(null);
+  const anchorPopoverToButton = (buttonEl, popoverHeight = 460) => {
+    const containerRect = documentViewRef.current?.getBoundingClientRect();
+    const buttonRect = buttonEl?.getBoundingClientRect();
+    if (containerRect && buttonRect) {
+      const maxTop = Math.max(8, containerRect.height - popoverHeight - 8);
+      setPopoverTop(Math.min(Math.max(8, buttonRect.top - containerRect.top), maxTop));
+    }
+  };
+  // Defaults for the next text insert. Editing a selected text writes to the
+  // object instead, so the popover always shows what the next edit affects.
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 20,
+    fontFamily: "sans",
+    textAlign: "left",
+    bold: false,
+    italic: false,
+    snapToLines: true,
+    lineStep: 1,
+    color: "#EFECE4",
+    flow: false,
+  });
+  const [selectedObjectId, setSelectedObjectId] = useState(null);
+  // Copy/cut/paste clipboard for page objects, same convention as the
+  // whiteboard — kept in-memory rather than the OS clipboard.
+  const clipboardRef = useRef(null);
+  // Held space pans with the mouse regardless of the active tool, same
+  // convention as the whiteboard (and Figma/Photoshop).
+  const [isSpaceDown, setIsSpaceDown] = useState(false);
+  const spacePanRef = useRef(null);
+  const [processingImageId, setProcessingImageId] = useState(null);
+  // A text object placed by a plain click (not dragged into size) enters edit
+  // mode immediately, so the keyboard opens with the caret already blinking
+  // where the user tapped instead of requiring a separate double-click.
+  const [editingObjectId, setEditingObjectId] = useState(null);
+  // Set while a design-tool button is armed: the next drag on the page draws
+  // that object instead of an ink stroke. draftPlacement tracks that drag.
+  const [placingTool, setPlacingTool] = useState(null);
+  // Typing into a box ends the text tool's turn, same as placing one does.
+  useEffect(() => {
+    if (editingObjectId) setPlacingTool((tool) => (tool?.id === "text" ? null : tool));
+  }, [editingObjectId]);
+  const [draftPlacement, setDraftPlacement] = useState(null);
+  // Kommentare sind nur im Kommentar-Modus sichtbar (siehe CommentLayer).
+  const [isCommentMode, setIsCommentMode] = useState(false);
+  const [commentFlash, setCommentFlash] = useState(null);
+  const { comments, addComment, editComment, removeComment } = useComments(inkDocument.documentId);
+  // A pen of its own: stays on until another tool is picked, fills whatever
+  // ink/shape outlines enclose the next click.
+  const [isBucketMode, setIsBucketMode] = useState(false);
+  // Lasso: lassoDraft is the loop being dragged right now; lassoSelection is
+  // what it resolved to (strokes + objects), kept until the next lasso, a
+  // delete, or another tool takes over.
+  const [isLassoMode, setIsLassoMode] = useState(false);
+  const [lassoDraft, setLassoDraft] = useState(null);
+  const [lassoSelection, setLassoSelection] = useState(null);
+  // Live transform of the current lasso drag, in page units — null when not
+  // dragging. Applied to the selected strokes/objects at render time so the
+  // actual content moves with the drag, not just the selection outline.
+  const [lassoLiveTransform, setLassoLiveTransform] = useState(null);
+  // While a lasso drag is live, render the selected objects at their
+  // dragged position instead of their stored one — the box moves with them.
+  const livePageObjects =
+    lassoLiveTransform && lassoSelection
+      ? pageObjects.map((object) => {
+          if (
+            object.locked ||
+            object.pageId !== lassoSelection.pageId ||
+            !lassoSelection.objectIds.includes(object.id)
+          )
+            return object;
+          const topLeft = mapLassoPoint(object.x, object.y, lassoLiveTransform);
+          return {
+            ...object,
+            x: topLeft.x,
+            y: topLeft.y,
+            width: object.width * (lassoLiveTransform.scaleX ?? 1),
+            height: object.height * (lassoLiveTransform.scaleY ?? 1),
+          };
+        })
+      : pageObjects;
+
+  const activeInkLayerIndex = resolveInkLayerIndex(inkDocument);
+  const objectsBelowInk = useMemo(
+    () => livePageObjects.slice(0, activeInkLayerIndex),
+    [livePageObjects, activeInkLayerIndex],
+  );
+  const objectsAboveInk = useMemo(
+    () => livePageObjects.slice(activeInkLayerIndex),
+    [livePageObjects, activeInkLayerIndex],
+  );
+  const imageInputRef = useRef(null);
+
+  const [zoom, setZoom] = useState(1);
+  const maxZoom = note?.kind === "imported" ? MAX_ZOOM_IMPORTED : MAX_ZOOM;
+  const pagesCountRef = useRef(1);
+  useEffect(() => {
+    pagesCountRef.current = pagesCount;
+  }, [pagesCount]);
+
+  const [zoomToast, setZoomToast] = useState(null);
+  const zoomToastTimeoutRef = useRef(null);
+  const zoomMountedRef = useRef(false);
+  useEffect(() => {
+    if (!zoomMountedRef.current) {
+      zoomMountedRef.current = true;
+      return;
+    }
+    setZoomToast(Math.round(zoom * 100));
+    clearTimeout(zoomToastTimeoutRef.current);
+    zoomToastTimeoutRef.current = setTimeout(() => setZoomToast(null), 1200);
+  }, [zoom]);
+
+  // A lasso selection follows the pen color: picking a color recolors it.
+  const applyPenColor = (c) => {
+    setColor?.(c);
+    if (lassoSelection)
+      inkController?.recolorSelection?.(lassoSelection.strokeIds, lassoSelection.objectIds, c);
+  };
+
+  const handleColorChange = (index, newColor) => {
+    const newColors = [...customColors];
+    newColors[index] = newColor;
+    setCustomColors(newColors);
+    applyPenColor(newColor);
+    setIsEraser?.(false);
+  };
+
+  const handleUndo = () => {
+    inkController?.undo?.();
+  };
+  const handleRedo = () => {
+    inkController?.redo?.();
+  };
+
+  const [draftFocusBox, setDraftFocusBox] = useState(null);
+  const containerRef = useRef(null);
+  const scrollRef = useRef(null);
+  const objectLayerBelowRef = useRef(null);
+  const objectLayerAboveRef = useRef(null);
+  const inkCanvasRef = useRef(null);
+  const resolvedPageWidth = inkDocument.pages[0]?.width || baseWidth;
+  const resolvedPageHeight = inkDocument.pages[0]?.height || pageHeight;
+  const pageBackground = inkDocument.pages[0]?.background || DEFAULT_PAGE_BACKGROUND;
+
+  const isLightPage = isLightBackground(pageBackground, note?.kind);
+  useEffect(() => {
+    const shell = documentViewRef.current?.closest(".editor-shell");
+    if (shell) {
+      if (isLightPage) {
+        shell.setAttribute("data-document-theme", "light");
+        shell.classList.add("light-doc");
+      } else {
+        shell.setAttribute("data-document-theme", "dark");
+        shell.classList.remove("light-doc");
+      }
+    }
+  }, [isLightPage]);
+  // Only on a paper or note change: a color picked afterwards stays picked.
+  useEffect(() => {
+    const ink = readableInk(penColor, isLightPage);
+    if (ink !== penColor) setColor?.(ink);
+    setCustomColors((colors) => colors.map((c) => readableInk(c, isLightPage)));
+    setTextStyle((style) => ({ ...style, color: readableInk(style.color, isLightPage) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLightPage, inkDocument.documentId]);
+
+  const documentHeight = resolvedPageHeight * pagesCount;
+  // Imported documents take page sizes from the source file (note.pages), but
+  // the order and set of pages from the ink document - that is what the pages
+  // panel reorders, adds to and removes from. sourceIndex keeps each page
+  // showing its own PDF page after it moved; a page added later has none.
+  const sourcePages =
+    note?.kind === "imported" && Array.isArray(note.pages) && note.pages.length > 0
+      ? note.pages
+      : null;
+  const importedDescriptors = useMemo(() => {
+    if (!sourcePages) return null;
+    const byId = new Map(sourcePages.map((page) => [page.id, page]));
+    return inkDocument.pages.map((inkPage, index) => {
+      const source = byId.get(inkPage.id);
+      return source
+        ? { ...source, index, sourceIndex: source.index }
+        : {
+            id: inkPage.id,
+            index,
+            sourceIndex: null,
+            width: sourcePages[0].width,
+            height: sourcePages[0].height,
+          };
+    });
+  }, [sourcePages, inkDocument.pages]);
+  const pageDescriptors =
+    importedDescriptors ||
+    pageIds.map((id, index) => ({
+      id,
+      index,
+      width: inkDocument.pages[index]?.width || resolvedPageWidth,
+      height: inkDocument.pages[index]?.height || resolvedPageHeight,
+    }));
+  // Memoized so imported documents (a stable pageDescriptors reference until
+  // the page list changes) get a stable pageLayouts array/objects across
+  // unrelated re-renders - otherwise every DocumentPage below would see a
+  // "new" page prop each time and React.memo on it would never hit.
+  const documentMetrics = useMemo(
+    () => calculateDocumentMetrics(pageDescriptors),
+    [pageDescriptors],
+  );
+  // Group strokes by page once per document change instead of handing every
+  // visible page's canvas the whole document's strokes to scan itself - that
+  // was O(pages * totalStrokes) on every single stroke commit.
+  const strokesByPage = useMemo(() => {
+    const map = new Map();
+    for (const stroke of inkDocument.strokes) {
+      const list = map.get(stroke.pageId);
+      if (list) list.push(stroke);
+      else map.set(stroke.pageId, [stroke]);
+    }
+    return map;
+  }, [inkDocument.strokes]);
+  const totalDocumentHeight = showPageBreaks
+    ? note?.kind === "imported"
+      ? documentMetrics.totalHeight * zoom
+      : pagesCount * resolvedPageHeight * zoom + (pagesCount - 1) * PAGE_GAP
+    : note?.kind === "imported"
+      ? documentMetrics.totalHeight * zoom
+      : documentHeight * zoom;
+  const pageLayout = {
+    pageIds,
+    pageWidth: baseWidth,
+    pageHeight,
+    pageGap: PAGE_GAP,
+    pageLayouts: documentMetrics.pageLayouts,
+    zoom,
+    showPageBreaks: Boolean(showPageBreaks),
+  };
+  useEffect(() => {
+    if (!navigatePageRequest) return;
+    const index = pageIds.indexOf(navigatePageRequest.pageId);
+    if (index >= 0 && scrollRef.current) {
+      const unit = showPageBreaks
+        ? resolvedPageHeight * zoom + PAGE_GAP
+        : resolvedPageHeight * zoom;
+      scrollRef.current.scrollTo({ top: index * unit, behavior: "smooth" });
+    }
+    onNavigatePageHandled?.(navigatePageRequest.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigatePageRequest]);
+  const draftFocusBoxViewport = focusRectToViewport(pageLayout, draftFocusBox);
+  const normalizedDraftPlacement = draftPlacement
+    ? {
+        pageId: draftPlacement.pageId,
+        x: Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width),
+        y: Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height),
+        width: Math.abs(draftPlacement.width),
+        height: Math.abs(draftPlacement.height),
+      }
+    : null;
+  const draftPlacementViewport = focusRectToViewport(pageLayout, normalizedDraftPlacement);
+  const lassoDraftViewportPoints = lassoDraft
+    ? lassoDraft.points
+        .map((point) => pagePointToViewport(pageLayout, lassoDraft.pageId, point))
+        .filter(Boolean)
+    : null;
+  const lassoSelectionBox = lassoSelection
+    ? (() => {
+        const bounds = selectionBounds(
+          inkDocument.strokes,
+          pageObjects,
+          lassoSelection.strokeIds,
+          lassoSelection.objectIds,
+        );
+        return bounds ? { ...bounds, pageId: lassoSelection.pageId } : null;
+      })()
+    : null;
+  // Reicht das Papier über die ganze Fensterbreite, verliert der eingerückte
+  // Rahmen seinen Sinn: die Seite läuft randlos unter Rail und Pills durch.
+  const isFullBleed =
+    isImmersive ||
+    (isFullMode && baseWidth * zoom >= (globalThis.innerWidth ?? Infinity));
+  const isFullBleedRef = useRef(false);
+  isFullBleedRef.current = isFullBleed;
+  const inputMode = INPUT_MODES.includes(inkController?.inputMode)
+    ? inkController.inputMode
+    : "stylus";
+  const isMoveMode = inputMode === "move";
+  const inkTool = resolveInkTool({ isEraser, eraserMode: inkController?.eraserMode, tool });
+  // Paint only the newly appended segment of the live stroke straight onto the
+  // canvas that already renders that page. No React render, no full redraw.
+  const drawDraftSegment = (draft, appendedFrom) => {
+    if (inkTool === "stroke-eraser") return;
+    const points = draft.points.slice(Math.max(0, appendedFrom - 1));
+    if (points.length < 2) return;
+    const segment = { ...draft, points };
+    const pageBox = documentMetrics.pageLayouts.find((p) => p.id === draft.pageId);
+    if (!pageBox) return;
+
+    if (note?.kind === "imported") {
+      const canvas = containerRef.current?.querySelector(
+        `canvas[data-ink-page-id="${draft.pageId}"]`,
+      );
+      const context = canvas?.getContext("2d");
+      if (!context) return;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      // Zoomed in, that canvas covers only the slice of the page that is on
+      // screen (see pageCanvasSlice), so the live segment has to land at the
+      // slice's origin and its resolution. Both are read back off the canvas
+      // rather than recomputed here, so this cannot drift from what
+      // InkPageCanvas actually allocated.
+      const cssWidth = parseFloat(canvas.style.width) || 0;
+      const cssHeight = parseFloat(canvas.style.height) || 0;
+      const perCssX = cssWidth > 0 ? canvas.width / cssWidth : 1;
+      const perCssY = cssHeight > 0 ? canvas.height / cssHeight : 1;
+      if (!paintedPageDraftsRef.current.has(draft)) {
+        paintedPageDraftsRef.current.set(draft, strokesByPage.get(draft.pageId));
+      }
+      renderInkStroke(context, segment, {
+        offsetX: -(parseFloat(canvas.style.left) || 0) * perCssX,
+        offsetY: -(parseFloat(canvas.style.top) || 0) * perCssY,
+        scaleX: perCssX * zoom,
+        scaleY: perCssY * zoom,
+      });
+      return;
+    }
+
+    const canvas = inkCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!context) return;
+    const cssWidth = resolvedPageWidth * zoom;
+    const cssHeight = totalDocumentHeight;
+    const scaleX = cssWidth > 0 && Number.isFinite(canvas.width) ? canvas.width / cssWidth : (globalThis.devicePixelRatio || 1);
+    const scaleY = cssHeight > 0 && Number.isFinite(canvas.height) ? canvas.height / cssHeight : (globalThis.devicePixelRatio || 1);
+    context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    renderInkStroke(context, segment, {
+      offsetX: 0,
+      offsetY: pageBox.top * zoom,
+      scaleX: zoom,
+      scaleY: zoom,
+    });
+    paintedDraftsRef.current.add(draft);
+  };
+  // Drafts drawn straight onto the canvas since the last redraw: it has to
+  // repair their pixels whether they commit, get erased as a palm or become a
+  // shape.
+  const paintedDraftsRef = useRef(new Set());
+  // Same for an imported note's per-page canvases, which only repaint when
+  // their page's strokes change: draft -> that page's strokes when it was
+  // painted. A draft that ends without changing them (turned into a shape,
+  // palm-cancelled) would otherwise stay on screen as ghost ink until the
+  // next stroke on that page.
+  const paintedPageDraftsRef = useRef(new Map());
+  const [pageRepaintKeys, setPageRepaintKeys] = useState({});
+  // What the canvas shows now, so a redraw repaints only what changed since —
+  // a stroke commit redraws a word, not the whole note (see changedInkRegion).
+  const paintedInkRef = useRef(null);
+
+  // Contact geometry is reported in CSS px, so the palm threshold is panel
+  // specific; the settings profile is the calibration knob for it. Settings
+  // unmounts the document, so reading it once per mount is enough.
+  const palmGuard = useMemo(() => palmGuardFromProfile(loadPalmProfile()), []);
+
+  // A snapped text box may not land wherever the drag left it: re-snap on every
+  // geometry change so moving and resizing keep the lines aligned.
+  const handleObjectChange = (objectId, changes) => {
+    const target = pageObjects.find((o) => o.id === objectId);
+    const next =
+      target?.type === "text" && (changes.snapToLines ?? target.snapToLines)
+        ? { ...changes, ...snapTextToGrid({ ...target, ...changes }, paperStyle) }
+        : changes;
+    inkController?.updateObject?.(objectId, next);
+  };
+
+  const selectedTextObject =
+    pageObjects.find((o) => o.id === selectedObjectId && o.type === "text") || null;
+  const SHAPE_TYPES = ["rect", "ellipse", "line", "arrow"];
+  const selectedShapeObject =
+    pageObjects.find((o) => o.id === selectedObjectId && SHAPE_TYPES.includes(o.type)) || null;
+
+  // A page-width box spans its page between the margins; leaving that mode
+  // lets the box hug its text again.
+  const flowGeometry = (flow, pageId) => {
+    if (!flow) return { autoWidth: true };
+    const page = documentMetrics.pageLayouts.find((layout) => layout.id === pageId);
+    return { x: FLOW_MARGIN, width: (page?.width ?? baseWidth) - 2 * FLOW_MARGIN, autoWidth: false };
+  };
+  const handleTextStyleChange = (patch) => {
+    setTextStyle((prev) => ({ ...prev, ...patch }));
+    if (selectedTextObject)
+      handleObjectChange(
+        selectedTextObject.id,
+        "flow" in patch ? { ...patch, ...flowGeometry(patch.flow, selectedTextObject.pageId) } : patch,
+      );
+  };
+
+  // A page-width text box ran past its page (see PageObjectLayer). What no
+  // longer fits continues at the top of the next page: in the box already
+  // continuing it there, else in a new one, on a page of its own when the
+  // next page holds something else. One undo step for all of it. Returns
+  // where the moved text went, or null (nothing cut) when no page is left.
+  // ponytail: text only ever flows forward; deleting on page 1 leaves a gap
+  // instead of pulling the next page's text back up.
+  const handleTextOverflow = (objectId, cut) => {
+    const doc = inkController?.getDocument?.();
+    const objects = pageObjectsOf(doc);
+    const source = objects.find((object) => object.id === objectId);
+    const index = source ? doc.pages.findIndex((page) => page.id === source.pageId) : -1;
+    if (index < 0 || !inkController?.applyCommands) return null;
+    const next = doc.pages[index + 1];
+    const onNext = next ? objects.filter((object) => object.pageId === next.id) : [];
+    const continuation = onNext
+      .filter((object) => object.type === "text" && object.flow && object.y < FLOW_MARGIN * 1.5)
+      .sort((a, b) => a.y - b.y)[0];
+    const freshPage =
+      !continuation && (!next || onNext.length > 0 || doc.strokes.some((stroke) => stroke.pageId === next.id));
+    if (freshPage && doc.pages.length >= maxPages) return null;
+
+    const { rest, moved, caret } = cut();
+    const commands = [
+      rest.text.trim()
+        ? { type: "update-object", objectId, changes: rest }
+        : { type: "remove-objects", objectIds: [objectId] },
+    ];
+    let pageId = next?.id;
+    if (freshPage) {
+      pageId = `${doc.documentId}-page-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+      const order = doc.pages.map((page) => page.id);
+      order.splice(index + 1, 0, pageId);
+      commands.push({ type: "add-page", page: { id: pageId } }, { type: "reorder-pages", pageIds: order });
+    }
+    let id = continuation?.id;
+    if (continuation) {
+      const html = moved + richHtmlOf(continuation);
+      commands.push({ type: "update-object", objectId: id, changes: { html, text: plainTextOf(html) } });
+    } else {
+      id = globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`;
+      const object = { ...source, id, pageId, y: FLOW_MARGIN, html: moved, text: plainTextOf(moved) };
+      if (object.snapToLines) Object.assign(object, snapTextToGrid(object, paperStyle));
+      commands.push({ type: "add-object", object });
+    }
+    inkController.applyCommands(commands);
+    return { id, caret };
+  };
+  const handleShapeStyleChange = (patch) => {
+    if (selectedShapeObject) handleObjectChange(selectedShapeObject.id, patch);
+  };
+  // Selecting a shape opens its settings automatically, same as the text tool
+  // keeps its popover in sync with whatever text object is selected.
+  useEffect(() => {
+    if (selectedShapeObject) {
+      anchorPopoverToButton(designButtonRef.current);
+      setIsShapeSettingsOpen(true);
+      setIsTextSettingsOpen(false);
+    } else if (!selectedTextObject) {
+      setIsShapeSettingsOpen(false);
+    }
+  }, [selectedObjectId]);
+  const handleObjectDelete = (objectId) => {
+    setSelectedObjectId(null);
+    setEditingObjectId((prev) => (prev === objectId ? null : prev));
+    inkController?.removeObjects?.([objectId]);
+  };
+
+  const handleRemoveBackground = async (object) => {
+    if (!object || !object.src || processingImageId === object.id) return;
+    setProcessingImageId(object.id);
+    try {
+      const transparentDataUrl = await removeImageBackground(object.src);
+      inkController?.updateObject?.(object.id, {
+        src: transparentDataUrl,
+        originalSrc: object.originalSrc || object.src,
+      });
+    } catch (error) {
+      console.error("Failed to remove background:", error);
+    } finally {
+      setProcessingImageId(null);
+    }
+  };
+
+  const handleRestoreBackground = (object) => {
+    if (!object || !object.originalSrc) return;
+    inkController?.updateObject?.(object.id, {
+      src: object.originalSrc,
+      originalSrc: null,
+    });
+  };
+
+  // Just crops and hands the image up — no persisted object. The live drag
+  // box (draftPlacement's own preview) is all the visible feedback there is;
+  // nothing should remain on the page once the region is released.
+  const handleCircleSearch = (pageId, x, y, width, height) => {
+    if (width < 12 || height < 12) return;
+    const dataUrl = renderRegionFromDocument(
+      inkDocument,
+      pageId,
+      { minX: x, minY: y, maxX: x + width, maxY: y + height },
+      SEARCH_CROP_OPTIONS,
+    );
+    if (!dataUrl) return;
+    onCircleToSearch?.(dataUrl);
+  };
+
+  const handleLassoCommit = (transform) => {
+    if (!lassoSelection) return;
+    inkController?.transformSelection?.(
+      lassoSelection.strokeIds,
+      lassoSelection.objectIds,
+      transform,
+    );
+  };
+  const handleLassoDelete = () => {
+    if (!lassoSelection) return;
+    if (lassoSelection.strokeIds.length > 0)
+      inkController?.removeStrokes?.(lassoSelection.strokeIds);
+    if (lassoSelection.objectIds.length > 0)
+      inkController?.removeObjects?.(lassoSelection.objectIds);
+    setLassoSelection(null);
+  };
+
+  // Bluetooth/USB keyboard shortcuts. Skipped while a text object is being
+  // edited so Delete/Backspace/Escape keep editing the text instead of
+  // deleting the selection or leaving the tool.
+  useEffect(() => {
+    const CLONE_OFFSET = 24;
+    const selectedObjectIds = () =>
+      lassoSelection?.objectIds?.length ? lassoSelection.objectIds : selectedObjectId ? [selectedObjectId] : [];
+    const selectIds = (pageId, ids) => {
+      if (ids.length === 1) {
+        setSelectedObjectId(ids[0]);
+        setLassoSelection(null);
+      } else {
+        setSelectedObjectId(null);
+        setLassoSelection({ pageId, strokeIds: [], objectIds: ids });
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
+      if (editingObjectId) return;
+      const target = event.target;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable)
+        return;
+
+      const mod = event.ctrlKey || event.metaKey;
+      const isUndo = mod && !event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedo = (mod && event.shiftKey && event.key.toLowerCase() === "z") || (mod && event.key.toLowerCase() === "y");
+      if (isUndo) {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (isRedo) {
+        event.preventDefault();
+        handleRedo();
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        const point = viewportCenterOnPage();
+        if (!point) return;
+        const strokeIds = inkDocument.strokes.filter((s) => s.pageId === point.pageId).map((s) => s.id);
+        const objectIds = pageObjects.filter((o) => o.pageId === point.pageId).map((o) => o.id);
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setSelectedObjectId(null);
+          setLassoSelection({ pageId: point.pageId, strokeIds, objectIds });
+        }
+        return;
+      }
+      if (mod && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "x")) {
+        const ids = selectedObjectIds();
+        if (ids.length === 0) return;
+        event.preventDefault();
+        clipboardRef.current = pageObjects.filter((o) => ids.includes(o.id)).map((o) => ({ ...o }));
+        if (event.key.toLowerCase() === "x") {
+          inkController?.removeObjects?.(ids);
+          setSelectedObjectId(null);
+          setLassoSelection(null);
+        }
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "v") {
+        if (!clipboardRef.current?.length) return;
+        event.preventDefault();
+        const pasted = clipboardRef.current.map((o) =>
+          createPageObject({ ...o, id: undefined, x: o.x + CLONE_OFFSET, y: o.y + CLONE_OFFSET }),
+        );
+        pasted.forEach((o) => inkController?.addObject?.(o));
+        selectIds(pasted[0]?.pageId, pasted.map((o) => o.id));
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && lassoSelection) {
+        event.preventDefault();
+        handleLassoDelete();
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedObjectId) {
+        event.preventDefault();
+        inkController?.removeObjects?.([selectedObjectId]);
+        setSelectedObjectId(null);
+        return;
+      }
+      if (event.key === "Escape") {
+        if (lassoSelection) setLassoSelection(null);
+        else if (isLassoMode) setIsLassoMode(false);
+        else if (placingTool) setPlacingTool(null);
+        else if (selectedObjectId) setSelectedObjectId(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingObjectId, lassoSelection, isLassoMode, placingTool, selectedObjectId, pageObjects, inkDocument.strokes, inkController]);
+
+  // Holding space pans with the mouse no matter what tool is active — same
+  // convention as the whiteboard. keyup releases it even if focus moved away
+  // mid-hold.
+  useEffect(() => {
+    const isEditingTarget = (target) =>
+      target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+    const handleKeyDown = (event) => {
+      if (!isActiveRef.current) return;
+      if (event.code !== "Space" || isEditingTarget(event.target)) return;
+      event.preventDefault();
+      setIsSpaceDown(true);
+    };
+    const handleKeyUp = (event) => {
+      if (event.code !== "Space") return;
+      setIsSpaceDown(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Space+drag pans the scroll container directly — mirrors the whiteboard's
+  // camera pan, but this editor's "camera" is just native scrollLeft/scrollTop.
+  useEffect(() => {
+    if (!isSpaceDown) return undefined;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return undefined;
+    const handlePointerDownForPan = (event) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return;
+      spacePanRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startScrollLeft: scrollEl.scrollLeft,
+        startScrollTop: scrollEl.scrollTop,
+      };
+    };
+    const handlePointerMoveForPan = (event) => {
+      const pan = spacePanRef.current;
+      if (!pan || event.pointerId !== pan.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrollEl.scrollLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+      scrollEl.scrollTop = pan.startScrollTop - (event.clientY - pan.startY);
+    };
+    const handlePointerUpForPan = (event) => {
+      if (spacePanRef.current?.pointerId === event.pointerId) spacePanRef.current = null;
+    };
+    scrollEl.addEventListener("pointerdown", handlePointerDownForPan, { capture: true });
+    window.addEventListener("pointermove", handlePointerMoveForPan, { capture: true });
+    window.addEventListener("pointerup", handlePointerUpForPan, { capture: true });
+    window.addEventListener("pointercancel", handlePointerUpForPan, { capture: true });
+    return () => {
+      scrollEl.removeEventListener("pointerdown", handlePointerDownForPan, { capture: true });
+      window.removeEventListener("pointermove", handlePointerMoveForPan, { capture: true });
+      window.removeEventListener("pointerup", handlePointerUpForPan, { capture: true });
+      window.removeEventListener("pointercancel", handlePointerUpForPan, { capture: true });
+      spacePanRef.current = null;
+    };
+  }, [isSpaceDown]);
+
+  // New objects land in the middle of what the user is currently looking at,
+  // not at the top of the document they may have scrolled far past.
+  const viewportCenterOnPage = () => {
+    const content = containerRef.current;
+    if (!content) return null;
+    const contentRect = content.getBoundingClientRect();
+    const viewRect = scrollRef.current?.getBoundingClientRect() || contentRect;
+    return mapViewportPoint(pageLayout, {
+      x: viewRect.left + viewRect.width / 2 - contentRect.left,
+      y: viewRect.top + viewRect.height / 2 - contentRect.top,
+    });
+  };
+
+  const insertObject = (type, size, extra = {}, anchor = null) => {
+    const point = anchor || viewportCenterOnPage();
+    if (!point) return null;
+    const object = {
+      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+      type,
+      pageId: point.pageId,
+      x: point.x - size.width / 2,
+      y: point.y - size.height / 2,
+      width: size.width,
+      height: size.height,
+      color: penColor || "#3E7BD8",
+      strokeWidth: rawLineWidth ?? lineWidth ?? 3,
+      ...extra,
+    };
+    inkController?.addObject?.(object);
+    setSelectedObjectId(object.id);
+    return object;
+  };
+
+  // A drop from the internal browser arrives as a plain {id, dataUrl, x, y} —
+  // x/y are already viewport CSS px, the same space a PointerEvent's
+  // clientX/clientY would be in, so the same relativePoint+mapViewportPoint
+  // pipeline that places click-dragged shapes places this too.
+  // Deliberately keyed on imageDropRequest alone: it only needs to fire when a
+  // new request identity arrives, and closes over this render's pageLayout/insertObject.
+  useEffect(() => {
+    if (!imageDropRequest) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { src, width, height } = await readImageObjectSourceFromDataUrl(
+          imageDropRequest.dataUrl,
+        );
+        if (cancelled) return;
+        const maxWidth = Math.min(baseWidth * 0.8, width);
+        const scale = maxWidth / width;
+        const point =
+          imageDropRequest.x != null && imageDropRequest.y != null
+            ? mapViewportPoint(
+                pageLayout,
+                relativePoint(containerRef.current, {
+                  clientX: imageDropRequest.x,
+                  clientY: imageDropRequest.y,
+                }),
+              )
+            : viewportCenterOnPage();
+        insertObject(
+          "image",
+          { width: maxWidth, height: height * scale },
+          { src },
+          point,
+        );
+      } catch {
+        // An image the browser cannot decode simply inserts nothing.
+      } finally {
+        if (!cancelled) onImageDropHandled?.(imageDropRequest.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [imageDropRequest]);
+
+  // "Öffnen" from the ··· menu / Ctrl+O: the PDF becomes the pages' background.
+  useEffect(() => {
+    if (!openRequest) return undefined;
+    (async () => {
+      try {
+        const pages = await readPdfPages(openRequest.file);
+        inkController.applyCommands(
+          pdfPageCommands(inkController.getDocument(), pages, {
+            width: resolvedPageWidth,
+            height: resolvedPageHeight,
+          }),
+        );
+      } catch {
+        // A file pdf.js cannot read simply opens nothing.
+      } finally {
+        onOpenHandled?.(openRequest.id);
+      }
+    })();
+    return undefined;
+  }, [openRequest]);
+
+  // System clipboard image paste listener
+  useEffect(() => {
+    const handlePaste = async (event) => {
+      if (!isActiveRef.current) return;
+      const target = event.target;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            try {
+              const { src, width, height } = await readImageObjectSource(file);
+              const maxWidth = Math.min(baseWidth * 0.8, width);
+              const scale = maxWidth / width;
+              insertObject("image", { width: maxWidth, height: height * scale }, { src });
+            } catch {
+              // ignore
+            }
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [baseWidth, insertObject]);
+
+  // Armed from the chat input's own circle-to-search button (see
+  // AiChatPanel): the panel closes itself first so the canvas has full
+  // width to drag on, then this arms the tool the same way the toolbar
+  // button would.
+  useEffect(() => {
+    if (!armCircleSearchRequest) return;
+    setPlacingTool(CIRCLE_SEARCH_TOOL);
+    setIsBucketMode(false);
+    setIsEraser?.(false);
+    setIsSelectMode?.(false);
+    setIsPenSettingsOpen(false);
+    setIsEraserSettingsOpen(false);
+    setIsColorPickerOpen(false);
+    setIsLassoMode(false);
+    setLassoSelection(null);
+    onArmCircleSearchHandled?.(armCircleSearchRequest.id);
+  }, [armCircleSearchRequest]);
+
+  // Rasterizes this page's ink + shape outlines as walls, floods out from the
+  // click, and drops the cropped result in as a "fill" object sized to match.
+  const handleBucketFill = (point) => {
+    if (!point) return;
+
+    // Clicking inside a drawn rect/ellipse recolors that one object instead —
+    // stroke and fill are then the same shape, so they always move, resize
+    // and delete together rather than drifting apart as two separate things.
+    const target = [...pageObjects]
+      .reverse()
+      .find(
+        (object) =>
+          object.pageId === point.pageId &&
+          (object.type === "rect" || object.type === "ellipse") &&
+          isPointInsideObject(object, point.x, point.y),
+      );
+    if (target) {
+      inkController?.updateObject?.(target.id, { fillColor: penColor || "#3E7BD8" });
+      return;
+    }
+
+    const width = Math.round(baseWidth);
+    const height = Math.round(pageHeight);
+    const canvas = document.createElement("canvas");
+    const wallData = rasterizePageWalls(canvas, {
+      strokes: inkDocument.strokes,
+      objects: pageObjects,
+      pageId: point.pageId,
+      width,
+      height,
+    });
+    const result = floodFill(wallData, width, height, Math.round(point.x), Math.round(point.y));
+    if (!result) return;
+    const { dataUrl, x, y, width: w, height: h } = fillResultToDataUrl(
+      result,
+      width,
+      hexToRgb(penColor || "#3E7BD8"),
+    );
+    inkController?.addObject?.({
+      id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+      type: "fill",
+      pageId: point.pageId,
+      x,
+      y,
+      width: w,
+      height: h,
+      color: penColor || "#3E7BD8",
+      strokeWidth: 1,
+      src: dataUrl,
+    });
+  };
+
+  const handleInsertTool = (item) => {
+    if (item.id === "image") {
+      imageInputRef.current?.click();
+      setIsDesignToolsOpen(false);
+      return;
+    }
+    if (item.id === "link") {
+      const href = globalThis.prompt?.("Link-Adresse (URL)")?.trim();
+      if (!href) return;
+      const label = globalThis.prompt?.("Beschriftung", href)?.trim();
+      const url = /^[a-z][\w+.-]*:/i.test(href) ? href : `https://${href}`;
+      insertObject("link", item, { href: url, text: label || url });
+      setIsDesignToolsOpen(false);
+      return;
+    }
+    // Arrows, lines and shapes land where the user drags on the page; a plain
+    // click (no drag) falls back to the tool's default size, centered there.
+    setPlacingTool(item);
+    setIsDesignToolsOpen(false);
+  };
+
+  const handleImageFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      // A PDF inserted as an element is a movable image of its first page;
+      // "Öffnen" in the ··· menu is what turns whole PDFs into pages.
+      const { src, width, height } = isPdfFile(file)
+        ? (await readPdfPages(file, 1))[0]
+        : await readImageObjectSource(file);
+      const maxWidth = Math.min(baseWidth * 0.8, width);
+      const scale = maxWidth / width;
+      insertObject("image", { width: maxWidth, height: height * scale }, { src });
+      setIsDesignToolsOpen(false);
+    } catch {
+      // A file the browser cannot decode simply inserts nothing.
+    }
+  };
+
+  const inkPointer = useInkPointer({
+    inputMode,
+    palmGuard,
+    tool: inkTool,
+    eraserMode: inkController?.eraserMode || "pixel",
+    color: penColor || "#EFECE4",
+    width: isEraser ? eraserWidth || 15 : (rawLineWidth ?? lineWidth ?? 3),
+    mapPoint: (event) =>
+      mapViewportPoint(pageLayout, relativePoint(containerRef.current, event)),
+    document: inkDocument,
+    ...inkWriteOptions(inkController),
+    onDraftAppend: drawDraftSegment,
+  });
+  const eraserRingRef = useEraserRing(
+    containerRef,
+    Boolean(isEraser && !isSelectMode),
+    (eraserWidth || 15) * zoom,
+  );
+  const redrawInkCanvasRef = useRef(null);
+  redrawInkCanvasRef.current = () => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const cssWidth = resolvedPageWidth * zoom;
+    const cssHeight = totalDocumentHeight;
+    const dpr = globalThis.devicePixelRatio || 1;
+    resizeInkCanvas(canvas, cssWidth, cssHeight, dpr);
+    let previewDocument =
+      inkPointer.draftStroke && inkTool !== "stroke-eraser"
+        ? {
+            ...inkDocument,
+            strokes: [...inkDocument.strokes, inkPointer.draftStroke],
+          }
+        : inkDocument;
+    if (lassoLiveTransform && lassoSelection?.strokeIds.length > 0) {
+      const strokeIdSet = new Set(lassoSelection.strokeIds);
+      previewDocument = {
+        ...previewDocument,
+        strokes: previewDocument.strokes.map((stroke) =>
+          strokeIdSet.has(stroke.id)
+            ? {
+                ...stroke,
+                points: stroke.points.map((point) => mapLassoPoint(point.x, point.y, lassoLiveTransform)),
+              }
+            : stroke,
+        ),
+      };
+    }
+    const layout = { ...pageLayout, cssWidth, cssHeight, dpr };
+    // Only a canvas of the same size with the pages where they were still
+    // holds the last redraw's pixels; anything else starts over.
+    const key = [canvas.width, canvas.height, cssWidth, cssHeight, zoom]
+      .concat(pageLayout.pageLayouts.map((page) => `${page.id}:${page.top}`))
+      .join();
+    const last = paintedInkRef.current;
+    const region =
+      last?.key === key
+        ? changedInkRegion(last.strokes, previewDocument.strokes, previewDocument, layout, paintedDraftsRef.current)
+        : undefined;
+    paintedDraftsRef.current.clear();
+    paintedInkRef.current = { key, strokes: previewDocument.strokes };
+    if (region === null) return;
+    renderInkDocument(context, previewDocument, layout, region);
+  };
+
+  useLayoutEffect(() => {
+    const stale = [];
+    for (const [draft, strokes] of paintedPageDraftsRef.current) {
+      if (draft === inkPointer.draftStroke) continue;
+      paintedPageDraftsRef.current.delete(draft);
+      if (strokesByPage.get(draft.pageId) === strokes) stale.push(draft.pageId);
+    }
+    if (stale.length > 0) {
+      setPageRepaintKeys((keys) => {
+        const next = { ...keys };
+        for (const pageId of stale) next[pageId] = (next[pageId] || 0) + 1;
+        return next;
+      });
+    }
+    if (!inkCanvasRef.current) return;
+    redrawInkCanvasRef.current?.();
+  }, [
+    inkDocument,
+    inkPointer.draftStroke,
+    inkPointer.draftVersion,
+    inkTool,
+    pagesCount,
+    showPageBreaks,
+    totalDocumentHeight,
+    zoom,
+    lassoLiveTransform,
+    lassoSelection,
+  ]);
+
+  useEffect(() => {
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return undefined;
+    const observer = new ResizeObserver(() => redrawInkCanvasRef.current?.());
+    observer.observe(canvas);
+    // A lost GPU context comes back blank, so the pixels a partial redraw
+    // builds on are gone.
+    const restored = () => {
+      paintedInkRef.current = null;
+      redrawInkCanvasRef.current?.();
+    };
+    canvas.addEventListener("contextrestored", restored);
+    return () => {
+      observer.disconnect();
+      canvas.removeEventListener("contextrestored", restored);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof globalThis.matchMedia !== "function") return undefined;
+    let mediaQuery = null;
+    let disposed = false;
+
+    const removeListener = () => {
+      if (!mediaQuery) return;
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleDprChange);
+      } else {
+        mediaQuery.removeListener?.(handleDprChange);
+      }
+    };
+    const observeCurrentDpr = () => {
+      removeListener();
+      if (disposed) return;
+      const dpr = globalThis.devicePixelRatio || 1;
+      mediaQuery = globalThis.matchMedia(`(resolution: ${dpr}dppx)`);
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", handleDprChange);
+      } else {
+        mediaQuery.addListener?.(handleDprChange);
+      }
+    };
+    function handleDprChange() {
+      redrawInkCanvasRef.current?.();
+      observeCurrentDpr();
+    }
+
+    observeCurrentDpr();
+    return () => {
+      disposed = true;
+      removeListener();
+    };
+  }, []);
+
+  // Im Vollmodus füllt das Papier immer die Breite; gescrollt wird vertikal.
+  const lastFitWidthRef = useRef(null);
+  useEffect(() => {
+    if (!isFullMode) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    lastFitWidthRef.current = null;
+    const fit = () => {
+      // Randlos zoomt der Nutzer bewusst über die Passbreite hinaus, und das
+      // Wegfallen der Ränder verbreitert den Container — ohne diese Sperre
+      // würde das Auto-Fit den Zoom sofort wieder einfangen.
+      if (isFullBleedRef.current) return;
+      const width = el.clientWidth;
+      if (width <= 0) return;
+      // Zooming out past a certain point can make the scrollbar disappear,
+      // which nudges clientWidth by ~15-20px and fires this observer — without
+      // filtering that noise the "fit" below snaps the zoom straight back in.
+      const prevWidth = lastFitWidthRef.current;
+      lastFitWidthRef.current = width;
+      if (prevWidth !== null && Math.abs(width - prevWidth) < 40) return;
+      setZoom(width / baseWidth);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isFullMode]);
+
+  const clearAllGestures = () => {
+    activePointers.current.clear();
+    gutterPanData.current = null;
+    setPinchPreviewRef.current?.(false);
+    if (pinchInitialData.current) {
+      if (pendingFocusBox.current) {
+        focusBoxState?.setFocusBox?.(pendingFocusBox.current);
+        pendingFocusBox.current = null;
+      }
+      pinchInitialData.current = null;
+      commitLivePinchRef.current?.();
+    }
+  };
+  // clearAllGestures runs before commitLivePinch is defined, so reach it late.
+  const commitLivePinchRef = useRef(null);
+
+  // Hold a finger in the right-hand strip to grab a fat scrollbar (see the
+  // hook). Whatever the page had started with that finger is dropped.
+  const releaseGestures = () => {
+    clearAllGestures();
+    inkPointer.reset?.();
+  };
+  useScrollbarGrip(scrollRef, { onEngage: releaseGestures });
+  useLeftHandScrubber(scrollRef, { onEngage: releaseGestures });
+
+  const handlePointerDown = (e) => {
+    if (e.pointerType === "pen") {
+      clearAllGestures();
+    }
+
+    // A click never starts on an object — those stop propagation before it
+    // reaches here — so any page pointerdown means "away", clearing selection.
+    setSelectedObjectId(null);
+    // A tap that only dismisses a selection must not also leave an ink dot —
+    // nor one that ends a text edit (the blur it causes closes the keyboard).
+    if (editingObjectId) return;
+    if (selectedObjectId && e.pointerType !== "touch") return;
+
+    if (isBucketMode) {
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      handleBucketFill(point);
+      return;
+    }
+
+    // The selection box (if any) lives above this and stops its own
+    // pointerdowns, so getting here means the click landed on open page —
+    // start a fresh loop and drop whatever was selected before.
+    if (isLassoMode) {
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point) return;
+      setLassoSelection(null);
+      setLassoDraft({
+        pageId: point.pageId,
+        pointerId: e.pointerId,
+        points: [{ x: point.x, y: point.y }],
+      });
+      return;
+    }
+
+    if (placingTool) {
+      // The text box placed on release takes focus (and the keyboard) then; a
+      // touch would follow up with a compat mousedown that moves focus off it
+      // again, closing the keyboard and dropping the empty box. Cancelling
+      // the pointerdown suppresses those mouse events.
+      if (placingTool.id === "text" && e.pointerType !== "mouse") e.preventDefault();
+      inkPointer.onPointerDown(e, { preventDraw: true });
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point) return;
+      setDraftPlacement({
+        type: placingTool.id,
+        pageId: point.pageId,
+        pointerId: e.pointerId,
+        startX: point.x,
+        startY: point.y,
+        width: 0,
+        height: 0,
+      });
+      return;
+    }
+
+    const isBlockedTouch = e.pointerType === "touch" && inkPointer.shouldBlockTouch(e);
+
+    if (!isSelectMode || isBlockedTouch) {
+      inkPointer.onPointerDown(e, {
+        preventDraw: isBlockedTouch || inkController?.inkLayerLocked === true,
+      });
+      return;
+    }
+    
+    inkPointer.onPointerDown(e, { preventDraw: true });
+
+    const point = mapViewportPoint(
+      pageLayout,
+      relativePoint(containerRef.current, e),
+    );
+    if (!point) return;
+    setDraftFocusBox({
+      pageId: point.pageId,
+      pointerId: e.pointerId,
+      x: point.x,
+      y: point.y,
+      width: 0,
+      height: 0,
+      startX: point.x,
+      startY: point.y,
+    });
+  };
+
+  const handlePointerMove = (e) => {
+    if (pinchInitialData.current) {
+      return;
+    }
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerMove(e);
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point || point.pageId !== lassoDraft.pageId) return;
+      setLassoDraft((prev) => ({
+        ...prev,
+        points: [...prev.points, { x: point.x, y: point.y }],
+      }));
+      return;
+    }
+
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerMove(e);
+      const point = mapViewportPoint(
+        pageLayout,
+        relativePoint(containerRef.current, e),
+      );
+      if (!point || point.pageId !== draftPlacement.pageId) return;
+      setDraftPlacement((prev) => ({
+        ...prev,
+        // Signed on purpose: arrows and lines read the sign to know which way
+        // they point, and objectBounds() already normalizes it for display.
+        width: point.x - prev.startX,
+        height: point.y - prev.startY,
+      }));
+      return;
+    }
+
+    if (!isSelectMode) {
+      inkPointer.onPointerMove(e);
+      return;
+    }
+
+    inkPointer.onPointerMove(e);
+    
+    if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
+    const point = mapViewportPoint(
+      pageLayout,
+      relativePoint(containerRef.current, e),
+    );
+    if (!point || point.pageId !== draftFocusBox.pageId) return;
+    const currentX = point.x;
+    const currentY = point.y;
+
+    setDraftFocusBox((prev) => {
+      const x = Math.min(prev.startX, currentX);
+      const y = Math.min(prev.startY, currentY);
+      const width = Math.abs(currentX - prev.startX);
+      const height = Math.abs(currentY - prev.startY);
+      return { ...prev, x, y, width, height };
+    });
+  };
+
+  const handlePointerUp = (e) => {
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerUp(e);
+      const polygon = lassoDraft.points;
+      if (polygon.length >= 3) {
+        const strokeIds = strokesInLasso(inkDocument.strokes, lassoDraft.pageId, polygon);
+        const objectIds = objectsInLasso(
+          pageObjects.filter((o) => !o.locked),
+          lassoDraft.pageId,
+          polygon,
+        );
+        if (strokeIds.length > 0 || objectIds.length > 0) {
+          setLassoSelection({ pageId: lassoDraft.pageId, strokeIds, objectIds });
+        }
+      }
+      setLassoDraft(null);
+      return;
+    }
+
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerUp(e);
+      const tool = placingTool;
+
+      if (tool.id === "circleSearch") {
+        handleCircleSearch(
+          draftPlacement.pageId,
+          Math.min(draftPlacement.startX, draftPlacement.startX + draftPlacement.width),
+          Math.min(draftPlacement.startY, draftPlacement.startY + draftPlacement.height),
+          Math.abs(draftPlacement.width),
+          Math.abs(draftPlacement.height),
+        );
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
+
+      const dragged =
+        Math.abs(draftPlacement.width) > 8 || Math.abs(draftPlacement.height) > 8;
+      const object = {
+        id: globalThis.crypto?.randomUUID?.() || `object-${Date.now()}`,
+        type: draftPlacement.type,
+        pageId: draftPlacement.pageId,
+        // A plain click (no drag) falls back to the tool's default size,
+        // centered on where the user tapped — except text, which starts AT the tap:
+        // the caret should appear right under the finger/pen, not to its left.
+        x:
+          dragged || tool.id === "text"
+            ? draftPlacement.startX
+            : draftPlacement.startX - tool.width / 2,
+        // Text also skips the vertical centering: snapTextToGrid re-derives y
+        // from the raw tap anyway, and centering first shifted its rounding by
+        // half a row, so the snapped box always landed one line too high.
+        y:
+          dragged || tool.id === "text"
+            ? draftPlacement.startY
+            : draftPlacement.startY - tool.height / 2,
+        width: dragged ? draftPlacement.width : tool.width,
+        height: dragged ? draftPlacement.height : tool.height,
+        color: penColor || "#3E7BD8",
+        strokeWidth: rawLineWidth ?? lineWidth ?? 3,
+        // A dragged box gets a "Text" placeholder so its size stays visible;
+        // a plain click starts empty since the caret appears there right away.
+        ...(draftPlacement.type === "text"
+          ? {
+              text: dragged ? "Text" : "",
+              ...textStyle,
+              ...(textStyle.flow ? flowGeometry(true, draftPlacement.pageId) : null),
+            }
+          : {}),
+      };
+      if (object.type === "text" && object.snapToLines)
+        Object.assign(object, snapTextToGrid(object, paperStyle));
+      // A placed rect/ellipse/line/arrow becomes ink, not an object: no
+      // hitbox or handles, erased like a hand-drawn stroke.
+      const shapeStroke = inkController?.inkLayerLocked ? null : shapeToInkStroke(object, object.id);
+      if (shapeStroke) {
+        inkController?.commitStroke?.(shapeStroke);
+        setDraftPlacement(null);
+        setPlacingTool(null);
+        return;
+      }
+      inkController?.addObject?.(object);
+      setSelectedObjectId(object.id);
+      if (object.type === "text" && !dragged) setEditingObjectId(object.id);
+      setDraftPlacement(null);
+      setPlacingTool(null);
+      return;
+    }
+
+    if (!isSelectMode) {
+      inkPointer.onPointerUp(e);
+      return;
+    }
+
+    inkPointer.onPointerUp(e);
+    
+    if (!draftFocusBox || draftFocusBox.pointerId !== e.pointerId) return;
+    if (draftFocusBox.width > 10 && draftFocusBox.height > 10) {
+      focusBoxState.setFocusBox({
+        pageId: draftFocusBox.pageId,
+        x: draftFocusBox.x,
+        y: draftFocusBox.y,
+        width: draftFocusBox.width,
+        height: draftFocusBox.height,
+      });
+    }
+    setDraftFocusBox(null);
+    setIsSelectMode?.(false);
+  };
+
+  const handlePointerCancel = (e) => {
+    if (lassoDraft && lassoDraft.pointerId === e.pointerId) {
+      inkPointer.onPointerCancel(e);
+      setLassoDraft(null);
+      return;
+    }
+    if (draftPlacement && draftPlacement.pointerId === e.pointerId) {
+      inkPointer.onPointerCancel(e);
+      setDraftPlacement(null);
+      return;
+    }
+    if (!isSelectMode) {
+      inkPointer.onPointerCancel(e);
+      return;
+    }
+    inkPointer.onPointerCancel(e);
+    setDraftFocusBox(null);
+  };
+
+  const activePointers = useRef(new Map());
+  const pinchInitialData = useRef(null);
+  const handledReleases = useRef(new WeakSet());
+  const gutterPanData = useRef(null);
+  // Full-mode move-tool drag nudges the page a little off its centered rest
+  // position instead of scrolling it (there's usually no scroll room at all
+  // once it's fit to width). Bounded so it can never leave the frame, and
+  // springs back to center on release when it lands close enough.
+  // Written straight to the DOM, never through state: a pinch previews itself
+  // by writing this same transform every frame, so a render landing mid-gesture
+  // (autosave, page counter, anything upstream) would put the pre-gesture value
+  // back and the page would jump. One writer, no race. The ref is the value of
+  // record — every gesture below reads its own position back from it.
+  const docOffsetXRef = useRef(0);
+  const applyDocOffset = (next, { animate = false } = {}) => {
+    docOffsetXRef.current = next;
+    const content = containerRef.current;
+    if (!content) return;
+    content.style.transition = animate
+      ? "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)"
+      : "none";
+    content.style.transform = next ? `translateX(${next}px)` : "";
+  };
+  // Zoom a live pinch is previewing via transform, and where the previewed
+  // content sat on screen when it was committed (see commitLivePinch).
+  const livePinchRef = useRef(null);
+  const pinchCommitRef = useRef(null);
+
+  const focusBoxRef = useRef(null);
+  const focusDragRef = useRef(null);
+  const pendingFocusBox = useRef(null);
+  const wheelTimeout = useRef(null);
+
+  const activeFocusBox = pinchInitialData.current && pendingFocusBox.current
+    ? pendingFocusBox.current
+    : focusBoxState?.focusBox;
+
+  const focusBoxViewport = focusRectToViewport(
+    pageLayout,
+    activeFocusBox,
+  );
+
+  const cancelFocusBoxDrag = () => {
+    const drag = focusDragRef.current;
+    if (!drag) return;
+    focusDragRef.current = null;
+    if (drag.animationFrameId !== null)
+      cancelAnimationFrame(drag.animationFrameId);
+    document.removeEventListener("pointermove", drag.onPointerMove);
+    document.removeEventListener("pointerup", drag.onPointerUp);
+    document.removeEventListener("pointercancel", drag.onPointerUp);
+  };
+
+  useEffect(() => {
+    return () => {
+      inkPointer.reset?.();
+      cancelFocusBoxDrag();
+      gutterPanData.current = null;
+      activePointers.current.clear();
+      pinchInitialData.current = null;
+      pendingFocusBox.current = null;
+    };
+  }, [inkDocument.documentId]);
+
+  // A nudged-off-center page from the previous note would otherwise carry
+  // over onto the next one opened.
+  useLayoutEffect(() => {
+    applyDocOffset(0);
+  }, [inkDocument.documentId]);
+
+  // Full mode's page sits under the floating title/action pills by default
+  // (see TOP_UI_CLEARANCE) — without this, a freshly opened note would show
+  // that gap right away instead of starting flush like before, since a taller
+  // scroll container otherwise still rests at scrollTop 0.
+  useLayoutEffect(() => {
+    if (!isFullMode || !scrollRef.current) return;
+    scrollRef.current.scrollTop = TOP_UI_CLEARANCE;
+  }, [inkDocument.documentId, isFullMode]);
+
+  // A lasso selection names specific stroke/object ids — meaningless (and
+  // stale) the moment the user opens a different note.
+  useEffect(() => {
+    setLassoSelection(null);
+    setLassoDraft(null);
+  }, [inkDocument.documentId]);
+
+  // Gutter drags only ever scrolled vertically; a move-mode drag pans both axes.
+  const startPan = (event) => {
+    if (containerRef.current) containerRef.current.style.transition = "none";
+    return {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: scrollRef.current?.scrollLeft ?? 0,
+      startScrollTop: scrollRef.current?.scrollTop ?? 0,
+      startOffsetX: docOffsetXRef.current,
+      panX: isMoveMode,
+      active: false,
+    };
+  };
+
+  const handleGestureStart = (event) => {
+    if (event.pointerType === "pen") {
+      clearAllGestures();
+    }
+    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
+    if (!startedOnPage) {
+      inkPointer.onPointerDown(event, { preventDraw: true });
+    }
+    // Move mode drags with the pen too, which would otherwise stop at the
+    // touch-only guard below. Touch keeps flowing through so it can still pinch.
+    // An armed placement tool (text, shapes, …) owns this drag instead — left
+    // over move-mode panning would otherwise fight it for the same gesture.
+    if (isMoveMode && !placingTool && event.pointerType === "pen" && activePointers.current.size === 0) {
+      gutterPanData.current = startPan(event);
+      return;
+    }
+    if (event.pointerType !== 'touch') return;
+    if (inkPointer.shouldBlockTouch(event)) return;
+    activePointers.current.set(event.pointerId, {
+      x: event.clientX, y: event.clientY, downX: event.clientX, downY: event.clientY, startedOnPage,
+    });
+
+    // A finger on an object drags that object in move mode, not the page.
+    const onObject = Boolean(event.target?.closest?.('[data-testid="object-container"]'));
+    if (activePointers.current.size === 1 && (!startedOnPage || (isMoveMode && !placingTool && !onObject))) {
+      gutterPanData.current = startPan(event);
+    }
+
+    // Two touches are two fingers in every mode (see inputPolicy), so arm at
+    // touchdown: waiting for the pair to move is what let one of them draw.
+    if (activePointers.current.size === 2) commitPinchArm(event);
+  };
+
+  // The preview below moves every page's rendered box without touching the
+  // layout, which each page's IntersectionObserver reads as "scrolled out of
+  // view" and the glass MutationObserver reads as a content change. Both then
+  // spend real work undoing something that never happened — a pdf.js re-render
+  // per page, an html-to-image pass over the whole document. Flag the node
+  // carrying the preview so they can tell a gesture from a real move.
+  //
+  // Never leave it set once the fingers are gone: every mounted page holds a
+  // full-size canvas, the WebView renderer here is 32-bit, and a flag that
+  // sticks pins them all until it runs out of canvas memory and takes the app
+  // down with it (measured: SIGTRAP in CrRendererMain). Hence the clear on
+  // every path out of a gesture, not just the one that hands over the zoom.
+  const setPinchPreview = (on) => {
+    const content = containerRef.current;
+    if (!content) return;
+    if (on) content.setAttribute("data-pinch-preview", "");
+    else content.removeAttribute("data-pinch-preview");
+  };
+  // clearAllGestures is defined above this, so reach it late.
+  const setPinchPreviewRef = useRef(null);
+  setPinchPreviewRef.current = setPinchPreview;
+
+  const commitPinchArm = (event) => {
+    gutterPanData.current = null;
+    setPinchPreview(true);
+    // A pinch/pan just armed — any single-finger drag an object started with
+    // one of these same fingers is no longer a drag, it's half of a gesture.
+    objectLayerBelowRef.current?.cancelDrag();
+    objectLayerAboveRef.current?.cancelDrag();
+    // A snap still transitioning would animate every preview frame below.
+    if (containerRef.current) containerRef.current.style.transition = "none";
+
+    for (const pointerId of activePointers.current.keys()) {
+      inkPointer.abortActiveStroke?.(pointerId, event.timeStamp);
+    }
+
+    // Anchored on each contact's own touchdown spot, not where the threshold
+    // check above happened to catch it moving — otherwise the bit of pinch
+    // that occurred while still confirming it was real would be lost, and a
+    // fast pinch would visibly undershoot its first frame.
+    const rect = scrollRef.current.getBoundingClientRect();
+    const entries = Array.from(activePointers.current.entries());
+    const [id1, down1] = entries[0];
+    const [id2, down2] = entries[1];
+    const first = { x: down1.downX, y: down1.downY };
+    const second = { x: down2.downX, y: down2.downY };
+
+    pinchInitialData.current = {
+      pointerIds: [id1, id2],
+      distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
+      zoom,
+      centerX: (first.x + second.x) / 2 - rect.left,
+      centerY: (first.y + second.y) / 2 - rect.top,
+      scrollTop: scrollRef.current.scrollTop,
+      scrollLeft: scrollRef.current.scrollLeft,
+      offsetX: docOffsetXRef.current,
+      viewportWidth: rect.width,
+      // Only a focus box that is actually on screen (split mode — see its
+      // render below) takes part in the pinch; useFocusBox hands us one in
+      // full mode too, where it is invisible.
+      focusBox:
+        !isFullMode && focusBoxState?.focusBox
+          ? { ...focusBoxState.focusBox }
+          : null,
+      ticking: false,
+    };
+  };
+
+  const applyPan = (e) => {
+    const pan = gutterPanData.current;
+    const dx = pan.startX - e.clientX;
+    const dy = pan.startY - e.clientY;
+    if (!pan.active && Math.abs(pan.panX ? Math.hypot(dx, dy) : dy) > 15) {
+      pan.active = true;
+    }
+    if (pan.active && scrollRef.current) {
+      scrollRef.current.scrollTop = pan.startScrollTop + dy;
+      // Page fits the viewport width and sits centered — nothing to reveal
+      // sideways, so the smallest x jitter of a vertical drag must not walk
+      // it off center. Only a genuinely overflowing (zoomed-in) page pans x.
+      const pageFitsWidth =
+        resolvedPageWidth * zoom <= scrollRef.current.clientWidth + 1;
+      if (pan.panX && !pageFitsWidth) {
+        if (isFullMode) {
+          applyDocOffset(
+            clampDocOffsetX(
+              pan.startOffsetX - dx,
+              scrollRef.current.clientWidth,
+              resolvedPageWidth * zoom,
+            ),
+          );
+        } else {
+          scrollRef.current.scrollLeft = pan.startScrollLeft + dx;
+        }
+      }
+    }
+  };
+
+  const handleGestureMove = (e) => {
+    const startedOnPage = containerRef.current?.contains(e.target) ?? false;
+    if (!startedOnPage) {
+      inkPointer.onPointerMove(e);
+    }
+    if (gutterPanData.current?.pointerId === e.pointerId && e.pointerType === "pen") {
+      applyPan(e);
+      return;
+    }
+    if (e.pointerType !== "touch") return;
+
+    // A pair keeps its fingers even if the guard turns on one mid-gesture (a
+    // pen coming into hover range, a thumb flattening to palm size) — dropping
+    // it would end the pinch under the user's hand. Once a pointer has left the
+    // pair (or a third arrives), the normal per-touch guard applies.
+    if (inkPointer.shouldBlockTouch(e) && activePointers.current.size !== 2) {
+      if (activePointers.current.has(e.pointerId)) {
+        handleGestureEnd(e);
+      }
+      return;
+    }
+
+    if (activePointers.current.has(e.pointerId)) {
+      const prev = activePointers.current.get(e.pointerId);
+      activePointers.current.set(e.pointerId, { ...prev, x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.current.size === 1 && gutterPanData.current?.pointerId === e.pointerId) {
+      applyPan(e);
+      return;
+    }
+
+    // Down to a pair again after a third finger left: pinch with those two.
+    if (activePointers.current.size === 2 && !pinchInitialData.current) {
+      commitPinchArm(e);
+    }
+
+    if (pinchInitialData.current) {
+      if (pinchInitialData.current.ticking) return;
+      pinchInitialData.current.ticking = true;
+
+      requestAnimationFrame(() => {
+        if (!pinchInitialData.current) return;
+        const [id1, id2] = pinchInitialData.current.pointerIds;
+        const p1 = activePointers.current.get(id1);
+        const p2 = activePointers.current.get(id2);
+        
+        if (!p1 || !p2) {
+          pinchInitialData.current.ticking = false;
+          return;
+        }
+
+        const rect = scrollRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+        const currentDistance = Math.hypot(
+          p1.x - p2.x,
+          p1.y - p2.y,
+        );
+        const currentCenterX = (p1.x + p2.x) / 2 - rect.left;
+        const currentCenterY = (p1.y + p2.y) / 2 - rect.top;
+
+        const {
+          distance: startDist,
+          zoom: startZoom,
+          centerX: startX,
+          centerY: startY,
+          scrollTop: startScrollTop,
+          scrollLeft: startScrollLeft,
+          offsetX: startOffsetX,
+          viewportWidth: startViewportWidth,
+          focusBox: startFb,
+        } = pinchInitialData.current;
+
+        const newZoom = Math.max(
+          0.5,
+          Math.min(maxZoom, startZoom * pinchZoomRatio(currentDistance / startDist)),
+        );
+        const zoomRatio = newZoom / startZoom;
+
+        // Committing the zoom per frame relays out every page and forces a full
+        // ink-canvas realloc plus a redraw of every stroke — that is the pinch
+        // stutter. Preview it with a transform (content layout untouched, so the
+        // anchor stays exact) and commit the real zoom once on release.
+        // Focus-box pinches scale the box inversely to the zoom, which a plain
+        // transform cannot express, so those keep the per-frame path.
+        if (!startFb) {
+          // Horizontally the page is laid out, not scrolled: it sits where
+          // pageLeftEdgeX says and the offset carries it from there. The
+          // scroll-frame formula below stays for y, which does grow down from a
+          // fixed top.
+          const anchor = isFullMode
+            ? pinchAnchorX({
+                centerX: currentCenterX,
+                startCenterX: startX,
+                startOffsetX,
+                viewportWidth: startViewportWidth,
+                startPageWidth: resolvedPageWidth * startZoom,
+                pageWidth: resolvedPageWidth * newZoom,
+              })
+            : { offsetX: 0, translateX: 0 };
+          livePinchRef.current = {
+            zoom: newZoom,
+            offsetX: anchor.offsetX,
+            scrollLeft: (startScrollLeft + startX) * zoomRatio - currentCenterX,
+            scrollTop: (startScrollTop + startY) * zoomRatio - currentCenterY,
+          };
+          const content = containerRef.current;
+          if (content) {
+            // This replaces the resting translateX on the same node, so tx
+            // carries the whole offset, not the change in it. It comes out of
+            // the same call as the committed offsetX, so the handover on
+            // release is invisible instead of a jump.
+            const tx = isFullMode
+              ? anchor.translateX
+              : currentCenterX + startScrollLeft - (startScrollLeft + startX) * zoomRatio;
+            const ty = currentCenterY + startScrollTop - (startScrollTop + startY) * zoomRatio;
+            content.style.transformOrigin = "0 0";
+            content.style.willChange = "transform";
+            content.style.transform = `translate(${tx}px, ${ty}px) scale(${zoomRatio})`;
+          }
+          pinchInitialData.current.ticking = false;
+          return;
+        }
+
+        setZoom(newZoom);
+
+        if (startFb) {
+          const ratio = startZoom / newZoom;
+          let newY =
+            startFb.y + startFb.height / 2 - (startFb.height * ratio) / 2;
+          const newHeight = startFb.height * ratio;
+          if (newY < 0) newY = 0;
+          if (newY + newHeight > pageHeight)
+            newY = Math.max(0, pageHeight - newHeight);
+
+          const newFb = clampFocusBoxToPage({
+            ...startFb,
+            x: startFb.x + startFb.width / 2 - (startFb.width * ratio) / 2,
+            y: newY,
+            width: startFb.width * ratio,
+            height: newHeight,
+          });
+          pendingFocusBox.current = newFb;
+          if (focusBoxRef.current) {
+            const viewportRect = focusRectToViewport(
+              { ...pageLayout, zoom: newZoom },
+              newFb,
+            );
+            if (viewportRect) {
+              focusBoxRef.current.style.left = `${viewportRect.x}px`;
+              focusBoxRef.current.style.top = `${viewportRect.y}px`;
+              focusBoxRef.current.style.width = `${viewportRect.width}px`;
+              focusBoxRef.current.style.height = `${viewportRect.height}px`;
+            }
+          }
+        }
+
+        const scrollContainer = containerRef.current?.parentElement;
+        if (scrollContainer) {
+          scrollContainer.scrollLeft = (startScrollLeft + startX) * zoomRatio - currentCenterX;
+          scrollContainer.scrollTop = (startScrollTop + startY) * zoomRatio - currentCenterY;
+        }
+
+        if (pinchInitialData.current) {
+          pinchInitialData.current.ticking = false;
+        }
+      });
+    }
+  };
+
+  useEffect(() => {
+    const scrollContainer = containerRef.current?.parentElement;
+    if (!scrollContainer) return;
+    let wheelTicking = false;
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        if (!wheelTicking) {
+          wheelTicking = true;
+          requestAnimationFrame(() => {
+            setZoom((prev) => {
+              // Normalize to pixels first: a physical mouse wheel reports
+              // deltaMode 1 (lines, deltaY ~3) while a trackpad reports mode 0
+              // (pixels, deltaY ~100+) — without this the same factor makes
+              // wheel zoom jump in huge steps while trackpad zoom stays fine.
+              const normalizedDeltaY =
+                e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+              const newZoom = Math.max(
+                0.5,
+                Math.min(maxZoom, prev - normalizedDeltaY * 0.0015),
+              );
+              if (focusBoxState?.focusBox && newZoom !== prev) {
+                const ratio = prev / newZoom;
+                let newY =
+                  focusBoxState.focusBox.y +
+                  focusBoxState.focusBox.height / 2 -
+                  (focusBoxState.focusBox.height * ratio) / 2;
+                const newHeight = focusBoxState.focusBox.height * ratio;
+                if (newY < 0) newY = 0;
+                if (newY + newHeight > pageHeight)
+                  newY = Math.max(0, pageHeight - newHeight);
+
+                const newFb = clampFocusBoxToPage({
+                  ...focusBoxState.focusBox,
+                  x:
+                    focusBoxState.focusBox.x +
+                    focusBoxState.focusBox.width / 2 -
+                    (focusBoxState.focusBox.width * ratio) / 2,
+                  y: newY,
+                  width: focusBoxState.focusBox.width * ratio,
+                  height: newHeight,
+                });
+                pendingFocusBox.current = newFb;
+                if (focusBoxRef.current) {
+                  const viewportRect = focusRectToViewport(
+                    { ...pageLayout, zoom: newZoom },
+                    newFb,
+                  );
+                  if (viewportRect) {
+                    focusBoxRef.current.style.left = `${viewportRect.x}px`;
+                    focusBoxRef.current.style.top = `${viewportRect.y}px`;
+                    focusBoxRef.current.style.width = `${viewportRect.width}px`;
+                    focusBoxRef.current.style.height = `${viewportRect.height}px`;
+                  }
+                }
+              }
+              clearTimeout(wheelTimeout.current);
+              wheelTimeout.current = setTimeout(() => {
+                if (pendingFocusBox.current) {
+                  focusBoxState.setFocusBox(pendingFocusBox.current);
+                  pendingFocusBox.current = null;
+                }
+              }, 150);
+              return newZoom;
+            });
+            wheelTicking = false;
+          });
+        }
+      }
+    };
+    scrollContainer.addEventListener("wheel", handleWheel, { passive: false });
+    return () => scrollContainer.removeEventListener("wheel", handleWheel);
+  }, [focusBoxState, maxZoom]);
+
+  // Hand the previewed zoom over to React. The transform stays on until the new
+  // layout exists, so the layout effect below is what drops it and applies the
+  // scroll offset the preview was standing in for.
+  const commitLivePinch = () => {
+    const pending = livePinchRef.current;
+    livePinchRef.current = null;
+    // Armed but never moved (or a focus-box pinch, which never previews): no
+    // transform to hand over, so nothing below would clear the flag.
+    if (!pending) return setPinchPreview(false);
+    pinchCommitRef.current = pending;
+    // Same zoom means no re-render, so the layout effect would never run and
+    // the transform would stick. Drop it here instead.
+    if (pending.zoom === zoom) dropPinchPreviewRef.current?.();
+    else setZoom(pending.zoom);
+  };
+  commitLivePinchRef.current = commitLivePinch;
+
+  const dropPinchPreview = () => {
+    const commit = pinchCommitRef.current;
+    if (!commit) return;
+    pinchCommitRef.current = null;
+    setPinchPreview(false);
+    const content = containerRef.current;
+    if (content) {
+      content.style.transformOrigin = "";
+      content.style.willChange = "";
+    }
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (isFullMode) {
+      // Horizontal lives in the offset, not in scrollLeft: at the fitted width
+      // there is no scroll range, so writing it there is a silent no-op and the
+      // page springs back the moment the preview drops. offsetX already carries
+      // the anchored, clamped position the preview was showing — hand it over
+      // as is. No snap to center here: this also ends a pure zoom, and yanking
+      // the page to the middle after every pinch is not a gesture the user made.
+      applyDocOffset(commit.offsetX);
+      scroller.scrollTop = commit.scrollTop;
+      return;
+    }
+    containerRef.current?.style.setProperty("transform", "");
+    scroller.scrollLeft = commit.scrollLeft;
+    scroller.scrollTop = commit.scrollTop;
+  };
+  const dropPinchPreviewRef = useRef(null);
+  dropPinchPreviewRef.current = dropPinchPreview;
+
+  useLayoutEffect(() => {
+    if (pinchCommitRef.current?.zoom !== zoom) return;
+    dropPinchPreviewRef.current?.();
+  }, [zoom]);
+
+  const handleGestureEnd = (event) => {
+    // Reachable twice for one release: the document-capture safety net below
+    // and the scroll container's own handler. Running the ink release twice
+    // would commit the stroke twice.
+    const native = event.nativeEvent ?? event;
+    if (handledReleases.current.has(native)) return;
+    handledReleases.current.add(native);
+    const startedOnPage = containerRef.current?.contains(event.target) ?? false;
+    if (!startedOnPage) {
+      if (event.type === 'pointercancel') {
+        inkPointer.onPointerCancel(event);
+      } else {
+        inkPointer.onPointerUp(event);
+      }
+    }
+    if (gutterPanData.current?.pointerId === event.pointerId) {
+      // Offset 0 only means "at rest" while the whole page fits across the
+      // viewport. Zoomed in past that, center is just one more spot on a page
+      // the user is panning around, and catching them as they cross it is the
+      // gesture fighting back.
+      const pageFitsWidth =
+        resolvedPageWidth * zoom <= (scrollRef.current?.clientWidth ?? 0) + 1;
+      if (
+        gutterPanData.current.panX &&
+        gutterPanData.current.active &&
+        pageFitsWidth &&
+        docOffsetXRef.current !== 0 &&
+        Math.abs(docOffsetXRef.current) <= DOC_SNAP_THRESHOLD_X
+      ) {
+        applyDocOffset(0, { animate: true });
+      }
+      gutterPanData.current = null;
+    }
+    if (event.pointerType !== 'touch') return;
+    activePointers.current.delete(event.pointerId);
+    
+    if (pinchInitialData.current) {
+      const [id1, id2] = pinchInitialData.current.pointerIds;
+      if (event.pointerId === id1 || event.pointerId === id2) {
+        if (pendingFocusBox.current) {
+          focusBoxState?.setFocusBox?.(pendingFocusBox.current);
+          pendingFocusBox.current = null;
+        }
+        pinchInitialData.current = null;
+        commitLivePinch();
+        // commitLivePinch normally hands the flag on to dropPinchPreview, but a
+        // setZoom React bails on (the pending zoom already equals the one this
+        // closure captured) never re-renders, so that layout effect never runs.
+        // The fingers are off the glass either way — see setPinchPreview.
+        setPinchPreview(false);
+      }
+    }
+  };
+  const handleGestureEndRef = useRef(null);
+  handleGestureEndRef.current = handleGestureEnd;
+
+  // handleGestureEnd is a React handler on the scroll container, so it only
+  // runs for events that bubble up to it — and several children stop
+  // propagation (focus box drags, object layers). A contact whose pointerup is
+  // swallowed that way is never removed from activePointers, and it keeps the
+  // position it had when it was swallowed. The next single-finger move then
+  // measures the live finger against that frozen point: distance explodes and
+  // the pinch preview writes a wild transform (traced on the tablet with one
+  // finger down: scale(1.7475) and translateY(-6906px)). The stale entry only
+  // dies on remount, which is why reopening the document always fixed it.
+  // Capture on document sees every release regardless of who swallows it.
+  useEffect(() => {
+    const release = (event) => {
+      if (event.pointerType !== "touch") return;
+      if (!activePointers.current.has(event.pointerId)) return;
+      handleGestureEndRef.current?.(event);
+    };
+    document.addEventListener("pointerup", release, { capture: true });
+    document.addEventListener("pointercancel", release, { capture: true });
+    return () => {
+      document.removeEventListener("pointerup", release, { capture: true });
+      document.removeEventListener("pointercancel", release, { capture: true });
+    };
+  }, []);
+
+  const handleFocusBoxDragStart = (e) => {
+    e.stopPropagation();
+    if (isSelectMode) return;
+    cancelFocusBoxDrag();
+    if (!focusBoxState?.focusBox) return;
+    const pointerId = e.pointerId;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startBoxX = focusBoxState.focusBox.x;
+    const startBoxY = focusBoxState.focusBox.y;
+    const boxWidth = focusBoxState.focusBox.width;
+
+    let currentX = startX;
+    let currentY = startY;
+    const scrollContainer = containerRef.current?.parentElement;
+    if (!scrollContainer) return;
+    const startScrollTop = scrollContainer.scrollTop;
+    const startScrollLeft = scrollContainer.scrollLeft;
+    const drag = {
+      pointerId,
+      animationFrameId: null,
+      onPointerMove: null,
+      onPointerUp: null,
+    };
+    const isActiveDrag = () => focusDragRef.current === drag;
+
+    const updateBoxDOM = (dx, dy) => {
+      if (!isActiveDrag()) return startBoxY;
+      const movedFocusBox = moveFocusBoxWithinPage(
+        {
+          ...focusBoxState.focusBox,
+          x: startBoxX,
+          y: startBoxY,
+          width: boxWidth,
+        },
+        dx,
+        dy,
+      );
+      focusBoxState.setFocusBox((prev) =>
+        prev
+          ? {
+              ...prev,
+              x: movedFocusBox.x,
+              y: movedFocusBox.y,
+            }
+          : prev,
+      );
+
+      return movedFocusBox.y;
+    };
+
+    const doScroll = () => {
+      if (!isActiveDrag()) return;
+      const rect = scrollContainer.getBoundingClientRect();
+      const scrollZone = 60;
+      const speed = 15;
+
+      let scrolled = false;
+      if (currentY < rect.top + scrollZone) {
+        scrollContainer.scrollTop -= speed;
+        scrolled = true;
+      } else if (currentY > rect.bottom - scrollZone) {
+        scrollContainer.scrollTop += speed;
+        scrolled = true;
+      }
+
+      if (currentX < rect.left + scrollZone) {
+        scrollContainer.scrollLeft -= speed;
+        scrolled = true;
+      } else if (currentX > rect.right - scrollZone) {
+        scrollContainer.scrollLeft += speed;
+        scrolled = true;
+      }
+
+      if (scrolled) {
+        const dx =
+          (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) /
+          zoom;
+        const dy =
+          (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) /
+          zoom;
+
+        const newY = updateBoxDOM(dx, dy);
+
+        // Auto-expand in continuous mode if near the document bottom
+        if (!showPageBreaks) {
+          const currentBoxBottom = newY + focusBoxState.focusBox.height;
+          const focusPageIndex = pageIds.indexOf(focusBoxState.focusBox.pageId);
+          if (
+            focusPageIndex === pagesCountRef.current - 1 &&
+            pagesCountRef.current < maxPages &&
+            currentBoxBottom > pageHeight - 400
+          ) {
+            inkController?.addPage?.();
+          }
+        }
+      }
+      drag.animationFrameId = requestAnimationFrame(doScroll);
+    };
+
+    const onPointerMove = (moveEvent) => {
+      if (!isActiveDrag() || moveEvent.pointerId !== pointerId) return;
+      currentX = moveEvent.clientX;
+      currentY = moveEvent.clientY;
+      const dx =
+        (currentX - startX + (scrollContainer.scrollLeft - startScrollLeft)) /
+        zoom;
+      const dy =
+        (currentY - startY + (scrollContainer.scrollTop - startScrollTop)) /
+        zoom;
+      updateBoxDOM(dx, dy);
+    };
+
+    const onPointerUp = (upEvent) => {
+      if (!isActiveDrag() || upEvent.pointerId !== pointerId) return;
+      cancelFocusBoxDrag();
+    };
+
+    drag.onPointerMove = onPointerMove;
+    drag.onPointerUp = onPointerUp;
+    focusDragRef.current = drag;
+    drag.animationFrameId = requestAnimationFrame(doScroll);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerUp);
+  };
+
+  const handleFocusBoxKeyDown = (e) => {
+    const direction = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }[e.key];
+    if (!direction) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const step = (e.shiftKey ? 50 : 10) / zoom;
+    focusBoxState?.setFocusBox((prev) =>
+      prev
+        ? moveFocusBoxWithinPage(prev, direction[0] * step, direction[1] * step)
+        : prev,
+    );
+  };
+
+  const getStaticBackgroundStyles = () => {
+    const linesRgb = inkDocument.pages[0]?.linesRgb || "255,255,255";
+    const lineOpacity = inkDocument.pages[0]?.lineOpacity ?? 0.07;
+    const gridOpacity = inkDocument.pages[0]?.gridOpacity ?? 0.065;
+
+    if (paperStyle === "blank") {
+      return { backgroundImage: "none" };
+    }
+
+    if (paperStyle === "lined") {
+      return {
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},${lineOpacity}) calc(100% - 1px))`,
+        backgroundSize: "100% 34px",
+        backgroundPosition: "0 92px",
+        backgroundRepeat: "repeat-y",
+      };
+    }
+
+    if (paperStyle === "grid") {
+      return {
+        backgroundImage: `linear-gradient(to bottom, transparent calc(100% - 1px), rgba(${linesRgb},${gridOpacity}) calc(100% - 1px)), linear-gradient(to right, transparent calc(100% - 1px), rgba(${linesRgb},${gridOpacity}) calc(100% - 1px))`,
+        backgroundSize: "100% 24px, 24px 100%",
+        backgroundPosition: "0 92px, 88px 0",
+        backgroundRepeat: "repeat-y, repeat-x",
+      };
+    }
+
+    if (paperStyle === "dotted") {
+      return {
+        backgroundImage: `radial-gradient(circle, rgba(${linesRgb},.18) 1.2px, transparent 1.3px)`,
+        backgroundSize: "24px 24px",
+        backgroundPosition: "16px 92px",
+        backgroundRepeat: "repeat",
+      };
+    }
+
+    return { backgroundImage: "none" };
+  };
+
+  // Portalled into the editor shell when a slot is given, so the rail is a
+  // direct child of the Liquid Glass root and can be a glass control. Without a
+  // slot (tests, standalone use) it renders in place as before.
+  const railContent = (
+    <ToolRail
+      onUndo={handleUndo}
+      onRedo={handleRedo}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      tool={tool}
+      setInputMode={inkController?.setInputMode}
+      isMoveMode={isMoveMode}
+      isEraser={isEraser}
+      setIsEraser={setIsEraser}
+      isSelectMode={isSelectMode}
+      setIsSelectMode={setIsSelectMode}
+      isBucketMode={isBucketMode}
+      setIsBucketMode={setIsBucketMode}
+      isLassoMode={isLassoMode}
+      setIsLassoMode={setIsLassoMode}
+      setLassoSelection={setLassoSelection}
+      placingTool={placingTool}
+      setPlacingTool={setPlacingTool}
+      isDesignToolsOpen={isDesignToolsOpen}
+      setIsDesignToolsOpen={setIsDesignToolsOpen}
+      designButtonRef={designButtonRef}
+      isTextSettingsOpen={isTextSettingsOpen}
+      setIsTextSettingsOpen={setIsTextSettingsOpen}
+      setIsPenSettingsOpen={setIsPenSettingsOpen}
+      setIsEraserSettingsOpen={setIsEraserSettingsOpen}
+      setIsColorPickerOpen={setIsColorPickerOpen}
+      anchorPopoverToButton={anchorPopoverToButton}
+      customColors={customColors}
+      penColor={penColor}
+      applyPenColor={applyPenColor}
+      setActivePickerIndex={setActivePickerIndex}
+      showFocusBoxButton={!isFullMode}
+      onFocusBoxArm={() => focusBoxState?.setFocusBox(null)}
+      isCommentMode={isCommentMode}
+      setIsCommentMode={setIsCommentMode}
+      isLayersOpen={isLayersOpen}
+      toggleLayers={toggleLayers}
+    />
+  );
+
+  return (
+    <div
+      ref={documentViewRef}
+      className={`document-view paper-style-${paperStyle}`}
+      data-full-bleed={isFullBleed ? "true" : undefined}
+      data-testid="document-view"
+      data-document-id={inkController?.document?.documentId}
+      data-document-kind={note?.kind || "blank"}
+      data-page-count={pagesCount}
+      data-tool={tool}
+      data-color={penColor}
+      data-pen-width={rawLineWidth ?? lineWidth}
+      data-eraser-width={eraserWidth}
+      data-input-mode={inkController?.inputMode}
+      data-eraser-mode={inkController?.eraserMode}
+      data-stroke-count={inkDocument.strokes.length}
+      style={{ display: "flex", height: "100%" }}
+    >
+      {railSlot ? (
+        createPortal(railContent, railSlot)
+      ) : (
+        <div className="editor-sidebar">
+          {railContent}
+        </div>
+      )}
+
+      {/* Floating Popovers */}
+      {isPenSettingsOpen && (
+        <PenSettingsPopover
+          tool={tool}
+          setTool={setTool}
+          rawLineWidth={rawLineWidth ?? lineWidth}
+          setLineWidth={setLineWidth}
+          penColor={penColor}
+          onClose={() => setIsPenSettingsOpen(false)}
+          setIsEraser={setIsEraser}
+          setIsSelectMode={setIsSelectMode}
+          inputMode={inputMode}
+          setInputMode={inkController?.setInputMode}
+          top={popoverTop}
+        />
+      )}
+      {isEraserSettingsOpen && (
+        <EraserSettingsPopover
+          eraserMode={inkController?.eraserMode}
+          setEraserMode={inkController?.setEraserMode}
+          eraserWidth={eraserWidth}
+          setEraserWidth={setEraserWidth}
+          onClose={() => setIsEraserSettingsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isDesignToolsOpen && (
+        <DesignToolsPopover
+          onInsert={handleInsertTool}
+          onClose={() => setIsDesignToolsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isTextSettingsOpen && (
+        <TextSettingsPopover
+          style={selectedTextObject || textStyle}
+          onStyleChange={handleTextStyleChange}
+          paperStyle={paperStyle}
+          hasSelection={Boolean(selectedTextObject)}
+          canFlow={note?.kind !== "imported"}
+          onInsert={() => {
+            setPlacingTool(TEXT_TOOL);
+            setIsTextSettingsOpen(false);
+          }}
+          onClose={() => setIsTextSettingsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {isShapeSettingsOpen && selectedShapeObject && (
+        <ShapeSettingsPopover
+          object={selectedShapeObject}
+          onChange={handleShapeStyleChange}
+          onClose={() => setIsShapeSettingsOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {/* Layers panel — slides out of the same sidebar as agent/browser/pages
+          when panelSlot is given, or renders in place (tests, standalone). */}
+      {isLayersOpen &&
+        (() => {
+          const drawer = (
+            <LayerDrawer
+              isOpen={isLayersOpen}
+              objects={pageObjects}
+              inkLayerIndex={activeInkLayerIndex}
+              inkLayerHidden={inkController?.inkLayerHidden}
+              inkLayerLocked={inkController?.inkLayerLocked}
+              strokeCount={inkDocument.strokes.length}
+              selectedObjectId={selectedObjectId}
+              onSelect={(id) => {
+                setSelectedObjectId(id === "__ink__" ? null : id);
+              }}
+              onToggleLock={inkController?.setLayerLock}
+              onToggleVisibility={inkController?.setLayerVisibility}
+              onReorder={inkController?.reorderLayers}
+              onClose={closeLayers}
+            />
+          );
+          return panelSlot ? createPortal(drawer, panelSlot) : drawer;
+        })()}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        onChange={handleImageFile}
+        data-testid="object-image-input"
+        style={{ display: "none" }}
+      />
+      {isColorPickerOpen && (
+        <ColorWheelPopover
+          customColors={customColors}
+          activePickerIndex={activePickerIndex ?? 0}
+          setActivePickerIndex={setActivePickerIndex}
+          onColorChange={handleColorChange}
+          onClose={() => setIsColorPickerOpen(false)}
+          top={popoverTop}
+        />
+      )}
+      {zoomToast !== null && (
+        <div className="zoom-toast" data-testid="zoom-toast" data-glass-no-recapture="">
+          <span>{zoomToast}%</span>
+        </div>
+      )}
+
+      {/* Scrolled content: glass repaints it live, never re-shoots it (see
+          NO_RECAPTURE_ATTR in useLiquidGlass). */}
+      <div
+        ref={scrollRef}
+        data-glass-no-recapture=""
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: isFullMode ? "hidden" : "auto",
+          position: "relative",
+          textAlign: "center",
+          touchAction: "none",
+          cursor: isSpaceDown ? "grab" : undefined,
+          // Vollmodus: der Scroll-Container IST das Papier.
+          // Startet unterhalb der Pill-Buttons (top: 78px) und schließt bündig am unteren Bildschirmrand ab.
+          margin: isFullBleed
+            ? 0
+            : isFullMode
+              ? `4px 4px 0 ${hasRail ? 88 : 4}px`
+              : `78px 12px 0 ${hasRail ? 104 : 12}px`,
+          background: "transparent",
+          color: "#FFFFFF",
+        }}
+        onPointerDown={handleGestureStart}
+        onPointerMove={handleGestureMove}
+        onPointerUp={handleGestureEnd}
+        onPointerCancel={handleGestureEnd}
+        onScroll={(e) => {
+          const { scrollTop, scrollHeight, clientHeight } = e.target;
+          // Notes-App: am unteren Ende wächst das Papier NUR im unendlichen Modus nach.
+          if (!showPageBreaks && note?.kind !== 'imported') {
+            if (
+              scrollHeight - scrollTop - clientHeight < 200 &&
+              pagesCount < maxPages
+            ) {
+              inkController?.addPage?.();
+            }
+          }
+          const unit = showPageBreaks
+            ? pageHeight * zoom + PAGE_GAP
+            : pageHeight * zoom;
+          const currentPage =
+            Math.min(pagesCount - 1, Math.max(0, Math.round(scrollTop / unit))) + 1;
+          onCurrentPageChange?.(currentPage);
+        }}
+      >
+        <div
+          data-testid="document-page"
+          style={{
+            display: "inline-block",
+            textAlign: "left",
+            width: `${resolvedPageWidth * zoom}px`,
+            height: `${totalDocumentHeight}px`,
+            position: "relative",
+            backgroundColor: "transparent",
+            boxShadow: "none",
+            margin: isFullMode ? `${TOP_UI_CLEARANCE}px 0 0 0` : "96px 0 24px 0",
+            touchAction:
+              isSelectMode || isFullMode || placingTool || isBucketMode || isLassoMode
+                ? "none"
+                : "auto",
+          }}
+          ref={containerRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
+          <div ref={eraserRingRef} data-testid="eraser-ring" style={eraserRingStyle} />
+          {sourceLoading && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                color: '#fff',
+                zIndex: 100,
+                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+              }}
+              data-testid="source-loading"
+            >
+              <span>Dokument wird geladen...</span>
+            </div>
+          )}
+          {sourceError && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                color: '#fff',
+                zIndex: 100,
+                borderRadius: isFullMode ? "22px 22px 0 0" : "20px",
+              }}
+              data-testid="source-error"
+            >
+              <span style={{ marginBottom: 12 }}>Fehler beim Laden des Dokuments</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); retrySource?.(); }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#3E7BD8',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                Erneut versuchen
+              </button>
+            </div>
+          )}
+          {/* Paper Background: 1 continuous paper for infinite mode, discrete page cards with real gaps, or imported document */}
+          {note?.kind === "imported" ? (
+            documentMetrics.pageLayouts.map((pageLayout) => (
+              <div
+                key={pageLayout.id}
+                style={{
+                  position: "absolute",
+                  top: `${pageLayout.top * zoom}px`,
+                  left: 0,
+                  width: `${pageLayout.width * zoom}px`,
+                  height: `${pageLayout.height * zoom}px`,
+                  // Documents can have hundreds of pages; every wrapper (and its
+                  // IntersectionObserver) is still created up front, but this
+                  // lets the browser itself skip layout/paint for the ones far
+                  // off screen instead of doing that work for all of them. No
+                  // effect on unsupported browsers - it's a pure optimization.
+                  contentVisibility: "auto",
+                  containIntrinsicSize: `${Math.round(pageLayout.width * zoom)}px ${Math.round(pageLayout.height * zoom)}px`,
+                }}
+              >
+                <DocumentPage
+                  page={pageLayout}
+                  sourceType={note.source?.type}
+                  sourceHandle={sourceHandle}
+                  strokes={strokesByPage.get(pageLayout.id) || EMPTY_STROKES}
+                  repaintKey={pageRepaintKeys[pageLayout.id]}
+                  zoom={zoom}
+                  dpr={globalThis.devicePixelRatio || 1}
+                />
+              </div>
+            ))
+          ) : !showPageBreaks ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: `${documentHeight * zoom}px`,
+                borderRadius: isFullBleed ? 0 : isFullMode ? "22px 22px 0 0" : "20px",
+                background: pageBackground,
+                boxShadow:
+                  "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 34px 74px -30px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
+                overflow: "hidden",
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: `${resolvedPageWidth}px`,
+                  height: `${documentHeight}px`,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "0 0",
+                  ...getStaticBackgroundStyles(),
+                  pointerEvents: "none",
+                  willChange: "transform",
+                }}
+              />
+            </div>
+          ) : (
+            Array.from({ length: pagesCount }).map((_, i) => {
+              const pageTop = i * (resolvedPageHeight * zoom + PAGE_GAP);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: "absolute",
+                    top: `${pageTop}px`,
+                    left: 0,
+                    width: "100%",
+                    height: `${resolvedPageHeight * zoom}px`,
+                    borderRadius: isFullBleed ? 0 : "20px",
+                    background: pageBackground,
+                    boxShadow:
+                      "inset 0 1.5px 1px 0 rgba(255,255,255,.1), 0 24px 50px -16px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.08)",
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: `${resolvedPageWidth}px`,
+                      height: `${resolvedPageHeight}px`,
+                      transform: `scale(${zoom})`,
+                      transformOrigin: "0 0",
+                      ...getStaticBackgroundStyles(),
+                      pointerEvents: "none",
+                    }}
+                  />
+                </div>
+              );
+            })
+          )}
+          {/* Layers below ink canvas */}
+          <PageObjectLayer
+            ref={objectLayerBelowRef}
+            objects={objectsBelowInk}
+            pageLayout={pageLayout}
+            selectedId={selectedObjectId}
+            paperStyle={paperStyle}
+            editingId={editingObjectId}
+            processingObjectId={processingImageId}
+            onEditingChange={setEditingObjectId}
+            onSelect={setSelectedObjectId}
+            onChange={handleObjectChange}
+            onDelete={handleObjectDelete}
+            onOpenLink={openLink}
+            onRemoveBackground={handleRemoveBackground}
+            onRestoreBackground={handleRestoreBackground}
+            onToggleLock={inkController?.setLayerLock}
+            onShiftOrder={inkController?.shiftLayerOrder}
+            onOpenLayers={openLayers}
+            onGestureStart={handleGestureStart}
+            panMode={isSpaceDown}
+            penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
+            textToolArmed={placingTool?.id === "text"}
+            onTextOverflow={handleTextOverflow}
+          />
+          {note?.kind !== 'imported' && (
+            <canvas
+              ref={inkCanvasRef}
+              className="master-canvas"
+              data-testid="ink-canvas"
+              style={{
+                width: "100%",
+                height: "100%",
+                position: "absolute",
+                left: 0,
+                top: 0,
+                touchAction: "none",
+                pointerEvents: "none",
+                display: inkController?.inkLayerHidden ? "none" : "block",
+              }}
+            />
+          )}
+          {/* Layers above ink canvas */}
+          <PageObjectLayer
+            ref={objectLayerAboveRef}
+            objects={objectsAboveInk}
+            pageLayout={pageLayout}
+            selectedId={selectedObjectId}
+            paperStyle={paperStyle}
+            editingId={editingObjectId}
+            processingObjectId={processingImageId}
+            onEditingChange={setEditingObjectId}
+            onSelect={setSelectedObjectId}
+            onChange={handleObjectChange}
+            onDelete={handleObjectDelete}
+            onOpenLink={openLink}
+            onRemoveBackground={handleRemoveBackground}
+            onRestoreBackground={handleRestoreBackground}
+            onToggleLock={inkController?.setLayerLock}
+            onShiftOrder={inkController?.shiftLayerOrder}
+            onOpenLayers={openLayers}
+            onGestureStart={handleGestureStart}
+            panMode={isSpaceDown}
+            penDrawsThrough={!isMoveMode && !isLassoMode && !placingTool}
+            textToolArmed={placingTool?.id === "text"}
+            onTextOverflow={handleTextOverflow}
+          />
+          {lassoDraftViewportPoints && lassoDraftViewportPoints.length > 1 && (
+            <svg
+              data-testid="lasso-draft-path"
+              style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}
+            >
+              <polyline
+                points={lassoDraftViewportPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="rgba(62,123,216,0.12)"
+                stroke="#3E7BD8"
+                strokeWidth="1.5"
+                strokeDasharray="5 4"
+              />
+            </svg>
+          )}
+          {isLassoMode && lassoSelectionBox && (
+            <LassoSelectionLayer
+              bounds={lassoSelectionBox}
+              pageLayout={pageLayout}
+              onCommit={handleLassoCommit}
+              onDelete={handleLassoDelete}
+              onDragChange={setLassoLiveTransform}
+            />
+          )}
+          {!isFullMode && focusBoxState?.focusBox && focusBoxViewport && (
+            <div
+              ref={focusBoxRef}
+              className="focus-box"
+              data-testid="focus-box"
+              role="region"
+              aria-label="Fokusbereich"
+              tabIndex={0}
+              style={{
+                left: focusBoxViewport.x,
+                top: focusBoxViewport.y,
+                width: focusBoxViewport.width,
+                height: focusBoxViewport.height,
+                position: "absolute",
+                border: "2px solid #1976D2",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                cursor: "move",
+                zIndex: 10,
+                touchAction: "none",
+              }}
+              onPointerDown={handleFocusBoxDragStart}
+              onKeyDown={handleFocusBoxKeyDown}
+            />
+          )}
+          {isCommentMode && (
+            <CommentLayer
+              comments={comments}
+              locate={(e) => mapViewportPoint(pageLayout, relativePoint(containerRef.current, e))}
+              project={(pageId, x, y) => pagePointToViewport(pageLayout, pageId, { x, y })}
+              onSave={({ id, text, ...point }) => {
+                if (id) editComment(id, text);
+                else addComment({ ...point, text });
+                setCommentFlash(point);
+                setIsCommentMode(false);
+              }}
+              onRemove={removeComment}
+              onClose={() => setIsCommentMode(false)}
+            />
+          )}
+          {commentFlash && !isCommentMode && (() => {
+            const at = pagePointToViewport(pageLayout, commentFlash.pageId, commentFlash);
+            return at && <CommentFlash at={at} onDone={() => setCommentFlash(null)} />;
+          })()}
+          {draftPlacement && draftPlacementViewport && (
+            <div
+              data-testid="draft-placement-box"
+              style={{
+                position: "absolute",
+                pointerEvents: "none",
+                left: draftPlacementViewport.x,
+                top: draftPlacementViewport.y,
+                width: draftPlacementViewport.width,
+                height: draftPlacementViewport.height,
+                zIndex: 1000,
+              }}
+            >
+              {draftPlacement.type === "line" || draftPlacement.type === "arrow" ? (
+                <svg width="100%" height="100%" style={{ overflow: "visible" }}>
+                  <line
+                    x1={draftPlacement.width < 0 ? draftPlacementViewport.width : 0}
+                    y1={draftPlacement.height < 0 ? draftPlacementViewport.height : 0}
+                    x2={draftPlacement.width < 0 ? 0 : draftPlacementViewport.width}
+                    y2={draftPlacement.height < 0 ? 0 : draftPlacementViewport.height}
+                    stroke="#3E7BD8"
+                    strokeWidth={2}
+                    strokeDasharray="6 5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              ) : draftPlacement.type === "ellipse" ? (
+                <svg width="100%" height="100%" style={{ overflow: "visible" }}>
+                  <ellipse
+                    cx="50%"
+                    cy="50%"
+                    rx={draftPlacementViewport.width / 2}
+                    ry={draftPlacementViewport.height / 2}
+                    fill="rgba(62, 123, 216, 0.12)"
+                    stroke="#3E7BD8"
+                    strokeWidth={2}
+                    strokeDasharray="6 5"
+                  />
+                </svg>
+              ) : (
+                <div
+                  style={
+                    draftPlacement.type === "circleSearch"
+                      ? {
+                          width: "100%",
+                          height: "100%",
+                          border: `2px dashed ${SEARCH_MARK_COLOR}`,
+                          backgroundColor: "rgba(255, 122, 51, 0.12)",
+                          borderRadius: 6,
+                        }
+                      : {
+                          width: "100%",
+                          height: "100%",
+                          border: "2px dashed #3E7BD8",
+                          backgroundColor: "rgba(62, 123, 216, 0.12)",
+                          borderRadius: draftPlacement.type === "rect" ? 6 : 4,
+                        }
+                  }
+                />
+              )}
+            </div>
+          )}
+          {draftFocusBox && draftFocusBoxViewport && (
+            <div
+              data-testid="draft-focus-box"
+              style={{
+                position: "absolute",
+                border: "2px dashed #1976D2",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                pointerEvents: "none",
+                left: draftFocusBoxViewport.x,
+                top: draftFocusBoxViewport.y,
+                width: draftFocusBoxViewport.width,
+                height: draftFocusBoxViewport.height,
+                zIndex: 1000,
+              }}
+            />
+          )}
+        </div>
+        {/* Plus Button under the page (only in showPageBreaks mode for regular notes) */}
+        {showPageBreaks && note?.kind !== 'imported' && pagesCount < maxPages && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: "24px 0 54px",
+              position: "relative",
+              zIndex: 10,
+            }}
+          >
+            <button
+              className="add-page-btn"
+              onClick={() => {
+                inkController?.addPage?.();
+                setTimeout(() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTo({
+                      top: scrollRef.current.scrollHeight,
+                      behavior: "smooth",
+                    });
+                  }
+                }, 50);
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                borderRadius: 9999,
+                background:
+                  "linear-gradient(180deg, rgba(42, 42, 48, 0.78) 0%, rgba(18, 18, 22, 0.9) 100%)",
+                backdropFilter: "blur(24px) saturate(1.8)",
+                WebkitBackdropFilter: "blur(24px) saturate(1.8)",
+                border: "1px solid rgba(255, 255, 255, 0.22)",
+                boxShadow:
+                  "inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.85), 0 16px 36px -12px rgba(0, 0, 0, 0.9)",
+                color: "#FFFFFF",
+                cursor: "pointer",
+                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+              title="Neue Seite hinzufügen"
+              data-testid="add-page-btn"
+            >
+              <Plus size={18} strokeWidth={2.4} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
