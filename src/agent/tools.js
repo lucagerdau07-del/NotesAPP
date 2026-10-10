@@ -13,6 +13,7 @@ import { fold, queryTerms, readSource, searchSources } from "../knowledge/source
 import { requestGoogleDoc, requestGoogleDocEdit, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { SCHOOL_TOOLS, isSchoolTool, runSchoolTool } from "./schoolContext.js";
+import { TASK_TOOLS, searchImages } from "./taskTools.js";
 import { buildExamDashboard, SUBAGENT_TOOLS } from "./examAgent.js";
 import { KNOWLEDGE_CHANGED } from "../knowledge/knowledgeRepository.js";
 import { browserMemoryRepository, MEMORY_MAX_CHARS } from "../knowledge/memoryRepository.js";
@@ -1110,6 +1111,9 @@ export const AGENT_LIBRARY_TOOLS = [
   ).values(),
 ];
 
+// Aufgaben-Chat im Kalender (taskChat.js): lesen, recherchieren, Dateien, dazu Anhang und Bilder.
+export const AGENT_TASK_TOOLS = [...AGENT_NO_DOCUMENT_TOOLS, ...TASK_TOOLS];
+
 // Die drei Lesewerkzeuge des Klausur-Subagenten (examAgent.js), mit den
 // bestehenden Schemas.
 const EXAM_AGENT_TOOLS = AGENT_LIBRARY_TOOLS.filter((tool) => SUBAGENT_TOOLS.includes(tool.function.name));
@@ -1149,6 +1153,10 @@ export function describeToolCall(name, args = {}) {
       return `Quellen durchsuchen: ${String(args.query || "").slice(0, 40)}`;
     case "read_source":
       return `Quelle ${args.image ? "ansehen" : "lesen"} (Seite ${args.page ?? "?"})`;
+    case "read_attachment":
+      return `Anhang ${Number(args.index) + 1} lesen`;
+    case "search_images":
+      return `Bilder suchen: ${String(args.query || "").slice(0, 40)}`;
     case "see_document":
       return args.pageId ? "Seite ansehen" : "Seiten ansehen";
     case "write_text":
@@ -1410,6 +1418,9 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "done") return { summary: String(args.summary || "") };
   if (name === "remember") return browserMemoryRepository.remember(args);
   if (name === "build_exam_dashboard") return buildDashboardTool(args);
+  if (name === "search_images") return searchImages(args.query);
+  if (name === "read_attachment")
+    return api?.readAttachment ? api.readAttachment(args) : "Fehler: Anhänge gibt es nur im Aufgaben-Chat.";
   if (isSchoolTool(name)) return runSchoolTool(name, args);
   if (name === "create_note") return api?.createNote ? api.createNote(args) : "Fehler: Notizen anlegen geht nur auf der Startseite.";
   if (name === "open_note") return api?.openNote ? api.openNote(args) : "Fehler: Notizen wechseln geht nur auf der Startseite.";

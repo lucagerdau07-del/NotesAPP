@@ -125,6 +125,7 @@ export default function useKnowledge({
         subjects: subjectsRef.current,
         today,
         complete: requestCompletion,
+        previous: current.plan,
       });
       repository.savePlan(plan);
     } finally {
@@ -203,6 +204,17 @@ export default function useKnowledge({
     [repository],
   );
 
+  // Einen Lernblock abhaken (clear = wieder öffnen): Die Minuten verteilen sich
+  // auf die Aufgaben des Blocks, der Plan rechnet danach mit dem Rest.
+  const setWorkDone = useCallback(
+    (eventIds, date, minutes, clear = false) => {
+      const share = minutes / Math.max(1, eventIds.length);
+      for (const id of eventIds) repository.setEventWork(id, date, clear ? 0 : Math.max(1, share));
+      setState(repository.read());
+    },
+    [repository],
+  );
+
   const addEvent = useCallback(
     (input) => {
       const event = repository.addEvent(input);
@@ -264,6 +276,7 @@ export default function useKnowledge({
     buildDashboard,
     updateStudy,
     setEventDone,
+    setWorkDone,
     addEvent,
     removeEvent,
     setAutoScan,

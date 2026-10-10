@@ -34,7 +34,7 @@ const MORNING_CUTOFF = "12:00";
 export const PLAN_DAYS = 7;
 // Hochzählen, wenn sich die Planungsregeln ändern: ein gespeicherter Plan mit
 // älterer Version wird dann sofort neu berechnet statt erst am nächsten Tag.
-export const PLAN_RULES_VERSION = 8;
+export const PLAN_RULES_VERSION = 9;
 
 export function isoDate(value) {
   const date = new Date(value);
@@ -119,7 +119,17 @@ export function planInputsKey(events) {
   return JSON.stringify(
     (Array.isArray(events) ? events : [])
       .filter(isLearnable)
-      .map((event) => [event.kind, event.title, event.subject || "", event.due, event.time || "", activePrep(event)?.at || 0, activeNeed(event)?.at || 0])
+      .map((event) => [
+        event.kind,
+        event.title,
+        event.subject || "",
+        event.due,
+        event.time || "",
+        activePrep(event)?.at || 0,
+        activeNeed(event)?.at || 0,
+        // Nur wenn gearbeitet wurde, damit bestehende Pläne gültig bleiben.
+        ...(event.kind !== "exam" && workMinutes(event) ? [workMinutes(event)] : []),
+      ])
       .sort(),
   );
 }
@@ -136,6 +146,11 @@ export const TASK_SPREAD_DAYS = 7;
 const TIME_PATTERN =
   /(\d+(?:[.,]\d+)?)(?:\s*(?:-|–|bis)\s*(\d+(?:[.,]\d+)?))?\s*(minuten|minute|min|stunden|stunde|std|h)(?![a-zäöüß])/i;
 
+// Was an einer Aufgabe schon gemacht ist: per Wischen im Kalender abgehakte
+// Lernblöcke (event.work: Tag -> Minuten). Der Plan verteilt nur den Rest.
+export const workMinutes = (event) =>
+  Object.values(event?.work || {}).reduce((sum, minutes) => sum + (Number(minutes) || 0), 0);
+
 export function estimatedMinutes(event) {
   const match = String(event?.description || "").match(TIME_PATTERN);
   if (!match) return null;
@@ -143,6 +158,8 @@ export function estimatedMinutes(event) {
   const minutes = /^m/i.test(match[3]) ? value : value * 60;
   return Number.isFinite(minutes) && minutes > 0 ? Math.min(240, Math.max(5, Math.round(minutes))) : null;
 }
+
+export const needMinutes = (event) => estimatedMinutes(event) ?? HOMEWORK_MINUTES;
 
 // Eine Aufgabe, die in einen Lernblock passt, wird an einem Tag in einem Block
 // erledigt. Nur größere werden in Teile dieser Größe auf mehrere Tage geteilt.
@@ -164,7 +181,8 @@ function placeTasks(open, today) {
     .sort((a, b) => lastWorkDay(a, today).localeCompare(lastWorkDay(b, today)) || String(a.due).localeCompare(String(b.due)));
   for (const event of tasks) {
     const window = daysThrough(today, lastWorkDay(event, today)).slice(-TASK_SPREAD_DAYS);
-    const minutes = estimatedMinutes(event) ?? HOMEWORK_MINUTES;
+    const minutes = needMinutes(event) - workMinutes(event);
+    if (minutes <= 0) continue;
     const parts = Math.max(1, Math.ceil(minutes / TASK_BLOCK_MINUTES));
     const mine = new Map();
     const cost = (iso) => (load.get(iso) || 0) + ([0, 6].includes(weekdayOf(iso)) ? WEEKEND_PENALTY : 0);
@@ -405,7 +423,13 @@ export function fitBlocks(blocks, budgetMinutes) {
     if (!Number.isFinite(requestedMinutes) || requestedMinutes <= 0) continue;
     const wanted = Math.max(MIN_BLOCK_MINUTES, Math.round(requestedMinutes));
     const minutes = Math.min(remaining, wanted);
-    fitted.push({ subject: String(block?.subject ?? "").trim().slice(0, 60), task, minutes });
+    const eventIds = Array.isArray(block?.eventIds) ? block.eventIds.filter((id) => typeof id === "string") : [];
+    fitted.push({
+      subject: String(block?.subject ?? "").trim().slice(0, 60),
+      task,
+      minutes,
+      ...(eventIds.length ? { eventIds } : {}),
+    });
     remaining -= minutes;
   }
   return fitted;
@@ -433,6 +457,7 @@ function fallbackBlocks(date, events, budgetMinutes, today, schedule, placed) {
     .filter((event) => event.kind === "exam" || shareOf(event) > 0)
     .sort((left, right) => lastWorkDay(left, today).localeCompare(lastWorkDay(right, today)));
   const blocks = dueFromDate.slice(0, 3).map((event) => ({
+    eventIds: [event.id],
     subject: event.subject,
     task: event.kind === "exam" ? `Vorbereitung: ${event.title}` : event.title,
     minutes:
@@ -471,7 +496,39 @@ function allowedOn(date, today, refs, schedule) {
   };
 }
 
-export async function buildPlan({ events = [], terms = [], subjects = [], today, complete }) {
+// Welche Aufgaben ein Modellblock meint: per Kennung, ohne Kennung über den Titel im
+// Text. Daran hängt das Abhaken im Kalender.
+function withEventIds(refs) {
+  return (block) => {
+    const keys = [block?.ref, ...(Array.isArray(block?.refs) ? block.refs : [block?.refs])]
+      .flatMap((value) => String(value ?? "").split(","))
+      .map((key) => key.trim())
+      .filter(Boolean);
+    let found = keys.map((key) => refs.get(key)).filter(Boolean);
+    if (found.length === 0) {
+      const text = String(block?.task ?? "").toLowerCase();
+      found = [...refs.values()].filter((event) => event.title && text.includes(String(event.title).trim().toLowerCase()));
+    }
+    return found.length ? { ...block, eventIds: found.map((event) => event.id) } : block;
+  };
+}
+
+// Blöcke erledigter Aufgaben aus dem bisherigen Plan: sie sollen im Kalender
+// ausgegraut stehen bleiben, nicht verschwinden. Gearbeitet-Tage zeigt der
+// Kalender schon als eigenen erledigten Eintrag.
+function keptDoneBlocks(previous, events, date) {
+  const byId = new Map(events.map((event) => [event.id, event]));
+  return (previous?.days?.find((day) => day.date === date)?.blocks || []).filter((block) => {
+    const linked = (Array.isArray(block?.eventIds) ? block.eventIds : []).map((id) => byId.get(id));
+    return (
+      linked.length > 0 &&
+      linked.every((event) => event?.done) &&
+      !linked.every((event) => Number(event.work?.[date]) > 0)
+    );
+  });
+}
+
+export async function buildPlan({ events = [], terms = [], subjects = [], today, complete, previous = null }) {
   // Eine Klausur mit eigenem Lernplan (examPrep.js) steht fest und erscheint im
   // Kalender direkt von ihr. Das Modell verteilt nur, was das Tagesbudget
   // darüber hinaus lässt, und sieht die Klausur nicht mehr als offene Aufgabe.
@@ -515,10 +572,10 @@ export async function buildPlan({ events = [], terms = [], subjects = [], today,
       budgetMinutes,
       blocks: fitBlocks(
         Array.isArray(blocksByDate?.[date])
-          ? blocksByDate[date].filter(allowedOn(date, today, refs, schedule))
+          ? blocksByDate[date].filter(allowedOn(date, today, refs, schedule)).map(withEventIds(refs))
           : fallbackBlocks(date, open, budgetMinutes, today, schedule, placed),
         budgetMinutes,
-      ),
+      ).concat(keptDoneBlocks(previous, events, date)),
     })),
   };
 }

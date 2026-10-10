@@ -22,12 +22,14 @@ import useKnowledge from "../hooks/useKnowledge.js";
 import { activeNeed, activePrep, isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
 import { TOPIC_MAX_CHARS } from "../knowledge/examPrep.js";
 import ExamDashboard from "./ExamDashboard.jsx";
+import SwipeRow from "./SwipeRow.jsx";
+import TaskChat from "./TaskChat.jsx";
+import { taskForEntry } from "../agent/taskChat.js";
 import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
 import {
   ENTRY_TYPES,
   buildCalendarEntries,
   groupByWeek,
-  lessonSubject,
   mondaysOfMonth,
   nearestEntry,
   untisTime,
@@ -133,27 +135,6 @@ function NewEntryForm({ initialDate, onCancel, onSave }) {
         </button>
       </div>
     </form>
-  );
-}
-
-function DayLessons({ lessons }) {
-  if (!lessons.length) return null;
-  return (
-    <section className="cal-detail-section">
-      <h3 className="cal-detail-label">Stundenplan an diesem Tag</h3>
-      <ul className="cal-group cal-lessons">
-        {lessons.map((lesson) => {
-          const cancelled = isLessonCancelled(lesson);
-          return (
-            <li key={`${lesson.id}-${lesson.startTime}`} className={cancelled ? "is-cancelled" : ""}>
-              <span className="cal-lesson-time">{untisTime(lesson.startTime)}</span>
-              <span className="cal-lesson-subject">{lessonSubject(lesson)}</span>
-              <span className="cal-lesson-room">{cancelled ? "Entfall" : lesson.ro?.[0]?.name || ""}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 
@@ -358,6 +339,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
     updateStudy,
     dashboardExamId,
     setEventDone,
+    setWorkDone,
     addEvent,
     removeEvent,
     iservState,
@@ -393,7 +375,10 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
     [month],
   );
   const notesById = useMemo(() => Object.fromEntries(notes.map((note) => [note.id, note])), [notes]);
-  const entries = useMemo(() => buildCalendarEntries({ events, plan, lessons, notes }), [events, plan, lessons, notes]);
+  const entries = useMemo(
+    () => buildCalendarEntries({ events, plan, planCurrent, lessons, notes }),
+    [events, plan, planCurrent, lessons, notes],
+  );
   const monthPrefix = `${month.year}-${String(month.month + 1).padStart(2, "0")}`;
   const monthEntries = useMemo(() => entries.filter((entry) => entry.date.startsWith(monthPrefix)), [entries, monthPrefix]);
   const weeks = useMemo(() => groupByWeek(monthEntries, month.year, month.month), [monthEntries, month]);
@@ -402,9 +387,9 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
     monthEntries.find((entry) => entry.id === selectedId) ||
     (monthPrefix === today.slice(0, 7) ? nearestEntry(monthEntries, today) : monthEntries[0]) ||
     null;
-  const dayLessons = selected
-    ? lessons.filter((lesson) => lesson.date === untisDateNumber(dateOf(selected.date))).sort((a, b) => a.startTime - b.startTime)
-    : [];
+
+  // Hausaufgabe, Klausur und Lernblock haben einen Chat mit dem Agenten.
+  const task = useMemo(() => taskForEntry(selected, events), [selected, events]);
 
   // Beim Öffnen und Blättern steht der ausgewählte Tag im Blick, nicht der Monatsanfang.
   const selectedDate = selected?.date;
@@ -429,6 +414,13 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
     const now = new Date();
     setMonth({ year: now.getFullYear(), month: now.getMonth() });
     setSelectedId(null);
+  };
+
+  // Wischen nach rechts: eine Aufgabe oder Klausur abhaken, einen Lernblock als
+  // gemacht vermerken (der Plan rechnet dann mit dem Rest) - oder beides zurück.
+  const toggleDone = (entry) => {
+    if (entry.event) setEventDone(entry.event.id, !entry.done);
+    else setWorkDone(entry.eventIds, entry.date, entry.minutes, entry.done);
   };
 
   const select = (id) => {
@@ -517,6 +509,11 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
                     <ul className="cal-day-entries" aria-label={longDate(day.date)}>
                       {day.entries.map((entry) => (
                         <li key={entry.id}>
+                          <SwipeRow
+                            enabled={Boolean(entry.event || entry.eventIds?.length)}
+                            done={entry.done}
+                            onCommit={() => toggleDone(entry)}
+                          >
                           <button
                             type="button"
                             className={`cal-entry ${entry.done ? "is-done" : ""}`}
@@ -533,6 +530,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
                               <EntryIcon entry={entry} />
                             </span>
                           </button>
+                          </SwipeRow>
                         </li>
                       ))}
                     </ul>
@@ -558,7 +556,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
         </div>
       </section>
 
-      <aside className="cal-detail" aria-label="Details">
+      <aside className="cal-detail" aria-label="Details" data-chat={Boolean(task) && !creating}>
         <button
           type="button"
           className="cal-round cal-detail-close"
@@ -597,7 +595,6 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
                 onOpenAttachment={openAttachment}
                 attachmentError={attachmentError}
               />
-              <DayLessons lessons={dayLessons} />
             </>
           ) : (
             <div className="cal-empty">
@@ -606,6 +603,7 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEve
             </div>
           )}
         </div>
+        {task && !creating && <TaskChat key={task.key} task={task} />}
       </aside>
     </main>
   );

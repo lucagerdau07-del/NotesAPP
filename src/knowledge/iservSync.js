@@ -51,13 +51,11 @@ export async function syncIserv({ repository, loadConfig = loadAgentConfig, fetc
   return repository.mergeFindings({ events, sourceNoteId: ISERV_SOURCE_ID }).addedEvents;
 }
 
-// Lädt den Anhang über den Space (er ist dort angemeldet) und reicht ihn ans Teilen-Menü des Systems.
-// saveAndShare kommt per dynamischem Import, damit dieses Modul (und seine Tests) jspdf und die
-// Capacitor-Plugins nicht mitladen.
-export async function openIservAttachment({
+// Lädt den Anhang über den Space (er ist dort angemeldet). Gemeinsamer Weg fürs Teilen und für den
+// Aufgaben-Chat (read_attachment).
+export async function fetchIservAttachment({
   attachment,
   config = loadAgentConfig(),
-  share,
   fetchImpl = (...args) => fetch(...args),
 }) {
   if (!attachment?.path) throw new Error("Anhang nicht verfügbar.");
@@ -66,7 +64,19 @@ export async function openIservAttachment({
     signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error("Download fehlgeschlagen.");
-  const data = await response.blob();
+  return response.blob();
+}
+
+// Reicht den Anhang ans Teilen-Menü des Systems.
+// saveAndShare kommt per dynamischem Import, damit dieses Modul (und seine Tests) jspdf und die
+// Capacitor-Plugins nicht mitladen.
+export async function openIservAttachment({
+  attachment,
+  config = loadAgentConfig(),
+  share,
+  fetchImpl = (...args) => fetch(...args),
+}) {
+  const data = await fetchIservAttachment({ attachment, config, fetchImpl });
   const shareFile = share || (await import("../documents/exportDocument.js")).saveAndShare;
   await shareFile(data, String(attachment.filename || "Anhang").replace(/[\\/:*?"<>|]+/g, "_"));
 }

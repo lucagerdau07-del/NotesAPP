@@ -29,6 +29,7 @@ export function buildSystemPrompt({
   libraryOverview = "",
   memory = "",
   schoolContext = "",
+  taskContext = "",
 }) {
   // Fast mode trades editing for speed: treat it as read-only regardless of
   // what the caller allows, so the model never reaches for document tools.
@@ -82,6 +83,11 @@ export function buildSystemPrompt({
         "Passt nichts mehr auf die Seite, rufe add_page auf.",
       );
     }
+  } else if (taskContext) {
+    lines.push(
+      'Du hilfst bei genau einer Aufgabe, ihre Daten stehen unter "Aufgabe" unten. Du kannst keine Notizen bearbeiten, Ergebnisse gibst du im Chat oder als Datei (create_file, Google Doc). Hilf so weit wie möglich: recherchieren, gliedern, Texte und Folien entwerfen, erklären, rechnen, Bilder suchen (search_images, Quelle und Lizenz nennen). Fehlt dir etwas, tu den machbaren Teil und sag, was fehlt.',
+      "Anhänge liest du nur mit read_attachment (index aus der Liste). Rate nie, was in einem Anhang steht. Für Stoff aus dem Unterricht suchst du mit search_sources (mit der folderId des Fachs) und liest mit read_source.",
+    );
   } else if (canRead) {
     lines.push(
       "Du darfst die Notiz nicht bearbeiten, nur darüber reden. Nutze read_document für Text/Formen und see_document, um Handschrift oder Zeichnungen als Bild zu sehen, bevor du zum Inhalt der Notiz antwortest.",
@@ -133,7 +139,8 @@ export function buildSystemPrompt({
       libraryOverview,
     );
   }
-  lines.push(memory, schoolContext);
+  lines.push(memory, schoolContext, taskContext ? `Aufgabe:
+${taskContext}` : "");
   lines.push(
     "Aktueller Kontext:",
     `Heute ist ${formatNow(now)}.`,

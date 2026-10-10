@@ -4,6 +4,7 @@ import { VISION_MODEL_CHAIN } from "../agent/agentSettings.js";
 import {
   AGENT_CORE_TOOLS,
   AGENT_LIBRARY_TOOLS,
+  AGENT_TASK_TOOLS,
   AGENT_READ_TOOLS,
   AGENT_NO_DOCUMENT_TOOLS,
   AGENT_EXTENDED_BY_NAME,
@@ -16,6 +17,8 @@ import { loadLibraryOverview } from "../agent/libraryOverview.js";
 import { loadSchoolContext } from "../agent/schoolContext.js";
 import { browserMemoryRepository, memoryBlock } from "../knowledge/memoryRepository.js";
 import { createLibraryNoteSession } from "../agent/libraryNote.js";
+import { buildTaskContext } from "../agent/taskChat.js";
+import { readTaskAttachment } from "../agent/taskTools.js";
 
 const MAX_STEPS = 30;
 const MAX_HISTORY = 40;
@@ -156,7 +159,18 @@ function wireMessages(messages) {
  */
 // library: the start screen has no open note, so the agent gets create_note/
 // open_note and edits the stored notes through a headless session instead.
-export default function useAgent({ documentId, noteTitle, subject, inkControllerRef, model, fast, library = false }) {
+// task: Aufgaben-Chat im Kalender (taskChat.js). Kein Dokument, nur lesende
+// Werkzeuge plus Anhang und Bildsuche, der Kontext ist die Aufgabe.
+export default function useAgent({
+  documentId,
+  noteTitle,
+  subject,
+  inkControllerRef,
+  model,
+  fast,
+  library = false,
+  task: taskInfo = null,
+}) {
   const [sessions, setSessions] = useState(() => loadSessions(documentId));
   const [activeId, setActiveId] = useState(() => sessions[0]?.id ?? newSessionId());
   const [messages, setMessages] = useState(() => sessions[0]?.messages ?? []);
@@ -288,6 +302,11 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     [documentId],
   );
 
+  // Die Startnachricht des Agenten: nur in einen leeren Chat.
+  const seedMessage = useCallback((content) => {
+    setMessages((current) => (current.length > 0 ? current : [{ role: "assistant", content }]));
+  }, []);
+
   const send = useCallback(
     async (text, { editDocument = true, images = [], files = [], names = [] } = {}) => {
       const task = String(text || "").trim();
@@ -298,10 +317,10 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         ? (librarySessionRef.current ??= createLibraryNoteSession())
         : null;
       const controllerAtStart = inkControllerRef?.current;
-      const canRead = library || Boolean(controllerAtStart?.getDocument);
+      const canRead = !taskInfo && (library || Boolean(controllerAtStart?.getDocument));
       // Fast mode trades editing for speed — the tools sent to the model
       // never include document-writing ones, same as buildSystemPrompt's gate.
-      const canEdit = !fast && editDocument && (library || Boolean(controllerAtStart?.applyCommands));
+      const canEdit = !taskInfo && !fast && editDocument && (library || Boolean(controllerAtStart?.applyCommands));
       const isWhiteboard = controllerAtStart?.document?.pages?.[0]?.kind === "whiteboard";
       const background = controllerAtStart?.document?.pages?.[0]?.background;
       const controller = new AbortController();
@@ -320,7 +339,12 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
 
       // Read through the ref on every call: the controller object is replaced
       // on each render of the editor, and a run outlives many of them.
-      const api = librarySession
+      const api = taskInfo
+        ? {
+            readAttachment: (args) =>
+              readTaskAttachment({ attachments: taskInfo.event.attachments || [], index: args?.index }),
+          }
+        : librarySession
         ? librarySession.api
         : {
             getDocument: () => inkControllerRef.current.getDocument(),
@@ -347,7 +371,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         : { role: "user", content: wireText };
       // Fast mode answers from training and never searches, so the cards
       // would only cost tokens there.
-      const libraryOverview = fast ? "" : await loadLibraryOverview().catch(() => "");
+      const libraryOverview = fast || taskInfo ? "" : await loadLibraryOverview().catch(() => "");
       let conversation = [
         {
           role: "system",
@@ -366,6 +390,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
             // Only where the task tools are sent too (AGENT_LIBRARY_TOOLS):
             // the editor chat stays as lean as it was.
             schoolContext: library && canEdit ? loadSchoolContext() : "",
+            taskContext: taskInfo ? buildTaskContext(taskInfo) : "",
           }),
         },
         ...messages,
@@ -387,7 +412,9 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
           const { message: reply, usage } = await requestCompletion({
             model,
             messages: wireMessages(conversation),
-            tools: library && canEdit
+            tools: taskInfo
+              ? AGENT_TASK_TOOLS
+              : library && canEdit
               ? withExtras(AGENT_LIBRARY_TOOLS, enabledExtra)
               : canEdit
               ? withExtras(AGENT_CORE_TOOLS, enabledExtra)
@@ -585,7 +612,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
         abortRef.current = null;
       }
     },
-    [activeId, documentId, fast, inkControllerRef, library, messages, model, noteTitle, status, subject],
+    [activeId, documentId, fast, inkControllerRef, library, messages, model, noteTitle, status, subject, taskInfo],
   );
 
   return {
@@ -600,6 +627,7 @@ export default function useAgent({ documentId, noteTitle, subject, inkController
     elapsedMs,
     streamText,
     send,
+    seedMessage,
     stop,
     clear,
     selectSession,

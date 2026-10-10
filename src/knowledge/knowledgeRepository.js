@@ -1,3 +1,5 @@
+import { needMinutes, workMinutes } from "./studyPlan.js";
+
 export const KNOWLEDGE_STORAGE_KEY = "notes.knowledge.v1";
 // Fenster-Event, wenn jemand außerhalb von useKnowledge schreibt (der Agent
 // über add_task / set_task_done), damit die Oberfläche neu liest.
@@ -89,6 +91,7 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           ...(previous.prep ? { prep: previous.prep } : {}),
           ...(previous.need ? { need: previous.need } : {}),
           ...(previous.study ? { study: previous.study } : {}),
+          ...(previous.work ? { work: previous.work } : {}),
           ...onKnown(candidate, previous),
         });
       } else if (!skip(candidate)) {
@@ -181,6 +184,29 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
         events: state.events.map((event) =>
           event.id === id ? { ...event, done: Boolean(done), updatedAt: timestamp } : event,
         ),
+      }));
+    },
+
+    // Ein im Kalender abgehakter Lernblock: Minuten an einem Tag als gemacht
+    // vermerken (minutes 0 nimmt den Vermerk zurück). Ist der Bedarf einer
+    // Aufgabe damit gedeckt, gilt sie als erledigt; wird der Vermerk
+    // zurückgenommen und sie war nur dadurch erledigt, ist sie wieder offen.
+    setEventWork(id, date, minutes) {
+      const timestamp = now();
+      update((state) => ({
+        ...state,
+        events: state.events.map((event) => {
+          if (event.id !== id) return event;
+          const work = { ...(event.work || {}) };
+          if (minutes > 0) work[date] = Math.round((work[date] || 0) + minutes);
+          else delete work[date];
+          const next = { ...event, work, updatedAt: timestamp };
+          if (event.kind === "exam") return next;
+          const need = needMinutes(event);
+          if (workMinutes(next) >= need) return { ...next, done: true };
+          if (event.done && workMinutes(event) >= need) return { ...next, done: false };
+          return next;
+        }),
       }));
     },
 

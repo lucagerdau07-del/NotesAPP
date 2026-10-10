@@ -69,3 +69,29 @@ describe("nearestEntry", () => {
   it("wählt den nächsten ab heute", () => expect(nearestEntry(entries, "2026-09-10")).toBe(entries[1]));
   it("fällt auf den letzten zurück", () => expect(nearestEntry(entries, "2026-09-25")).toBe(entries[1]));
 });
+
+describe("abgehakte Lernblöcke", () => {
+  const task = { id: "t1", kind: "homework", title: "Blatt 3", due: "2026-09-30", work: { "2026-09-24": 30 } };
+  const plan = { days: [{ date: "2026-09-24", blocks: [{ task: "Blatt 3", minutes: 30, eventIds: ["t1"] }] }] };
+
+  it("zeigt gemachte Arbeit als erledigten Eintrag und blendet den alten Planblock aus", () => {
+    const entries = buildCalendarEntries({ events: [task], plan, planCurrent: false });
+    const study = entries.filter((entry) => entry.type === "study");
+    expect(study).toHaveLength(1);
+    expect(study[0]).toMatchObject({ done: true, minutes: 30, eventIds: ["t1"] });
+  });
+
+  it("zeigt im neuen Plan den Rest daneben", () => {
+    const study = buildCalendarEntries({ events: [task], plan, planCurrent: true }).filter((entry) => entry.type === "study");
+    expect(study.map((entry) => entry.done)).toEqual([false, true]);
+  });
+
+  it("hakt Klausurblöcke direkt am Block ab", () => {
+    const exam = { id: "x", kind: "exam", title: "Klausur", due: "2026-09-30", work: { "2026-09-24": 30 } };
+    const [entry] = buildCalendarEntries({
+      events: [exam],
+      plan: { days: [{ date: "2026-09-24", blocks: [{ task: "Vorbereitung", minutes: 30, eventIds: ["x"] }] }] },
+    }).filter((item) => item.type === "study");
+    expect(entry.done).toBe(true);
+  });
+});

@@ -224,3 +224,84 @@ describe("CalendarScreen", () => {
     expect(requestCompletion).not.toHaveBeenCalled();
   });
 });
+
+const drag = (element, dx, dy = 0) => {
+  const at = (type, x, y) =>
+    fireEvent(element, new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  at("pointerdown", 100, 100);
+  at("pointermove", 100 + dx, 100 + dy);
+  at("pointerup", 100 + dx, 100 + dy);
+};
+
+describe("CalendarScreen Aufgaben-Chat", () => {
+  it("zeigt bei einer Hausaufgabe den Chat neben den Details", () => {
+    seed();
+    render(<CalendarScreen onBack={() => {}} />);
+    expect(screen.getByTestId("task-chat")).toBeInTheDocument();
+    expect(screen.getByLabelText("Details")).toHaveAttribute("data-chat", "true");
+  });
+
+  it("zeigt bei einem Termin keinen Chat", () => {
+    seed({ events: [{ ...iservEvent, kind: "appointment", iservId: undefined, sourceNoteId: "manual" }] });
+    render(<CalendarScreen onBack={() => {}} />);
+    expect(screen.queryByTestId("task-chat")).toBeNull();
+    expect(screen.getByLabelText("Details")).toHaveAttribute("data-chat", "false");
+  });
+
+  it("gibt einem Lernblock den Chat seiner Aufgabe", () => {
+    const events = [iservEvent];
+    seed({
+      events,
+      plan: currentPlan(events, [
+        { date: today, budgetMinutes: 30, blocks: [{ subject: "Mathe", task: "Blatt 3 üben", minutes: 30, eventIds: ["e1"] }] },
+      ]),
+    });
+    render(<CalendarScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByTestId(`cal-entry-study:${today}:0`));
+    expect(screen.getByRole("heading", { level: 2, name: "Blatt 3 üben" })).toBeInTheDocument();
+    expect(screen.getByTestId("task-chat")).toBeInTheDocument();
+  });
+
+  it("blendet den Chat beim Anlegen eines neuen Eintrags aus", () => {
+    seed();
+    render(<CalendarScreen onBack={() => {}} />);
+    fireEvent.click(screen.getByText("Neuer Eintrag"));
+    expect(screen.queryByTestId("task-chat")).toBeNull();
+  });
+});
+
+describe("CalendarScreen Wischen zum Abhaken", () => {
+  it("hakt eine Aufgabe per Wischen nach rechts ab und öffnet sie beim nächsten wieder", () => {
+    seed();
+    render(<CalendarScreen onBack={() => {}} />);
+    const row = screen.getByTestId("cal-entry-event:e1").closest(".cal-swipe");
+    drag(row, 90);
+    expect(stored().events[0].done).toBe(true);
+    drag(row, 90);
+    expect(stored().events[0].done).toBe(false);
+  });
+
+  it("ignoriert kurzes, senkrechtes und nach links gerichtetes Ziehen", () => {
+    seed();
+    render(<CalendarScreen onBack={() => {}} />);
+    const row = screen.getByTestId("cal-entry-event:e1").closest(".cal-swipe");
+    drag(row, 30);
+    drag(row, 90, 120);
+    drag(row, -90);
+    expect(stored().events[0].done).toBe(false);
+  });
+
+  it("vermerkt einen abgehakten Lernblock an der Aufgabe", () => {
+    const events = [{ ...iservEvent, due: "2099-01-01" }];
+    seed({
+      events,
+      plan: currentPlan(events, [
+        { date: today, budgetMinutes: 70, blocks: [{ subject: "Mathe", task: "Blatt 3 lösen", minutes: 30, eventIds: ["e1"] }] },
+      ]),
+    });
+    render(<CalendarScreen onBack={() => {}} />);
+    drag(screen.getByTestId(`cal-entry-study:${today}:0`).closest(".cal-swipe"), 90);
+    expect(stored().events[0].work).toEqual({ [today]: 30 });
+    expect(stored().events[0].done).toBe(true);
+  });
+});

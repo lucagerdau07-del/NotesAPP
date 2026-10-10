@@ -9,6 +9,7 @@ import {
   estimatedMinutes,
   isoDate,
   lastWorkDay,
+  planInputsKey,
 } from "../src/knowledge/studyPlan.js";
 
 // 2026-09-07 is a Monday (Lernzeit-Tag), 2026-09-09 a Wednesday (kein Lernzeit-Tag).
@@ -590,5 +591,46 @@ describe("buildPlan hält Abgabefristen hart ein", () => {
 
     expect(request).toContain(`${WEDNESDAY_DATE}: ${BASE_MINUTES} Min · möglich: A1`);
     expect(request).toMatch(new RegExp(`${THURSDAY}: \\d+ Min · möglich: nur Wiederholung`));
+  });
+});
+
+describe("abgehakte Lernblöcke", () => {
+  const task = { id: "t1", kind: "homework", title: "Blatt 3", due: "2026-09-11", description: "ca. 60 Minuten" };
+  const demand = (events) =>
+    dailyBudgets(events, { today: MONDAY }).reduce((sum, day) => sum + day.budgetMinutes, 0);
+
+  it("verteilt nur die Restminuten", () => {
+    const worked = { ...task, work: { [MONDAY]: 30 } };
+    expect(demand([worked])).toBeLessThan(demand([task]));
+  });
+
+  it("macht den Plan veraltet, sobald gearbeitet wurde, sonst nicht", () => {
+    expect(planInputsKey([{ ...task, work: {} }])).toBe(planInputsKey([task]));
+    expect(planInputsKey([{ ...task, work: { [MONDAY]: 30 } }])).not.toBe(planInputsKey([task]));
+  });
+
+  it("behält die Aufgaben-Kennung der Blöcke", async () => {
+    const plan = await buildPlan({
+      events: [task],
+      today: MONDAY,
+      complete: async () => ({ content: JSON.stringify({ days: { [MONDAY]: [{ refs: ["A1"], task: "Blatt 3 lösen", minutes: 30 }] } }) }),
+    });
+    expect(plan.days[0].blocks[0].eventIds).toEqual(["t1"]);
+  });
+});
+
+describe("Blöcke erledigter Aufgaben", () => {
+  const done = { id: "t1", kind: "homework", title: "Blatt 3", due: "2026-09-11", done: true };
+  const previous = { days: [{ date: MONDAY, blocks: [{ task: "Blatt 3", minutes: 30, eventIds: ["t1"] }] }] };
+  const run = (events) => buildPlan({ events, today: MONDAY, previous, complete: async () => ({ content: '{"days":{}}' }) });
+
+  it("bleiben im neuen Plan stehen, damit der Kalender sie ausgegraut zeigt", async () => {
+    const plan = await run([done]);
+    expect(plan.days[0].blocks).toContainEqual({ task: "Blatt 3", minutes: 30, eventIds: ["t1"] });
+  });
+
+  it("entfallen an einem Tag, an dem die Aufgabe abgehakt wurde (dort steht der erledigte Eintrag)", async () => {
+    const worked = await run([{ ...done, work: { [MONDAY]: 30 } }]);
+    expect(worked.days[0].blocks.some((block) => block.eventIds?.includes("t1"))).toBe(false);
   });
 });

@@ -39,7 +39,20 @@ const WEEKDAY_LONG = (iso) => {
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}.`;
 };
 
-export function buildContext({ event, terms = [], memory = [], folders = [], study = null, wish = "" }) {
+const KIND_LABEL = { exam: "Klausur", homework: "Hausaufgabe", study: "Lernblock" };
+
+// others: weitere Aufgaben, die derselbe Lernblock abdeckt (Aufgaben-Chat).
+// attachments: Anhänge des Eintrags, der Index ist der für read_attachment.
+export function buildContext({
+  event,
+  terms = [],
+  memory = [],
+  folders = [],
+  study = null,
+  wish = "",
+  others = [],
+  attachments = [],
+}) {
   const subject = event.subject || "";
   const folder = subject ? folders.find((entry) => fold(entry.name) === fold(subject)) : null;
   const description = oneLine(event.description);
@@ -58,11 +71,26 @@ export function buildContext({ event, terms = [], memory = [], folders = [], stu
   // Reihenfolge ist Rang: passt der Kontext nicht, fällt von hinten weg.
   const groups = [
     [
-      `Klausur: ${[subject, event.title].filter(Boolean).join(" · ")}, ${event.due}${event.time ? ` ${event.time}` : ""}.`,
-      `Thema: ${oneLine(event.topic) || "nicht angegeben, leite es aus Titel, Fach und Quellen ab"}`,
+      `${KIND_LABEL[event.kind] || "Eintrag"}: ${[subject, event.title].filter(Boolean).join(" · ")}, ${event.due}${event.time ? ` ${event.time}` : ""}.`,
+      ...(event.kind === "exam" || oneLine(event.topic)
+        ? [`Thema: ${oneLine(event.topic) || "nicht angegeben, leite es aus Titel, Fach und Quellen ab"}`]
+        : []),
       ...(description ? [`Aufgabe: ${clip(description, DESCRIPTION_CHARS)}`] : []),
       ...(need?.content?.length ? [`Zu lernen: ${need.content.join("; ")}`] : []),
     ],
+    ...(attachments.length
+      ? [
+          [
+            "Anhänge (read_attachment mit index):",
+            ...attachments.map(
+              (file, index) => `${index}: ${clip(oneLine(file?.filename) || "Datei", 60)}${file?.path ? "" : " (nicht verfügbar)"}`,
+            ),
+          ],
+        ]
+      : []),
+    ...(others.length
+      ? [[`Dieselbe Lernzeit deckt auch: ${others.map((other) => `${clip(oneLine(other.title), 50)} (${other.due})`).join("; ")}`]]
+      : []),
     ...(folder ? [[`Ordner: ${folder.name} (folderId ${folder.id})`]] : []),
     ...(study && counts.topics + counts.cards + counts.quiz > 0
       ? [

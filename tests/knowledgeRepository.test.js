@@ -298,3 +298,25 @@ describe("knowledge repository — IServ-Status", () => {
     expect(repository.read().events[0].done).toBe(true);
   });
 });
+
+describe("setEventWork", () => {
+  const seedTask = (events) => storage.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify({ version: 1, events, terms: [], plan: null }));
+
+  it("erledigt die Aufgabe, sobald ihr Bedarf gedeckt ist, und öffnet sie beim Zurücknehmen", () => {
+    seedTask([{ id: "t1", kind: "homework", title: "A", due: "2026-09-08", description: "ca. 40 Minuten", done: false }]);
+    const repository = repo();
+    repository.setEventWork("t1", "2026-09-07", 20);
+    expect(repository.read().events[0]).toMatchObject({ done: false, work: { "2026-09-07": 20 } });
+    repository.setEventWork("t1", "2026-09-08", 20);
+    expect(repository.read().events[0].done).toBe(true);
+    repository.setEventWork("t1", "2026-09-08", 0);
+    expect(repository.read().events[0]).toMatchObject({ done: false, work: { "2026-09-07": 20 } });
+  });
+
+  it("erledigt eine Klausur nie durch Lernblöcke", () => {
+    seedTask([{ id: "x", kind: "exam", title: "K", due: "2026-09-30", done: false }]);
+    const repository = repo();
+    repository.setEventWork("x", "2026-09-07", 500);
+    expect(repository.read().events[0].done).toBe(false);
+  });
+});

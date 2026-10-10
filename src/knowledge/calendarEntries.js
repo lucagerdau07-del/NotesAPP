@@ -39,18 +39,55 @@ function fromEvents(events) {
     }));
 }
 
-function fromPlan(plan) {
+// Abgehakt wird ein Lernblock mit event.work (Tag -> Minuten, per Wischen). Bei
+// Klausuren zählt das direkt am Block, bei Aufgaben steht die gemachte Arbeit
+// als eigener erledigter Eintrag (fromWork), und der Plan führt nur den Rest.
+const worked = (event, date) => (Number(event?.work?.[date]) || 0) > 0;
+
+function fromPlan(plan, events, planCurrent) {
+  const byId = new Map(events.map((event) => [event.id, event]));
   return (plan?.days || []).flatMap((day) =>
-    (day.blocks || []).map((block, index) => ({
-      id: `study:${day.date}:${index}`,
-      type: "study",
-      date: day.date,
-      time: "",
-      title: block.task,
-      subject: block.subject || "",
-      minutes: block.minutes,
-    })),
+    (day.blocks || []).flatMap((block, index) => {
+      const linked = (block.eventIds || []).map((id) => byId.get(id)).filter(Boolean);
+      // Ein Plan von vor dem Abhaken führt den Block noch, der erledigte Eintrag ersetzt ihn.
+      if (!planCurrent && linked.some((event) => event.kind !== "exam" && worked(event, day.date))) return [];
+      return [
+        {
+          id: `study:${day.date}:${index}`,
+          type: "study",
+          date: day.date,
+          time: "",
+          title: block.task,
+          subject: block.subject || "",
+          minutes: block.minutes,
+          eventIds: linked.map((event) => event.id),
+          done:
+            linked.length > 0 &&
+            linked.every((event) => event.done || (event.kind === "exam" && worked(event, day.date))),
+        },
+      ];
+    }),
   );
+}
+
+function fromWork(events) {
+  return events
+    .filter((event) => event?.kind !== "exam")
+    .flatMap((event) =>
+      Object.entries(event.work || {})
+        .filter(([, minutes]) => Number(minutes) > 0)
+        .map(([date, minutes]) => ({
+          id: `work:${event.id}:${date}`,
+          type: "study",
+          date,
+          time: "",
+          title: event.title,
+          subject: event.subject || "",
+          minutes: Math.round(Number(minutes)),
+          eventIds: [event.id],
+          done: true,
+        })),
+    );
 }
 
 // Der Klausurplan (examPrep.js) steht an der Klausur, nicht im täglichen Plan.
@@ -64,6 +101,8 @@ function fromPrep(events) {
       title: block.task,
       subject: event.subject || "",
       minutes: block.minutes,
+      eventIds: [event.id],
+      done: worked(event, block.date),
       forExam: event,
     })),
   );
@@ -111,10 +150,11 @@ export function compareEntries(left, right) {
   );
 }
 
-export function buildCalendarEntries({ events = [], plan = null, lessons = [], notes = [] }) {
+export function buildCalendarEntries({ events = [], plan = null, planCurrent = true, lessons = [], notes = [] }) {
   return [
     ...fromEvents(events),
-    ...fromPlan(plan),
+    ...fromPlan(plan, events, planCurrent),
+    ...fromWork(events),
     ...fromPrep(events),
     ...fromLessons(lessons),
     ...fromNotes(notes),

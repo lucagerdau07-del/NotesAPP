@@ -41,7 +41,7 @@ describe("model reply shape", () => {
       today: TODAY,
       complete: (args) => requestCompletion({ ...args, config: { baseUrl: "http://proxy.test" } }),
     });
-    expect(plan.days[0].blocks).toEqual([{ subject: "", task: "Kettenregel: fünf Ableitungen üben", minutes: 20 }]);
+    expect(plan.days[0].blocks).toEqual([{ eventIds: ["h1"], subject: "", task: "Kettenregel: fünf Ableitungen üben", minutes: 20 }]);
   });
 });
 
