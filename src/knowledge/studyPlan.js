@@ -34,7 +34,7 @@ const MORNING_CUTOFF = "12:00";
 export const PLAN_DAYS = 7;
 // Hochzählen, wenn sich die Planungsregeln ändern: ein gespeicherter Plan mit
 // älterer Version wird dann sofort neu berechnet statt erst am nächsten Tag.
-export const PLAN_RULES_VERSION = 7;
+export const PLAN_RULES_VERSION = 8;
 
 export function isoDate(value) {
   const date = new Date(value);
@@ -82,8 +82,15 @@ const dueDayIsWorkable = (event) => !event.time || event.time >= MORNING_CUTOFF;
 
 // Der letzte Tag, an dem an einer Aufgabe noch gearbeitet werden kann. Einzige
 // Quelle dieser Regel - Budgets, Rückfallplan und Modellprüfung nutzen sie alle.
-// Überfälliges und heute früh Fälliges landet auf heute statt ganz zu verschwinden.
+// Heute früh Fälliges landet auf heute statt ganz zu verschwinden. Überfälliges
+// hat keine Frist mehr, die drängt: es verteilt sich wie ferne Arbeit über die
+// nächste Woche, sonst ballt sich ein ganzer Rückstau auf einen Tag.
 export function lastWorkDay(event, today) {
+  if (event.due < today && event.kind !== "exam") {
+    const spread = dateOf(today);
+    spread.setDate(spread.getDate() + TASK_SPREAD_DAYS - 1);
+    return isoDate(spread);
+  }
   const due = event.due < today ? today : event.due;
   if (due === today || (event.kind !== "exam" && dueDayIsWorkable(event))) return due;
   const previous = dateOf(due);
@@ -273,9 +280,11 @@ export function dailyBudgets(events, { today, days = PLAN_DAYS } = {}) {
   const urgentDates = new Set();
 
   for (const event of open) {
-    const due = event.due < today ? today : event.due;
+    // Überfälliges drängt nicht mehr: es hat keine Frist vor sich und soll den
+    // Deckel nicht für den ganzen Rückstau aufheben.
+    if (event.due < today) continue;
     for (const iso of window) {
-      const lead = daysBetween(iso, due);
+      const lead = daysBetween(iso, event.due);
       if (lead >= 0 && lead <= URGENT_LEAD_DAYS) urgentDates.add(iso);
     }
   }

@@ -112,6 +112,21 @@ describe("dailyBudgets", () => {
     expect(budgetOn(dailyBudgets(events, { today: MONDAY }), MONDAY)).toBe(HOME_BASE_MINUTES + 30);
   });
 
+  it("spreads an overdue backlog over the week instead of piling it on today", () => {
+    const events = Array.from({ length: 11 }, (_, index) => ({
+      kind: "homework",
+      title: `Alt ${index}`,
+      subject: "Math",
+      due: "2026-08-25", // Wochen überfällig
+      done: false,
+    }));
+    const budgets = dailyBudgets(events, { today: MONDAY });
+    // 11 x 30 min lagen früher alle auf heute (330 min); jetzt Deckel je Tag.
+    for (const day of budgets) expect(day.budgetMinutes).toBeLessThanOrEqual(BASE_MINUTES + FAR_CAP_MINUTES);
+    expect(budgetOn(budgets, MONDAY)).toBeLessThanOrEqual(HOME_BASE_MINUTES + FAR_CAP_MINUTES);
+    expect(budgets.filter((day) => day.budgetMinutes > 0).length).toBeGreaterThan(4);
+  });
+
   it("does a task that fits one block in one block on one day, not spread out", () => {
     const events = [{ kind: "homework", title: "Essay", subject: "German", due: "2026-09-08", done: false }];
     const budgets = dailyBudgets(events, { today: MONDAY });
@@ -255,9 +270,10 @@ describe("buildPlan", () => {
     expect(plan.days.find((day) => day.date === MONDAY).blocks).toEqual([]);
   });
 
-  it("plant überfällige offene Termine im Rückfallplan für heute ein", async () => {
-    // Mittwoch statt Montag: voller Zuhause-Grundwert, keine Schul-Lernzeit -
-    // sonst reicht das Tagesbudget nicht für alle drei Blöcke plus Wiederholung.
+  it("plant überfällige offene Termine im Rückfallplan über die nächsten Tage ein", async () => {
+    // Mittwoch statt Montag: voller Zuhause-Grundwert, keine Schul-Lernzeit.
+    // Die Aufgabe mit naher Frist belegt heute, die überfälligen verteilen sich
+    // auf die folgenden Tage, statt sich alle auf heute zu legen.
     const plan = await buildPlan({
       events: [
         { kind: "homework", title: "Überfällige Bioaufgabe", subject: "Bio", due: "2026-09-01", done: false },
@@ -273,7 +289,14 @@ describe("buildPlan", () => {
     });
 
     const today = plan.days.find((day) => day.date === WEDNESDAY_DATE);
-    expect(today.blocks[0].task).toContain("Überfällige Bioaufgabe");
+    const planned = plan.days.flatMap((day) => day.blocks.map((block) => block.task));
+    expect(planned).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Überfällige Bioaufgabe"),
+        expect.stringContaining("Überfälliges Bio-Protokoll"),
+      ]),
+    );
+    expect(today.blocks.filter((block) => block.task.includes("Überfällig"))).toHaveLength(0);
     expect(today.blocks.at(-1).subject).toBe("Bio");
   });
 
@@ -490,9 +513,16 @@ describe("lastWorkDay", () => {
     expect(lastWorkDay({ kind: "exam", title: "x", due: "2026-09-10" }, MONDAY)).toBe(WEDNESDAY_DATE);
   });
 
-  it("puts overdue and due-this-morning work on today", () => {
-    expect(lastWorkDay(homework("2026-09-01"), MONDAY)).toBe(MONDAY);
+  it("puts due-this-morning work on today", () => {
     expect(lastWorkDay(homework(MONDAY, "07:45"), MONDAY)).toBe(MONDAY);
+  });
+
+  it("gives overdue work a week to spread over, not just today", () => {
+    expect(lastWorkDay(homework("2026-09-01"), MONDAY)).toBe("2026-09-13");
+  });
+
+  it("keeps an overdue exam on today", () => {
+    expect(lastWorkDay({ kind: "exam", title: "x", due: "2026-09-01" }, MONDAY)).toBe(MONDAY);
   });
 });
 
