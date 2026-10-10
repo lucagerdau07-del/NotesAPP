@@ -1,4 +1,5 @@
 import { extractJson, replyText } from "./documentScan.js";
+import { studyHint } from "./examStudy.js";
 
 // Zuhause-Grundlast an einem Schultag ohne eigene Schul-Lernzeit.
 export const BASE_MINUTES = 70;
@@ -363,7 +364,7 @@ function planRequest({ events, terms, subjects, budgets, today, refs, schedule, 
     ...(refs.size
       ? [...refs].map(
           ([ref, event]) =>
-            `- ${ref} · fällig ${event.due}${event.time ? ` ${event.time}` : ""} · ${kindLabel(event)} · ${event.subject || "ohne Fach"} · ${event.title}${timeNote(event)}`,
+            `- ${ref} · fällig ${event.due}${event.time ? ` ${event.time}` : ""} · ${kindLabel(event)} · ${event.subject || "ohne Fach"} · ${event.title}${timeNote(event)}${studyHint(event.study) ? ` · ${studyHint(event.study)}` : ""}`,
         )
       : ["- keine"]),
     "",

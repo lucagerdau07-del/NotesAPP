@@ -21,6 +21,7 @@ import {
 import useKnowledge from "../hooks/useKnowledge.js";
 import { activeNeed, activePrep, isoDate, isPlanCurrent, planInputsKey } from "../knowledge/studyPlan.js";
 import { TOPIC_MAX_CHARS } from "../knowledge/examPrep.js";
+import ExamDashboard from "./ExamDashboard.jsx";
 import { openIservAttachment, syncIserv } from "../knowledge/iservSync.js";
 import {
   ENTRY_TYPES,
@@ -224,6 +225,10 @@ function EntryDetail({
   notesById,
   planning,
   onPlanExam,
+  building,
+  today,
+  onBuildDashboard,
+  onChangeStudy,
   onToggleDone,
   onRemove,
   onOpenNote,
@@ -272,6 +277,20 @@ function EntryDetail({
 
       {event?.kind === "exam" && !event.done && (
         <ExamPlan event={event} planning={planning} onPlan={onPlanExam} />
+      )}
+
+      {event?.kind === "exam" && !event.done && (
+        <ExamDashboard
+          event={event}
+          today={today}
+          building={building}
+          onBuild={onBuildDashboard}
+          onChange={onChangeStudy}
+        />
+      )}
+
+      {entry.forExam && !entry.forExam.done && (
+        <ExamDashboard event={entry.forExam} today={today} onChange={onChangeStudy} compact />
       )}
 
       {entry.type === "study" && (
@@ -326,17 +345,35 @@ function EntryDetail({
   );
 }
 
-export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
+export default function CalendarScreen({ onBack, onOpenNote = () => {}, focusEventId = null }) {
   const notes = useMemo(() => browserNoteRepository.listNotes(), []);
   const knowledge = useKnowledge({ notes, subjects: [], syncIserv });
-  const { events, plan, refreshPlan, isPlanning, planExam, planningExamId, setEventDone, addEvent, removeEvent, iservState } =
-    knowledge;
+  const {
+    events,
+    plan,
+    refreshPlan,
+    isPlanning,
+    planExam,
+    planningExamId,
+    buildDashboard,
+    updateStudy,
+    dashboardExamId,
+    setEventDone,
+    addEvent,
+    removeEvent,
+    iservState,
+  } = knowledge;
+  // Vom Chat-Karte geöffnet: direkt bei der Klausur starten.
+  const focusEvent = focusEventId ? events.find((entry) => entry.id === focusEventId) : null;
 
   const today = isoDate(Date.now());
-  const [month, setMonth] = useState(() => ({ year: new Date().getFullYear(), month: new Date().getMonth() }));
-  const [selectedId, setSelectedId] = useState(null);
+  const [month, setMonth] = useState(() => {
+    const start = focusEvent ? new Date(`${focusEvent.due}T00:00:00`) : new Date();
+    return { year: start.getFullYear(), month: start.getMonth() };
+  });
+  const [selectedId, setSelectedId] = useState(focusEvent ? `event:${focusEvent.id}` : null);
   const [creating, setCreating] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(Boolean(focusEvent));
   const [attachmentError, setAttachmentError] = useState(false);
   const listRef = useRef(null);
 
@@ -546,6 +583,10 @@ export default function CalendarScreen({ onBack, onOpenNote = () => {} }) {
                 notesById={notesById}
                 planning={planningExamId !== null && planningExamId === selected.event?.id}
                 onPlanExam={planExam}
+                building={dashboardExamId !== null && dashboardExamId === selected.event?.id}
+                today={today}
+                onBuildDashboard={buildDashboard}
+                onChangeStudy={updateStudy}
                 onToggleDone={setEventDone}
                 onRemove={(id) => {
                   removeEvent(id);

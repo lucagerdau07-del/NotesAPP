@@ -3985,7 +3985,7 @@ export default function Library({
             {agent.messages.map((message, index) => (
               <React.Fragment key={index}>
                 {message.role === "assistant" && message.steps?.length > 0 && (
-                  <StepList steps={message.steps} elapsedMs={message.elapsedMs} />
+                  <StepList steps={message.steps} elapsedMs={message.elapsedMs} onOpenExam={onOpenCalendar} />
                 )}
                 <div className={`rail-chat-msg ${message.role}`}>
                   {message.role === "assistant" ? (
@@ -4003,7 +4003,7 @@ export default function Library({
               </React.Fragment>
             ))}
 
-            {agent.isRunning && agent.steps.length > 0 && <StepList steps={agent.steps} />}
+            {agent.isRunning && agent.steps.length > 0 && <StepList steps={agent.steps} onOpenExam={onOpenCalendar} />}
 
             {agent.isRunning && (() => {
               const researching = agent.steps.some(

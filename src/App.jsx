@@ -760,6 +760,8 @@ function Workspace({ notes, widths, onWidthsChange, activePaneId, onFocusPane, o
 
 export default function App() {
   const [screen, setScreen] = useState("library");
+  // Klausur, bei der der Kalender startet (Karte im Chat des Agenten).
+  const [calendarFocus, setCalendarFocus] = useState(null);
   // Up to MAX_PANES notes open side by side in the split-screen workspace.
   const [openNotes, setOpenNotes] = useState([]);
   const [paneWidths, setPaneWidths] = useState([]);
@@ -833,7 +835,14 @@ export default function App() {
   if (screen === "calendar") {
     return (
       <Suspense fallback={null}>
-        <CalendarScreen onBack={() => setScreen("library")} onOpenNote={openNote} />
+        <CalendarScreen
+          onBack={() => {
+            setCalendarFocus(null);
+            setScreen("library");
+          }}
+          onOpenNote={openNote}
+          focusEventId={calendarFocus}
+        />
       </Suspense>
     );
   }
@@ -851,7 +860,10 @@ export default function App() {
       <Library
         onOpenNote={openNote}
         onOpenSettings={() => setScreen("settings")}
-        onOpenCalendar={() => setScreen("calendar")}
+        onOpenCalendar={(eventId) => {
+          setCalendarFocus(typeof eventId === "string" ? eventId : null);
+          setScreen("calendar");
+        }}
         onOpenGlossary={() => setScreen("glossary")}
       />
     );

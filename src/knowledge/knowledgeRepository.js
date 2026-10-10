@@ -86,6 +86,7 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
           ...(previous.topic ? { topic: previous.topic } : {}),
           ...(previous.prep ? { prep: previous.prep } : {}),
           ...(previous.need ? { need: previous.need } : {}),
+          ...(previous.study ? { study: previous.study } : {}),
         });
       } else {
         byKey.set(key, candidate);
@@ -198,6 +199,26 @@ export function createKnowledgeRepository(storage, { now = Date.now } = {}) {
       update((state) => ({
         ...state,
         events: state.events.map((event) => (event.id === id ? { ...event, need } : event)),
+      }));
+    },
+
+    // Das Klausur-Dashboard (examStudy.js). updateStudy bekommt das vorhandene
+    // Dashboard (oder null) und liefert das neue; null lässt es unverändert.
+    setExamStudy(id, study) {
+      update((state) => ({
+        ...state,
+        events: state.events.map((event) => (event.id === id ? { ...event, study } : event)),
+      }));
+    },
+
+    updateStudy(id, change) {
+      update((state) => ({
+        ...state,
+        events: state.events.map((event) => {
+          if (event.id !== id) return event;
+          const next = change(event.study || null);
+          return next ? { ...event, study: next } : event;
+        }),
       }));
     },
 

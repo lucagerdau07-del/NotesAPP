@@ -1,6 +1,7 @@
 import { extractJson, replyText } from "./documentScan.js";
 import { activeNeed, activePrep } from "./studyPlan.js";
 import { fold } from "./sources.js";
+import { studyHint } from "./examStudy.js";
 
 // Wie viel Zeit eine Klausur braucht und was dafür zu lernen ist, je Klausur
 // einzeln geschätzt: aus Fach, Thema, Beschreibung, den Begriffen des Fachs, den
@@ -40,6 +41,7 @@ export async function estimateExamNeeds({ exams, terms = [], memory = "", materi
       `${key} · ${[event.subject, event.title].filter(Boolean).join(" · ")} · ${event.due}${event.time ? ` ${event.time}` : ""}`,
       `  Thema: ${event.topic ? oneLine(event.topic) : "nicht angegeben"}`,
       ...(description ? [`  Beschreibung: ${clip(description, 300)}`] : []),
+      ...(studyHint(event.study) ? [`  ${studyHint(event.study)}`] : []),
       ...(subjectTerms.length ? [`  Begriffe: ${subjectTerms.join(", ")}`] : []),
       ...(materials[event.id] ? [`  Aus Notizen:\n${materials[event.id]}`] : []),
     ];

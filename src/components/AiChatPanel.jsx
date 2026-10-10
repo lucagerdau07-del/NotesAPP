@@ -31,6 +31,8 @@ import {
   Wrench,
   CheckCheck,
   Sparkles,
+  GraduationCap,
+  ChevronRight,
 } from "lucide-react";
 import { ATTACHMENT_ACCEPT, readAgentAttachment } from "../agent/attachments";
 import Markdown, { renderInline } from "./Markdown";
@@ -287,17 +289,38 @@ export function DocCard({ card }) {
   );
 }
 
+// A study dashboard the agent built (build_exam_dashboard): tapping opens the
+// exam in the calendar, where the dashboard lives.
+export function ExamCard({ card, onOpen }) {
+  return (
+    <button type="button" className="rail-chat-doccard" onClick={() => onOpen?.(card.eventId)}>
+      <span className="rail-chat-doccard-icon">
+        <GraduationCap size={20} />
+      </span>
+      <span className="rail-chat-doccard-text">
+        <span className="rail-chat-doccard-title">{card.title}</span>
+        <span className="rail-chat-doccard-sub">{card.sub} · Im Kalender öffnen</span>
+      </span>
+      <ChevronRight size={15} className="rail-chat-doccard-open" />
+    </button>
+  );
+}
+
 // Cards sit outside the collapsible step list, so they stay visible after the
 // run's steps are folded away. Library.jsx renders StepList too, so it gets
 // them for free.
-export function StepList({ steps, elapsedMs }) {
+export function StepList({ steps, elapsedMs, onOpenExam }) {
   const cards = steps.filter((step) => step.card);
   return (
     <>
       <Steps steps={steps} elapsedMs={elapsedMs} />
-      {cards.map((step) => (
-        <DocCard key={step.id} card={step.card} />
-      ))}
+      {cards.map((step) =>
+        step.card.kind === "exam" ? (
+          <ExamCard key={step.id} card={step.card} onOpen={onOpenExam} />
+        ) : (
+          <DocCard key={step.id} card={step.card} />
+        ),
+      )}
     </>
   );
 }
@@ -391,6 +414,7 @@ const TOOL_ICONS = {
   add_page: FilePlus,
   create_file: FilePlus,
   create_google_doc: FileText,
+  build_exam_dashboard: GraduationCap,
   insert_table: Table,
   edit_table_cell: Table,
   insert_diagram: Network,

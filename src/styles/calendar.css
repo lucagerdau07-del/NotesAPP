@@ -800,3 +800,173 @@
     transform: none;
   }
 }
+
+/* Klausur-Dashboard (ExamDashboard.jsx) */
+.cal-dash {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.cal-dash-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--cal-fill-2);
+  overflow: hidden;
+}
+
+.cal-dash-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--cal-accent);
+  transition: width 0.3s ease;
+}
+
+.cal-dash-ready .cal-hint {
+  margin: 8px 0 0;
+}
+
+.cal-dash-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-dash-topic {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: var(--cal-fill-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cal-dash-topic-level {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cal-ink-2);
+}
+
+.cal-dash-topic.level-0 { box-shadow: inset 0 0 0 1.5px #ff6961; }
+.cal-dash-topic.level-1 { box-shadow: inset 0 0 0 1.5px #ffb340; }
+.cal-dash-topic.level-2 { box-shadow: inset 0 0 0 1.5px #ffd60a; }
+.cal-dash-topic.level-3 { box-shadow: inset 0 0 0 1.5px #4cd97b; }
+
+.cal-dash-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cal-ink-3);
+}
+
+.cal-dash-toggle {
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.cal-dash-toggle svg { transition: transform 0.2s ease; transform: rotate(-90deg); }
+.cal-dash-toggle svg.is-open { transform: rotate(0deg); }
+
+.cal-dash-card,
+.cal-dash-quiz {
+  display: grid;
+  gap: 10px;
+}
+
+.cal-dash-face {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--cal-fill-2);
+  text-align: left;
+}
+
+.cal-dash-face-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cal-ink-3);
+}
+
+.cal-dash-face-text {
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cal-dash-flip {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  color: var(--cal-ink-3);
+}
+
+.cal-dash-q {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cal-dash-opts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-dash-opt {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--cal-fill-2);
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.cal-dash-opt.is-right { box-shadow: inset 0 0 0 2px #4cd97b; }
+.cal-dash-opt.is-wrong { box-shadow: inset 0 0 0 2px #ff6961; }
+
+.cal-dash-sheet li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cal-dash-sheet li + li {
+  border-top: 1px solid var(--cal-sep);
+}
+
+.cal-dash-sheet-title {
+  font-weight: 700;
+}
+
+.cal-detail-section > .cal-field {
+  margin-top: 10px;
+}

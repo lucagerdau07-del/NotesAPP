@@ -6,6 +6,7 @@ import { browserKnowledgeRepository, KNOWLEDGE_CHANGED } from "../knowledge/know
 import { buildExamPrep, examMemory, loadExamMaterial } from "../knowledge/examPrep.js";
 import { estimateExamNeeds, needsEstimate } from "../knowledge/examNeed.js";
 import { browserMemoryRepository } from "../knowledge/memoryRepository.js";
+import { runExamDashboard } from "../agent/tools.js";
 import { activeNeed, buildPlan, isoDate } from "../knowledge/studyPlan.js";
 
 const UPCOMING_DAYS = 14;
@@ -36,6 +37,7 @@ export default function useKnowledge({
   const [isScanning, setScanning] = useState(false);
   const [isPlanning, setPlanning] = useState(false);
   const [planningExamId, setPlanningExamId] = useState(null);
+  const [dashboardExamId, setDashboardExamId] = useState(null);
   const [iservState, setIservState] = useState("off");
   const busyRef = useRef(false);
   const notesRef = useRef(notes);
@@ -165,6 +167,34 @@ export default function useKnowledge({
     [repository],
   );
 
+  // Das Dashboard einer Klausur vom Subagenten bauen oder ergänzen lassen. Läuft
+  // nur auf Knopfdruck. Gibt {ok} oder {error} zurück, ein vorhandenes
+  // Dashboard bleibt bei einem Fehler unberührt.
+  const buildDashboard = useCallback(
+    async (id, wish = "", mode = "add") => {
+      setDashboardExamId(id);
+      try {
+        await runExamDashboard({ id, wish, mode, repository });
+        return { ok: true };
+      } catch (error) {
+        return { error: error?.message || "Das Dashboard konnte nicht erstellt werden." };
+      } finally {
+        setDashboardExamId(null);
+        setState(repository.read());
+      }
+    },
+    [repository],
+  );
+
+  // Bedienung des Dashboards: change bekommt das alte study und liefert das neue.
+  const updateStudy = useCallback(
+    (id, change) => {
+      repository.updateStudy(id, change);
+      setState(repository.read());
+    },
+    [repository],
+  );
+
   const setEventDone = useCallback(
     (id, done) => {
       repository.setEventDone(id, done);
@@ -226,10 +256,13 @@ export default function useKnowledge({
     isScanning,
     isPlanning,
     planningExamId,
+    dashboardExamId,
     iservState,
     scanNow,
     refreshPlan,
     planExam,
+    buildDashboard,
+    updateStudy,
     setEventDone,
     addEvent,
     removeEvent,

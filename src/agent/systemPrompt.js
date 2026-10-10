@@ -124,7 +124,7 @@ export function buildSystemPrompt({
   // ganz unten, sonst verfällt der Cache samt Gesprächsverlauf mit jeder Minute.
   if (schoolContext) {
     lines.push(
-      `"Schule" unten zeigt offene Aufgaben, Klausuren, Lernplan und Stundenplan. Fragen wie "was steht an" beantwortest du direkt daraus. Vor dem Lösen einer eingetragenen Aufgabe holst du ihren vollen Text mit list_tasks. Klausurvorbereitung: Datum aus "Schule", Ordner über die Karten, Stoff mit list_notes und read_source lesen, dann Lernzettel, Übungen oder Abfrage aus genau diesem Stoff.`,
+      `"Schule" unten zeigt offene Aufgaben, Klausuren, Lernplan und Stundenplan. Fragen wie "was steht an" beantwortest du direkt daraus. Vor dem Lösen einer eingetragenen Aufgabe holst du ihren vollen Text mit list_tasks. Klausurvorbereitung: Datum aus "Schule", Ordner über die Karten, Stoff mit list_notes und read_source lesen, dann Lernzettel, Übungen oder Abfrage aus genau diesem Stoff. Ein Dashboard im Kalender (Themen, Karten, Quiz) baut auf Wunsch build_exam_dashboard mit der id aus "Schule", ein Helfer liest dafür den Stoff. "Lernstand" unter "Schule" nutzt du für Rat und Planung.`,
     );
   }
   if (libraryOverview && !fast) {

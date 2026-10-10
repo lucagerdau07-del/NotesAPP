@@ -4,6 +4,7 @@ import { lessonSubject, untisIso, untisTime } from "../knowledge/calendarEntries
 import { fold, queryTerms } from "../knowledge/sources.js";
 import { isLessonCancelled, loadArchivedWeek, untisDateNumber, untisMonday } from "../ink/untisArchive.js";
 import { clip } from "./libraryOverview.js";
+import { hasStudy, studyDetail, studyStatus } from "../knowledge/examStudy.js";
 
 // Der Schul-Block für den Agenten der Startseite: was offen ist, was heute zu
 // lernen ist und was im Stundenplan steht. Er steht in jedem Prompt, also ist
@@ -79,6 +80,18 @@ function planLine(plan, events, today) {
   return `Lernplan heute: ${parts.join(" | ")}`;
 }
 
+// Der Lernstand anstehender Klausuren mit Dashboard (examStudy.js), höchstens zwei.
+function studyLines(events, today) {
+  const to = shiftIso(today, AHEAD_DAYS);
+  return events
+    .filter((event) => event.kind === "exam" && !event.done && event.due >= today && event.due <= to && hasStudy(event.study))
+    .sort((a, b) => a.due.localeCompare(b.due))
+    .slice(0, 2)
+    .map((event) =>
+      clip(`Lernstand ${event.subject || clip(String(event.title || ""), 30)} ${shortDay(event.due)}: ${studyStatus(event.study)}`, 110),
+    );
+}
+
 // Eine Zeile je Tag, Doppelstunden zusammengefasst.
 function lessonLine(lessons, dateNumber, label) {
   const parts = [];
@@ -100,6 +113,7 @@ export function buildSchoolContext(
   // Reihenfolge ist Rang: passt der Block nicht, fällt von hinten weg.
   const extras = [
     planLine(plan, events, today),
+    ...studyLines(events, today),
     lessonLine(lessons, todayNumber, "heute"),
     nextNumber ? lessonLine(lessons, nextNumber, shortDay(untisIso(nextNumber))) : "",
   ].filter(Boolean);
@@ -136,6 +150,23 @@ export function loadSchoolContext({
 
 // Nur auf der Startseite (AGENT_LIBRARY_TOOLS), wie der Block selbst.
 export const SCHOOL_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "build_exam_dashboard",
+      description:
+        "Baut oder ergänzt das Lern-Dashboard (Themen, Karten, Quiz, Formelblatt) einer Klausur im Kalender. Ein eigener Helfer liest dafür die Quellen, du bekommst eine Zeile zurück. Nur auf Wunsch.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "id der Klausur aus Schule" },
+          wish: { type: "string", description: "Wunsch, z.B. mehr Karten zur Kettenregel" },
+          mode: { type: "string", enum: ["add", "replace"], description: "Standard add" },
+        },
+        required: ["id"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -241,6 +272,7 @@ function listTasks(args, events, today) {
         ? `  Lernplan: ${prep.map((block) => `${shortDay(block.date)} ${block.minutes} Min ${clip(block.task, 90)}`).join(" | ")}`
         : "",
       files.length ? `  Anhänge: ${files.join(", ")}` : "",
+      shown.length <= 3 && hasStudy(event.study) ? `  ${studyDetail(event.study)}` : "",
     ]
       .filter(Boolean)
       .join("\n");

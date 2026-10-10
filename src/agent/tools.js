@@ -13,6 +13,8 @@ import { fold, queryTerms, readSource, searchSources } from "../knowledge/source
 import { requestGoogleDoc, requestGoogleDocEdit, requestSearch, requestWolfram } from "./agentClient.js";
 import { createFile, FILE_FORMATS } from "./fileExport.js";
 import { SCHOOL_TOOLS, isSchoolTool, runSchoolTool } from "./schoolContext.js";
+import { buildExamDashboard, SUBAGENT_TOOLS } from "./examAgent.js";
+import { KNOWLEDGE_CHANGED } from "../knowledge/knowledgeRepository.js";
 import { browserMemoryRepository, MEMORY_MAX_CHARS } from "../knowledge/memoryRepository.js";
 import { FONT_STACKS, fontStackOf, snapBaselineToRule } from "../ink/textStyle.js";
 import {
@@ -1108,6 +1110,10 @@ export const AGENT_LIBRARY_TOOLS = [
   ).values(),
 ];
 
+// Die drei Lesewerkzeuge des Klausur-Subagenten (examAgent.js), mit den
+// bestehenden Schemas.
+const EXAM_AGENT_TOOLS = AGENT_LIBRARY_TOOLS.filter((tool) => SUBAGENT_TOOLS.includes(tool.function.name));
+
 const AGENT_EXTENDED_TOOLS = AGENT_TOOLS.filter(
   (tool) => !CORE_TOOL_NAMES.has(tool.function.name),
 );
@@ -1209,6 +1215,8 @@ export function describeToolCall(name, args = {}) {
       return `Eintragen: ${String(args.title || "").slice(0, 40)}`;
     case "set_task_done":
       return args.done === false ? "Aufgabe wieder öffnen" : "Aufgabe abhaken";
+    case "build_exam_dashboard":
+      return args.wish ? `Klausur-Dashboard: ${String(args.wish).slice(0, 40)}` : "Klausur-Dashboard bauen";
     case "remember":
       return String(args.text || "").trim() ? "Merken" : "Vergessen";
     case "done":
@@ -1367,6 +1375,23 @@ async function editGoogleDoc(args) {
   }
 }
 
+// Baut ein Klausur-Dashboard mit dem Subagenten (examAgent.js): gemeinsamer Weg
+// für den Knopf im Kalender (useKnowledge) und das Werkzeug unten.
+export const runExamDashboard = (options) =>
+  buildExamDashboard({ execute: executeTool, tools: EXAM_AGENT_TOOLS, ...options });
+
+// Delegiert an den Klausur-Subagenten. Der Haupt-Agent bekommt eine Zeile
+// zurück, die gelesenen Quellen bleiben im Verlauf des Subagenten.
+async function buildDashboardTool(args) {
+  try {
+    const { line, event } = await runExamDashboard({ id: args.id, wish: args.wish, mode: args.mode });
+    globalThis.dispatchEvent?.(new Event(KNOWLEDGE_CHANGED));
+    return { summary: line, card: { kind: "exam", title: event.title, sub: line, eventId: event.id } };
+  } catch (error) {
+    return `Fehler: ${error.message}`;
+  }
+}
+
 // Executes one tool call against the live document. Never throws on bad model
 // arguments: the error text goes back to the model as the tool result so it can
 // correct itself, and the run continues.
@@ -1384,6 +1409,7 @@ export async function executeTool(name, rawArgs, api) {
   if (name === "edit_google_doc") return editGoogleDoc(args);
   if (name === "done") return { summary: String(args.summary || "") };
   if (name === "remember") return browserMemoryRepository.remember(args);
+  if (name === "build_exam_dashboard") return buildDashboardTool(args);
   if (isSchoolTool(name)) return runSchoolTool(name, args);
   if (name === "create_note") return api?.createNote ? api.createNote(args) : "Fehler: Notizen anlegen geht nur auf der Startseite.";
   if (name === "open_note") return api?.openNote ? api.openNote(args) : "Fehler: Notizen wechseln geht nur auf der Startseite.";

@@ -1,5 +1,6 @@
 import { extractJson, replyText } from "./documentScan.js";
 import { examSlots, fitBlocks } from "./studyPlan.js";
+import { studyHint } from "./examStudy.js";
 import { fold, searchSources } from "./sources.js";
 import { browserNoteRepository } from "../storage/noteRepository.js";
 import { browserDocumentRepository } from "../storage/documentRepository.js";
@@ -40,6 +41,7 @@ function request({ event, topic, need, slots, terms, material, memory, today }) 
     `Klausur: ${[event.subject, event.title].filter(Boolean).join(" · ")}, ${event.due}${event.time ? ` ${event.time}` : ""}.`,
     `Thema vom Schüler: ${topic || "nicht angegeben, leite es aus Titel, Fach und Notizen ab"}`,
     ...(description ? [`Aufgabenstellung: ${clip(description, DESCRIPTION_CHARS)}`] : []),
+    ...(studyHint(event.study) ? [studyHint(event.study)] : []),
     ...(need ? [`Geschätzter Bedarf: ${need.minutes} Min. Zu lernen: ${need.content.join("; ")}`] : []),
     "Tage und Obergrenze:",
     ...slots.map(({ date, minutes }) => `- ${date} (${WEEKDAYS[new Date(`${date}T00:00:00`).getDay()]}): bis ${minutes} Min`),
